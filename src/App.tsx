@@ -20,7 +20,6 @@ export default function App() {
 
   return (
     <main>
-      <h1>Tasks</h1>
       <ul>
         {tasks.map((task) => (
           <li key={task.id}>{task.name}</li>
