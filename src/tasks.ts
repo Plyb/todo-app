@@ -1,18 +1,19 @@
 export type Task = {
   id: number
   name: string
+  done: boolean
 }
 
-type StoredTask = Pick<Task, 'name'>
+type StoredTask = Pick<Task, 'name' | 'done'>
 
 const DB_NAME = 'todo-app'
-const DB_VERSION = 1
+const DB_VERSION = 2
 const TASKS_STORE = 'tasks'
 
 const DEMO_TASKS: StoredTask[] = [
-  { name: 'Buy groceries' },
-  { name: 'Walk the dog' },
-  { name: 'Write weekly update' },
+  { name: 'Buy groceries', done: false },
+  { name: 'Walk the dog', done: false },
+  { name: 'Write weekly update', done: false },
 ]
 
 let openDatabasePromise: Promise<IDBDatabase> | undefined
@@ -48,10 +49,26 @@ async function openTasksDatabase(): Promise<IDBDatabase> {
   openDatabasePromise = new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION)
 
-    request.onupgradeneeded = () => {
+    request.onupgradeneeded = (event) => {
       const db = request.result
       if (!db.objectStoreNames.contains(TASKS_STORE)) {
         db.createObjectStore(TASKS_STORE, { autoIncrement: true })
+      }
+
+      // v1 -> v2: add done field to existing records
+      if (event.oldVersion < 2) {
+        const store = request.transaction!.objectStore(TASKS_STORE)
+        const cursorRequest = store.openCursor()
+        cursorRequest.onsuccess = () => {
+          const cursor = cursorRequest.result
+          if (cursor) {
+            const record = cursor.value as StoredTask
+            if (record.done === undefined) {
+              cursor.update({ ...record, done: false })
+            }
+            cursor.continue()
+          }
+        }
       }
     }
 
@@ -87,6 +104,7 @@ export async function loadTasks(): Promise<Task[]> {
     return storedTasks.map((task, index) => ({
       id: keyToTaskId(taskKeys[index]),
       name: task.name,
+      done: task.done ?? false,
     }))
   }
 
@@ -99,6 +117,16 @@ export async function saveTask(task: Task): Promise<void> {
 
   const transaction = db.transaction(TASKS_STORE, 'readwrite')
   const store = transaction.objectStore(TASKS_STORE)
-  store.put({ name: task.name }, task.id)
+  store.put({ name: task.name, done: task.done }, task.id)
+  await transactionToPromise(transaction)
+}
+
+export async function updateTaskDone(id: number, done: boolean): Promise<void> {
+  const db = await openTasksDatabase()
+
+  const transaction = db.transaction(TASKS_STORE, 'readwrite')
+  const store = transaction.objectStore(TASKS_STORE)
+  const record = await requestToPromise(store.get(id)) as StoredTask
+  store.put({ ...record, done }, id)
   await transactionToPromise(transaction)
 }
