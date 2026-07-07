@@ -16,7 +16,6 @@ def write_png(path: str, width: int, height: int, rgba: tuple) -> None:
         c = struct.pack(">I", len(data)) + tag + data
         return c + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
 
-    raw = b""
     row = b"\x00" + bytes([r, g, b, a]) * width
     raw = zlib.compress(row * height, 9)
 
