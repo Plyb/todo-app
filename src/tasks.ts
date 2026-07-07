@@ -3,75 +3,102 @@ export type Task = {
   name: string
 }
 
-const DEMO_TASKS: Task[] = [
-  { id: 1, name: 'Buy groceries' },
-  { id: 2, name: 'Walk the dog' },
-  { id: 3, name: 'Write weekly update' },
-]
+type StoredTask = Pick<Task, 'name'>
 
-const DATABASE_NAME = 'todo-app'
-const DATABASE_VERSION = 1
-const TASK_STORE_NAME = 'tasks'
+const DB_NAME = 'todo-app'
+const DB_VERSION = 1
+const TASKS_STORE = 'tasks'
+
+const DEMO_TASKS: StoredTask[] = [
+  { name: 'Buy groceries' },
+  { name: 'Walk the dog' },
+  { name: 'Write weekly update' },
+]
 
 let openDatabasePromise: Promise<IDBDatabase> | undefined
 
-function getDatabase() {
-  if (!openDatabasePromise) {
-    openDatabasePromise = new Promise((resolve, reject) => {
-      const openRequest = indexedDB.open(DATABASE_NAME, DATABASE_VERSION)
+function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => reject(request.error ?? new Error('IndexedDB request failed'))
+  })
+}
 
-      openRequest.addEventListener('upgradeneeded', () => {
-        const database = openRequest.result
-        if (!database.objectStoreNames.contains(TASK_STORE_NAME)) {
-          database.createObjectStore(TASK_STORE_NAME, { keyPath: 'id' })
-        }
-      })
+function transactionToPromise(transaction: IDBTransaction): Promise<void> {
+  return new Promise((resolve, reject) => {
+    transaction.oncomplete = () => resolve()
+    transaction.onabort = () => reject(transaction.error ?? new Error('IndexedDB transaction aborted'))
+    transaction.onerror = () => reject(transaction.error ?? new Error('IndexedDB transaction failed'))
+  })
+}
 
-      openRequest.addEventListener('success', () => resolve(openRequest.result))
-      openRequest.addEventListener('error', () => reject(openRequest.error))
-    })
+function keyToTaskId(key: IDBValidKey): number {
+  if (typeof key === 'number' && Number.isFinite(key)) {
+    return key
   }
+
+  throw new Error('IndexedDB task key is not a numeric id')
+}
+
+async function openTasksDatabase(): Promise<IDBDatabase> {
+  if (openDatabasePromise) {
+    return openDatabasePromise
+  }
+
+  openDatabasePromise = new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, DB_VERSION)
+
+    request.onupgradeneeded = () => {
+      const db = request.result
+      if (!db.objectStoreNames.contains(TASKS_STORE)) {
+        db.createObjectStore(TASKS_STORE, { autoIncrement: true })
+      }
+    }
+
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => {
+      openDatabasePromise = undefined
+      reject(request.error ?? new Error('Failed to open IndexedDB'))
+    }
+  })
 
   return openDatabasePromise
 }
 
-function requestToPromise<T>(request: IDBRequest<T>) {
-  return new Promise<T>((resolve, reject) => {
-    request.addEventListener('success', () => resolve(request.result))
-    request.addEventListener('error', () => reject(request.error))
-  })
-}
-
-function transactionToPromise(transaction: IDBTransaction) {
-  return new Promise<void>((resolve, reject) => {
-    transaction.addEventListener('complete', () => resolve())
-    transaction.addEventListener('abort', () => reject(transaction.error))
-    transaction.addEventListener('error', () => reject(transaction.error))
-  })
-}
-
-async function seedDemoTasks(database: IDBDatabase) {
-  const transaction = database.transaction(TASK_STORE_NAME, 'readwrite')
-  const store = transaction.objectStore(TASK_STORE_NAME)
-
+async function seedDemoTasks(db: IDBDatabase): Promise<void> {
+  const transaction = db.transaction(TASKS_STORE, 'readwrite')
+  const store = transaction.objectStore(TASKS_STORE)
   for (const task of DEMO_TASKS) {
     store.put(task)
   }
-
   await transactionToPromise(transaction)
 }
 
-export async function loadTasks() {
-  const database = await getDatabase()
-  const transaction = database.transaction(TASK_STORE_NAME, 'readonly')
-  const store = transaction.objectStore(TASK_STORE_NAME)
-  const tasks = await requestToPromise(store.getAll())
+export async function loadTasks(): Promise<Task[]> {
+  const db = await openTasksDatabase()
+
+  const transaction = db.transaction(TASKS_STORE, 'readonly')
+  const store = transaction.objectStore(TASKS_STORE)
+  const storedTasks = (await requestToPromise(store.getAll())) as StoredTask[]
+  const taskKeys = await requestToPromise(store.getAllKeys())
   await transactionToPromise(transaction)
 
-  if (tasks.length > 0) {
-    return tasks
+  if (storedTasks.length > 0) {
+    return storedTasks.map((task, index) => ({
+      id: keyToTaskId(taskKeys[index]),
+      name: task.name,
+    }))
   }
 
-  await seedDemoTasks(database)
-  return DEMO_TASKS
+  await seedDemoTasks(db)
+  return loadTasks()
+}
+
+export async function saveTask(task: Task): Promise<void> {
+  const db = await openTasksDatabase()
+
+  const transaction = db.transaction(TASKS_STORE, 'readwrite')
+  const store = transaction.objectStore(TASKS_STORE)
+  store.put({ name: task.name }, task.id)
+  await transactionToPromise(transaction)
 }
