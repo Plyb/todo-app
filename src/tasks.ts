@@ -1,4 +1,9 @@
 export type Task = {
+  id: number
+  name: string
+}
+
+export type TaskDraft = {
   name: string
 }
 
@@ -20,6 +25,14 @@ function transactionToPromise(transaction: IDBTransaction): Promise<void> {
     transaction.onabort = () => reject(transaction.error ?? new Error('IndexedDB transaction aborted'))
     transaction.onerror = () => reject(transaction.error ?? new Error('IndexedDB transaction failed'))
   })
+}
+
+function keyToTaskId(key: IDBValidKey): number {
+  if (typeof key === 'number' && Number.isFinite(key)) {
+    return key
+  }
+
+  throw new Error('IndexedDB task key is not a numeric id')
 }
 
 async function openTasksDatabase(): Promise<IDBDatabase> {
@@ -52,12 +65,31 @@ export async function loadTasks(): Promise<Task[]> {
 
   const transaction = db.transaction(TASKS_STORE, 'readonly')
   const store = transaction.objectStore(TASKS_STORE)
-  const tasks = await requestToPromise(store.getAll())
+  const taskNames = (await requestToPromise(store.getAll())) as TaskDraft[]
+  const taskKeys = await requestToPromise(store.getAllKeys())
   await transactionToPromise(transaction)
-  return tasks
+
+  return taskNames.map((task, index) => ({
+    id: keyToTaskId(taskKeys[index]),
+    name: task.name,
+  }))
 }
 
-export async function saveTasks(tasks: Task[]): Promise<void> {
+export async function saveTask(task: TaskDraft): Promise<Task> {
+  const db = await openTasksDatabase()
+
+  const transaction = db.transaction(TASKS_STORE, 'readwrite')
+  const store = transaction.objectStore(TASKS_STORE)
+  const taskId = await requestToPromise(store.add(task))
+  await transactionToPromise(transaction)
+
+  return {
+    id: keyToTaskId(taskId),
+    name: task.name,
+  }
+}
+
+export async function saveTasks(tasks: TaskDraft[]): Promise<void> {
   const db = await openTasksDatabase()
 
   const transaction = db.transaction(TASKS_STORE, 'readwrite')
