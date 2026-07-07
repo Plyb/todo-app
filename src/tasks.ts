@@ -3,9 +3,7 @@ export type Task = {
   name: string
 }
 
-export type TaskDraft = {
-  name: string
-}
+type StoredTask = Pick<Task, 'name'>
 
 const DB_NAME = 'todo-app'
 const DB_VERSION = 1
@@ -65,7 +63,7 @@ export async function loadTasks(): Promise<Task[]> {
 
   const transaction = db.transaction(TASKS_STORE, 'readonly')
   const store = transaction.objectStore(TASKS_STORE)
-  const taskNames = (await requestToPromise(store.getAll())) as TaskDraft[]
+  const taskNames = (await requestToPromise(store.getAll())) as StoredTask[]
   const taskKeys = await requestToPromise(store.getAllKeys())
   await transactionToPromise(transaction)
 
@@ -75,30 +73,11 @@ export async function loadTasks(): Promise<Task[]> {
   }))
 }
 
-export async function saveTask(task: TaskDraft): Promise<Task> {
+export async function saveTask(task: Task): Promise<void> {
   const db = await openTasksDatabase()
 
   const transaction = db.transaction(TASKS_STORE, 'readwrite')
   const store = transaction.objectStore(TASKS_STORE)
-  const taskId = await requestToPromise(store.add(task))
-  await transactionToPromise(transaction)
-
-  return {
-    id: keyToTaskId(taskId),
-    name: task.name,
-  }
-}
-
-export async function saveTasks(tasks: TaskDraft[]): Promise<void> {
-  const db = await openTasksDatabase()
-
-  const transaction = db.transaction(TASKS_STORE, 'readwrite')
-  const store = transaction.objectStore(TASKS_STORE)
-
-  await requestToPromise(store.clear())
-  for (const task of tasks) {
-    store.add(task)
-  }
-
+  store.put({ name: task.name }, task.id)
   await transactionToPromise(transaction)
 }
