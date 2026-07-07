@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
+  base: process.env.GITHUB_PAGES ? '/todo-app/' : '/',
   plugins: [
     react(),
     VitePWA({
@@ -11,7 +12,7 @@ export default defineConfig({
         name: 'Todo App',
         short_name: 'Todos',
         description: 'A simple todo app',
-        start_url: '/',
+        start_url: process.env.GITHUB_PAGES ? '/todo-app/' : '/',
         display: 'standalone',
         background_color: '#ffffff',
         theme_color: '#2563eb',
