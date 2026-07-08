@@ -107,10 +107,7 @@ export default function MainPage({ tasks, setTasks, onNavigateToSettings }: Main
   }
 
   function handleTaskClick(taskId: number) {
-    setSelectedTaskId((prev) => {
-      if (prev !== null) return null  // panel open — just close it
-      return taskId
-    })
+    setSelectedTaskId((prev) => (prev === taskId ? null : taskId))
   }
 
   function handleRename(id: number, name: string) {
@@ -158,7 +155,7 @@ export default function MainPage({ tasks, setTasks, onNavigateToSettings }: Main
         )}
         listRef={listRef}
         insertSlot={insertSlot}
-        onItemClick={handleTaskClick}
+        onItemClick={selectedTaskId === null ? handleTaskClick : undefined}
         itemStyle={(task) => {
           const isSelected = task.id === selectedTaskId
           const isFaded = selectedTaskId !== null && !isSelected
