@@ -12,15 +12,17 @@ type QuickSelectPanelProps = {
   onRename: (id: number, name: string) => void
   onChangeStatus: (id: number, statusSlug: string) => void
   onDelete: (id: number) => void
+  onUpdateNotes: (id: number, notes: string) => void
   onOpenTask: (id: number) => void
 }
 
-export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, onClose, onRename, onChangeStatus, onDelete, onOpenTask }: QuickSelectPanelProps) {
+export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, onClose, onRename, onChangeStatus, onDelete, onUpdateNotes, onOpenTask }: QuickSelectPanelProps) {
   const [name, setName] = useState(task.name)
   const [showModal, setShowModal] = useState(false)
   const [backdropReady, setBackdropReady] = useState(false)
   const [statusModalOpen, setStatusModalOpen] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
+  const [notes, setNotes] = useState(task.notes)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { inputRef.current?.focus() }, [])
@@ -47,6 +49,12 @@ export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, 
   // Placeholder: no related tasks yet
   const relatedGroups: Array<{ label: string; tasks: Task[] }> = []
 
+  function handleNotesBlur() {
+    if (notes !== task.notes) {
+      onUpdateNotes(task.id, notes)
+    }
+  }
+
   return (
     <>
       <div onClick={backdropReady ? onClose : undefined} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 10, pointerEvents: backdropReady ? 'auto' : 'none' }} />
@@ -54,7 +62,6 @@ export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, 
         onClick={(e) => e.stopPropagation()}
         style={{
           background: '#fff',
-          borderTop: '1px solid #eee',
           padding: 16,
           zIndex: 11,
           position: 'relative',
@@ -77,6 +84,24 @@ export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, 
             outline: 'none',
             boxSizing: 'border-box',
             marginBottom: 16,
+          }}
+        />
+        <label style={{ display: 'block', fontSize: 14, color: '#555', marginTop: 12, marginBottom: 4 }}>
+          Notes
+        </label>
+        <textarea
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          onBlur={handleNotesBlur}
+          style={{
+            width: '100%',
+            minHeight: 80,
+            boxSizing: 'border-box',
+            fontSize: 15,
+            padding: '8px 10px',
+            border: '1px solid #ccc',
+            borderRadius: 6,
+            resize: 'vertical',
           }}
         />
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12 }}>

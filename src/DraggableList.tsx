@@ -144,42 +144,54 @@ export function DraggableList<T extends { id: number }>({
           const isDragged = dragState?.taskId === item.id
           const translateY = getTaskTranslateY(item)
 
+          const isExpanded = expandedSlot?.afterItemId === item.id
+
           return (
             <React.Fragment key={item.id}>
               {insertSlot?.index === i && (
                 <li data-insert-slot style={{ listStyle: 'none' }}>{insertSlot.content}</li>
               )}
-              <li
-                ref={(el) => {
-                  if (el) rowsByTaskId.current.set(item.id, el)
-                  else rowsByTaskId.current.delete(item.id)
-                }}
-                onClick={(e) => e.stopPropagation()}
-                onPointerDown={(e) => handlePointerDown(e, item.id)}
-                onPointerMove={handlePointerMove}
-                onPointerUp={(e) => handlePointerUp(e, item.id)}
-                onPointerCancel={handlePointerCancel}
-                style={{
-                  userSelect: 'none',
-                  WebkitUserSelect: 'none',
-                  WebkitTouchCallout: 'none',
-                  touchAction: 'none',
-                  cursor: dragState ? 'grabbing' : 'grab',
-                  padding: '12px 16px',
-                  borderBottom: '1px solid #eee',
-                  boxSizing: 'border-box',
-                  position: 'relative',
-                  ...itemStyle?.(item),
-                  ...(isDragged
-                    ? { opacity: 0, transform: 'none', transition: 'none', zIndex: 0 }
-                    : { transform: `translateY(${translateY}px)`, transition: 'transform 0.15s ease, all 0.2s ease', zIndex: 1 }
-                  ),
-                }}
-              >
-                {renderItem(item)}
-              </li>
-              {expandedSlot?.afterItemId === item.id && (
-                <li key="expanded" style={{ listStyle: 'none' }}>{expandedSlot.content}</li>
+              {isExpanded ? (
+                <li
+                  ref={(el) => {
+                    if (el) rowsByTaskId.current.set(item.id, el)
+                    else rowsByTaskId.current.delete(item.id)
+                  }}
+                  style={{ listStyle: 'none', position: 'relative', zIndex: 11 }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {expandedSlot!.content}
+                </li>
+              ) : (
+                <li
+                  ref={(el) => {
+                    if (el) rowsByTaskId.current.set(item.id, el)
+                    else rowsByTaskId.current.delete(item.id)
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  onPointerDown={(e) => handlePointerDown(e, item.id)}
+                  onPointerMove={handlePointerMove}
+                  onPointerUp={(e) => handlePointerUp(e, item.id)}
+                  onPointerCancel={handlePointerCancel}
+                  style={{
+                    userSelect: 'none',
+                    WebkitUserSelect: 'none',
+                    WebkitTouchCallout: 'none',
+                    touchAction: 'none',
+                    cursor: dragState ? 'grabbing' : 'grab',
+                    padding: '12px 16px',
+                    borderBottom: '1px solid #eee',
+                    boxSizing: 'border-box',
+                    position: 'relative',
+                    ...itemStyle?.(item),
+                    ...(isDragged
+                      ? { opacity: 0, transform: 'none', transition: 'none', zIndex: 0 }
+                      : { transform: `translateY(${translateY}px)`, transition: 'transform 0.15s ease, all 0.2s ease', zIndex: 1 }
+                    ),
+                  }}
+                >
+                  {renderItem(item)}
+                </li>
               )}
             </React.Fragment>
           )
