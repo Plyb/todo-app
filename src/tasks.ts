@@ -286,3 +286,11 @@ export async function updateTaskStatus(id: number, statusSlug: string): Promise<
   }
   await transactionToPromise(transaction)
 }
+
+export async function deleteTask(id: number): Promise<void> {
+  const db = await openTasksDatabase()
+  const transaction = db.transaction(TASKS_STORE, 'readwrite')
+  const store = transaction.objectStore(TASKS_STORE)
+  store.delete(id)
+  await transactionToPromise(transaction)
+}

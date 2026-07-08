@@ -9,12 +9,14 @@ type QuickSelectPanelProps = {
   onClose: () => void
   onRename: (id: number, name: string) => void
   onChangeStatus: (id: number, statusSlug: string) => void
+  onDelete: (id: number) => void
 }
 
-export function QuickSelectPanel({ task, statuses, recentStatusSlugs, onClose, onRename, onChangeStatus }: QuickSelectPanelProps) {
+export function QuickSelectPanel({ task, statuses, recentStatusSlugs, onClose, onRename, onChangeStatus, onDelete }: QuickSelectPanelProps) {
   const [name, setName] = useState(task.name)
   const [backdropReady, setBackdropReady] = useState(false)
   const [statusModalOpen, setStatusModalOpen] = useState(false)
+  const [showConfirm, setShowConfirm] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { inputRef.current?.focus() }, [])
@@ -98,6 +100,31 @@ export function QuickSelectPanel({ task, statuses, recentStatusSlugs, onClose, o
             {currentStatus?.name ?? task.statusSlug}
           </button>
         </div>
+
+        {showConfirm ? (
+          <div style={{ marginTop: 16 }}>
+            <p style={{ margin: '0 0 12px' }}>Are you sure?</p>
+            <button
+              onClick={() => { onDelete(task.id); onClose() }}
+              style={{ marginRight: 8, color: '#fff', background: '#d32f2f', border: 'none', borderRadius: 4, padding: '8px 16px', cursor: 'pointer' }}
+            >
+              Confirm Delete
+            </button>
+            <button
+              onClick={() => setShowConfirm(false)}
+              style={{ border: '1px solid #ccc', borderRadius: 4, padding: '8px 16px', cursor: 'pointer' }}
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setShowConfirm(true)}
+            style={{ marginTop: 16, color: '#fff', background: '#d32f2f', border: 'none', borderRadius: 4, padding: '8px 16px', cursor: 'pointer' }}
+          >
+            Delete
+          </button>
+        )}
       </div>
 
       {statusModalOpen && (
