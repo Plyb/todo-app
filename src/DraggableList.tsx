@@ -17,6 +17,8 @@ type DraggableListProps<T extends { id: number }> = {
   onItemClick?: (id: number) => void
   insertSlot?: { index: number; content: React.ReactNode }
   listRef?: React.RefObject<HTMLUListElement | null>
+  onDragStart?: () => void
+  onDragEnd?: () => void
 }
 
 export function DraggableList<T extends { id: number }>({
@@ -27,6 +29,8 @@ export function DraggableList<T extends { id: number }>({
   onItemClick,
   insertSlot,
   listRef,
+  onDragStart,
+  onDragEnd,
 }: DraggableListProps<T>) {
   const [dragState, setDragState] = useState<DragState | null>(null)
 
@@ -68,6 +72,7 @@ export function DraggableList<T extends { id: number }>({
         insertIndex: items.findIndex((t) => t.id === taskId),
         rowHeight,
       })
+      onDragStart?.()
     }, 400)
   }
 
@@ -100,6 +105,7 @@ export function DraggableList<T extends { id: number }>({
 
     onReorder(dragState.taskId, dragState.insertIndex)
     setDragState(null)
+    onDragEnd?.()
   }
 
   function handlePointerCancel() {
@@ -109,6 +115,7 @@ export function DraggableList<T extends { id: number }>({
     }
     onItemClickAtDownRef.current = undefined
     setDragState(null)
+    onDragEnd?.()
   }
 
   const draggedItem = dragState ? items.find((t) => t.id === dragState.taskId) : null
