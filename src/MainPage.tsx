@@ -107,7 +107,10 @@ export default function MainPage({ tasks, setTasks, onNavigateToSettings }: Main
   }
 
   function handleTaskClick(taskId: number) {
-    setSelectedTaskId((prev) => (prev === taskId ? null : taskId))
+    setSelectedTaskId((prev) => {
+      if (prev !== null) return null  // panel open — just close it
+      return taskId
+    })
   }
 
   function handleRename(id: number, name: string) {
