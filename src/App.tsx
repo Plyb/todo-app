@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
-import { createTask, loadTasks, type Task } from './tasks'
+import { LexoRank } from 'lexorank'
+import { createTask, loadTasks, updateTaskRank, type Task } from './tasks'
+import { DraggableList } from './DraggableList'
 
 type NewTaskInput = {
   insertIndex: number // position in tasks array where this input is shown
 }
 
-type DragState = {
+type FabDragState = {
   isActive: boolean
   pointerX: number
   pointerY: number
@@ -16,12 +18,43 @@ const FAB_BOTTOM = 24
 const FAB_RIGHT = 24
 const FAB_SIZE = 56
 
+function computeNewRank(tasks: Task[], insertIndex: number, draggedTaskId: number): string {
+  const others = tasks.filter((t) => t.id !== draggedTaskId)
+  const prev = insertIndex > 0 ? others[insertIndex - 1] : null
+  const next = insertIndex < others.length ? others[insertIndex] : null
+
+  if (prev && next) {
+    return LexoRank.parse(prev.rank).between(LexoRank.parse(next.rank)).toString()
+  } else if (prev) {
+    return LexoRank.parse(prev.rank).genNext().toString()
+  } else if (next) {
+    return LexoRank.parse(next.rank).genPrev().toString()
+  } else {
+    return LexoRank.middle().toString()
+  }
+}
+
+function computeInsertRank(tasks: Task[], insertIndex: number): string {
+  const prev = insertIndex > 0 ? tasks[insertIndex - 1] : null
+  const next = insertIndex < tasks.length ? tasks[insertIndex] : null
+
+  if (prev && next) {
+    return LexoRank.parse(prev.rank).between(LexoRank.parse(next.rank)).toString()
+  } else if (prev) {
+    return LexoRank.parse(prev.rank).genNext().toString()
+  } else if (next) {
+    return LexoRank.parse(next.rank).genPrev().toString()
+  } else {
+    return LexoRank.middle().toString()
+  }
+}
+
 export default function App() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [newTaskInput, setNewTaskInput] = useState<NewTaskInput | null>(null)
-  const [dragState, setDragState] = useState<DragState | null>(null)
+  const [fabDragState, setFabDragState] = useState<FabDragState | null>(null)
 
-  const listRef = useRef<HTMLUListElement>(null)
+  const taskListWrapperRef = useRef<HTMLDivElement>(null)
   const fabRef = useRef<HTMLButtonElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -40,6 +73,20 @@ export default function App() {
     }
   }, [newTaskInput])
 
+  function handleReorder(draggedId: number, insertIndex: number) {
+    const newRank = computeNewRank(tasks, insertIndex, draggedId)
+    const others = tasks.filter((t) => t.id !== draggedId)
+    const draggedTask = tasks.find((t) => t.id === draggedId)!
+    const updatedDragged = { ...draggedTask, rank: newRank }
+    const newTasks = [
+      ...others.slice(0, insertIndex),
+      updatedDragged,
+      ...others.slice(insertIndex),
+    ]
+    setTasks(newTasks)
+    updateTaskRank(draggedId, newRank)
+  }
+
   function openInputAtBottom() {
     setNewTaskInput({ insertIndex: tasks.length })
   }
@@ -50,7 +97,8 @@ export default function App() {
       setNewTaskInput(null)
       return
     }
-    const task = await createTask(trimmed)
+    const rank = computeInsertRank(tasks, insertIndex)
+    const task = await createTask(trimmed, rank)
     setTasks((prev) => {
       const next = [...prev]
       next.splice(insertIndex, 0, task)
@@ -81,9 +129,9 @@ export default function App() {
   // --- Drag handling for FAB ---
 
   function getInsertIndexFromPointer(clientY: number): number {
-    if (!listRef.current) return tasks.length
+    if (!taskListWrapperRef.current) return tasks.length
     const listItems = Array.from(
-      listRef.current.querySelectorAll<HTMLElement>('li[data-task-item]')
+      taskListWrapperRef.current.querySelectorAll<HTMLElement>('li[data-task-item]')
     )
     for (let i = 0; i < listItems.length; i++) {
       const rect = listItems[i].getBoundingClientRect()
@@ -94,7 +142,6 @@ export default function App() {
 
   function isFabPosition(clientX: number, clientY: number): boolean {
     // Check if pointer is near the FAB's resting position (bottom-right corner area)
-    // We use the viewport dimensions to define a "home zone"
     const vw = window.innerWidth
     const vh = window.innerHeight
     const fabCenterX = vw - FAB_RIGHT - FAB_SIZE / 2
@@ -105,11 +152,10 @@ export default function App() {
   }
 
   function handleFabPointerDown(e: React.PointerEvent<HTMLButtonElement>) {
-    // Only initiate drag on primary button, no modifier keys
     if (e.button !== 0) return
     e.preventDefault()
     ;(e.currentTarget as HTMLButtonElement).setPointerCapture(e.pointerId)
-    setDragState({
+    setFabDragState({
       isActive: true,
       pointerX: e.clientX,
       pointerY: e.clientY,
@@ -118,9 +164,9 @@ export default function App() {
   }
 
   function handleFabPointerMove(e: React.PointerEvent<HTMLButtonElement>) {
-    if (!dragState?.isActive) return
+    if (!fabDragState?.isActive) return
     const atFab = isFabPosition(e.clientX, e.clientY)
-    setDragState({
+    setFabDragState({
       isActive: true,
       pointerX: e.clientX,
       pointerY: e.clientY,
@@ -129,87 +175,68 @@ export default function App() {
   }
 
   function handleFabPointerUp(e: React.PointerEvent<HTMLButtonElement>) {
-    if (!dragState?.isActive) return
+    if (!fabDragState?.isActive) return
     const atFab = isFabPosition(e.clientX, e.clientY)
-    if (atFab || dragState.insertIndex === null) {
+    if (atFab || fabDragState.insertIndex === null) {
       // Cancelled — dragged back to origin or didn't move far
-      setDragState(null)
+      setFabDragState(null)
       return
     }
-    const insertIndex = dragState.insertIndex
-    setDragState(null)
+    const insertIndex = fabDragState.insertIndex
+    setFabDragState(null)
     setNewTaskInput({ insertIndex })
   }
 
-  // Build the rendered list items, interleaving the input if present
-  function renderListItems() {
-    const items: React.ReactNode[] = []
-
-    // Determine drag placeholder index
-    const placeholderIndex =
-      dragState?.isActive && dragState.insertIndex !== null ? dragState.insertIndex : null
-
-    for (let slot = 0; slot <= tasks.length; slot++) {
-      // Insert drag placeholder at this position
-      if (placeholderIndex === slot) {
-        items.push(
-          <li
-            key="drag-placeholder"
-            style={{
-              height: 44,
-              background: 'rgba(26,115,232,0.08)',
-              borderRadius: 6,
-              border: '2px dashed #1a73e8',
-              margin: '4px 0',
-              transition: 'height 0.15s ease, opacity 0.15s ease',
-              opacity: 1,
-              listStyle: 'none',
-            }}
-          />
-        )
-      }
-
-      // Insert text input at this position
-      if (newTaskInput !== null && newTaskInput.insertIndex === slot) {
-        items.push(
-          <li key="new-task-input" style={{ listStyle: 'none', margin: '4px 0' }}>
-            <input
-              ref={inputRef}
-              type="text"
-              placeholder="Task name"
-              onBlur={(e) => handleInputBlur(e, slot)}
-              onKeyDown={(e) => handleInputKeyDown(e, slot)}
-              style={{
-                width: '100%',
-                boxSizing: 'border-box',
-                padding: '8px 12px',
-                fontSize: 16,
-                border: '2px solid #1a73e8',
-                borderRadius: 6,
-                outline: 'none',
-              }}
-            />
-          </li>
-        )
-      }
-
-      if (slot < tasks.length) {
-        items.push(
-          <li key={tasks[slot].id} data-task-item style={{ padding: '8px 0' }}>
-            {tasks[slot].name}
-          </li>
-        )
-      }
-    }
-
-    return items
-  }
+  const fabPlaceholderIndex =
+    fabDragState?.isActive && fabDragState.insertIndex !== null ? fabDragState.insertIndex : null
 
   return (
     <main>
-      <ul ref={listRef} style={{ padding: 0, listStyle: 'none', margin: 0 }}>
-        {renderListItems()}
-      </ul>
+      <div ref={taskListWrapperRef}>
+        <DraggableList
+          items={tasks}
+          onReorder={handleReorder}
+          renderItem={(task) => task.name}
+        />
+
+        {/* Input slots for FAB drag placeholder and new-task text input */}
+        <ul style={{ padding: 0, listStyle: 'none', margin: 0 }}>
+          {Array.from({ length: tasks.length + 1 }, (_, slot) => (
+            <li key={slot} style={{ listStyle: 'none' }}>
+              {fabPlaceholderIndex === slot && (
+                <div
+                  style={{
+                    height: 44,
+                    background: 'rgba(26,115,232,0.08)',
+                    borderRadius: 6,
+                    border: '2px dashed #1a73e8',
+                    margin: '4px 0',
+                  }}
+                />
+              )}
+              {newTaskInput !== null && newTaskInput.insertIndex === slot && (
+                <input
+                  ref={inputRef}
+                  type="text"
+                  placeholder="Task name"
+                  onBlur={(e) => handleInputBlur(e, slot)}
+                  onKeyDown={(e) => handleInputKeyDown(e, slot)}
+                  style={{
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    padding: '8px 12px',
+                    fontSize: 16,
+                    border: '2px solid #1a73e8',
+                    borderRadius: 6,
+                    outline: 'none',
+                    margin: '4px 0',
+                  }}
+                />
+              )}
+            </li>
+          ))}
+        </ul>
+      </div>
 
       {/* Floating Action Button */}
       <button
@@ -219,7 +246,7 @@ export default function App() {
         onPointerMove={handleFabPointerMove}
         onPointerUp={handleFabPointerUp}
         onClick={() => {
-          if (!dragState) openInputAtBottom()
+          if (!fabDragState) openInputAtBottom()
         }}
         style={{
           position: 'fixed',
@@ -233,7 +260,7 @@ export default function App() {
           border: 'none',
           fontSize: 28,
           lineHeight: 1,
-          cursor: dragState?.isActive ? 'grabbing' : 'pointer',
+          cursor: fabDragState?.isActive ? 'grabbing' : 'pointer',
           boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
           display: 'flex',
           alignItems: 'center',
@@ -241,7 +268,7 @@ export default function App() {
           userSelect: 'none',
           touchAction: 'none',
           transition: 'box-shadow 0.15s ease, transform 0.15s ease',
-          transform: dragState?.isActive ? 'scale(1.1)' : 'scale(1)',
+          transform: fabDragState?.isActive ? 'scale(1.1)' : 'scale(1)',
         }}
       >
         +
