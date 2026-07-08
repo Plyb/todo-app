@@ -34,7 +34,6 @@ export function QuickSelectPanel({ task, onClose, onRename }: QuickSelectPanelPr
 
   function handleBlur() {
     commitRename()
-    onClose()
   }
 
   return (
