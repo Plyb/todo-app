@@ -1,4 +1,5 @@
-import { useRef, useState } from 'react'
+import React, { useRef, useState } from 'react'
+import { isPrimaryButton, findInsertIndex } from './pointer-utils'
 
 type DragState = {
   taskId: number
@@ -8,15 +9,13 @@ type DragState = {
   rowHeight: number
 }
 
-function isPrimaryButton(e: React.PointerEvent): boolean {
-  return e.pointerType !== 'mouse' || e.button === 0
-}
-
 type DraggableListProps<T extends { id: number }> = {
   items: T[]
   onReorder: (draggedId: number, insertIndex: number) => void
   renderItem: (item: T) => React.ReactNode
   itemStyle?: React.CSSProperties
+  insertSlot?: { index: number; content: React.ReactNode }
+  listRef?: React.RefObject<HTMLUListElement | null>
 }
 
 export function DraggableList<T extends { id: number }>({
@@ -24,6 +23,8 @@ export function DraggableList<T extends { id: number }>({
   onReorder,
   renderItem,
   itemStyle,
+  insertSlot,
+  listRef,
 }: DraggableListProps<T>) {
   const [dragState, setDragState] = useState<DragState | null>(null)
 
@@ -36,21 +37,17 @@ export function DraggableList<T extends { id: number }>({
 
   function computeInsertIndex(probeY: number, draggedTaskId: number): number {
     const others = items.filter((t) => t.id !== draggedTaskId)
-    const othersWithRects = others.flatMap((t, i) => {
+    const elements = others.flatMap((t) => {
       const el = rowsByTaskId.current.get(t.id)
-      return el ? [{ index: i, rect: el.getBoundingClientRect() }] : []
+      return el ? [el] : []
     })
-    for (const { index, rect } of othersWithRects) {
-      if (probeY < rect.top + rect.height / 2) return index
-    }
-    return others.length
+    return findInsertIndex(elements, probeY)
   }
 
   function handlePointerDown(e: React.PointerEvent<HTMLLIElement>, taskId: number) {
     if (!isPrimaryButton(e)) return
 
     const startY = e.clientY
-    // React nullifies currentTarget after the event handler returns, so capture it now
     const target = e.currentTarget
 
     longPressTimerRef.current = setTimeout(() => {
@@ -94,7 +91,6 @@ export function DraggableList<T extends { id: number }>({
       clearTimeout(longPressTimerRef.current)
       longPressTimerRef.current = null
     }
-    // fires when the browser interrupts the pointer (e.g. system gesture, scroll takeover)
     setDragState(null)
   }
 
@@ -117,42 +113,48 @@ export function DraggableList<T extends { id: number }>({
 
   return (
     <>
-      <ul style={{ listStyle: 'none', padding: 0, margin: 0, position: 'relative' }}>
-        {items.map((item) => {
+      <ul ref={listRef} style={{ listStyle: 'none', padding: 0, margin: 0, position: 'relative' }}>
+        {items.map((item, i) => {
           const isDragged = dragState?.taskId === item.id
           const translateY = getTaskTranslateY(item)
 
           return (
-            <li
-              key={item.id}
-              data-task-item
-              ref={(el) => {
-                if (el) rowsByTaskId.current.set(item.id, el)
-                else rowsByTaskId.current.delete(item.id)
-              }}
-              onPointerDown={(e) => handlePointerDown(e, item.id)}
-              onPointerMove={handlePointerMove}
-              onPointerUp={handlePointerUp}
-              onPointerCancel={handlePointerCancel}
-              style={{
-                userSelect: 'none',
-                touchAction: 'none',
-                cursor: dragState ? 'grabbing' : 'grab',
-                padding: '12px 16px',
-                borderBottom: '1px solid #eee',
-                boxSizing: 'border-box',
-                opacity: isDragged ? 0 : 1,
-                transform: isDragged ? 'none' : `translateY(${translateY}px)`,
-                transition: isDragged ? 'none' : 'transform 0.15s ease',
-                position: 'relative',
-                zIndex: isDragged ? 0 : 1,
-                ...itemStyle,
-              }}
-            >
-              {renderItem(item)}
-            </li>
+            <React.Fragment key={item.id}>
+              {insertSlot?.index === i && (
+                <li data-insert-slot style={{ listStyle: 'none' }}>{insertSlot.content}</li>
+              )}
+              <li
+                ref={(el) => {
+                  if (el) rowsByTaskId.current.set(item.id, el)
+                  else rowsByTaskId.current.delete(item.id)
+                }}
+                onPointerDown={(e) => handlePointerDown(e, item.id)}
+                onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerUp}
+                onPointerCancel={handlePointerCancel}
+                style={{
+                  userSelect: 'none',
+                  touchAction: 'none',
+                  cursor: dragState ? 'grabbing' : 'grab',
+                  padding: '12px 16px',
+                  borderBottom: '1px solid #eee',
+                  boxSizing: 'border-box',
+                  opacity: isDragged ? 0 : 1,
+                  transform: isDragged ? 'none' : `translateY(${translateY}px)`,
+                  transition: isDragged ? 'none' : 'transform 0.15s ease',
+                  position: 'relative',
+                  zIndex: isDragged ? 0 : 1,
+                  ...itemStyle,
+                }}
+              >
+                {renderItem(item)}
+              </li>
+            </React.Fragment>
           )
         })}
+        {insertSlot?.index === items.length && (
+          <li data-insert-slot style={{ listStyle: 'none' }}>{insertSlot.content}</li>
+        )}
       </ul>
 
       {draggedItem && dragState && (() => {
