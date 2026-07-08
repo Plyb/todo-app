@@ -178,8 +178,10 @@ export default function MainPage({ tasks, setTasks, onNavigateToSettings }: Main
       {selectedTask && (
         <QuickSelectPanel
           task={selectedTask}
+          allTasks={tasks}
           onClose={() => setSelectedTaskId(null)}
           onRename={handleRename}
+          onOpenTask={(id) => setSelectedTaskId(id)}
         />
       )}
     </main>

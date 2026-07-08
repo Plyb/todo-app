@@ -1,21 +1,22 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Task } from './tasks'
+import { RelationshipModal, RelationshipGroup } from './RelationshipModal'
 
 type QuickSelectPanelProps = {
   task: Task
+  allTasks: Task[]
   onClose: () => void
   onRename: (id: number, name: string) => void
+  onOpenTask: (id: number) => void
 }
 
-export function QuickSelectPanel({ task, onClose, onRename }: QuickSelectPanelProps) {
+export function QuickSelectPanel({ task, allTasks, onClose, onRename, onOpenTask }: QuickSelectPanelProps) {
   const [name, setName] = useState(task.name)
+  const [showModal, setShowModal] = useState(false)
   const [backdropReady, setBackdropReady] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => {
-    inputRef.current?.focus()
-  }, [])
-
+  useEffect(() => { inputRef.current?.focus() }, [])
   useEffect(() => {
     const t = setTimeout(() => setBackdropReady(true), 350)
     return () => clearTimeout(t)
@@ -23,37 +24,22 @@ export function QuickSelectPanel({ task, onClose, onRename }: QuickSelectPanelPr
 
   function commitRename() {
     const trimmed = name.trim()
-    if (trimmed && trimmed !== task.name) {
-      onRename(task.id, trimmed)
-    }
+    if (trimmed && trimmed !== task.name) onRename(task.id, trimmed)
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === 'Enter') {
-      commitRename()
-      onClose()
-    } else if (e.key === 'Escape') {
-      setName(task.name)
-      onClose()
-    }
+    if (e.key === 'Enter') { commitRename(); onClose() }
+    else if (e.key === 'Escape') { setName(task.name); onClose() }
   }
 
-  function handleBlur() {
-    commitRename()
-  }
+  function handleBlur() { commitRename() }
+
+  // Placeholder: no related tasks yet
+  const relatedGroups: Array<{ label: string; tasks: Task[] }> = []
 
   return (
     <>
-      <div
-        onClick={backdropReady ? onClose : undefined}
-        style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(0,0,0,0.3)',
-          zIndex: 10,
-          pointerEvents: backdropReady ? 'auto' : 'none',
-        }}
-      />
+      <div onClick={backdropReady ? onClose : undefined} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 10, pointerEvents: backdropReady ? 'auto' : 'none' }} />
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
@@ -66,6 +52,8 @@ export function QuickSelectPanel({ task, onClose, onRename }: QuickSelectPanelPr
           padding: 16,
           boxShadow: '0 -4px 16px rgba(0,0,0,0.15)',
           zIndex: 11,
+          maxHeight: '60vh',
+          overflowY: 'auto',
         }}
       >
         <input
@@ -82,9 +70,51 @@ export function QuickSelectPanel({ task, onClose, onRename }: QuickSelectPanelPr
             borderBottom: '2px solid #1a73e8',
             outline: 'none',
             boxSizing: 'border-box',
+            marginBottom: 16,
           }}
         />
+
+        <div>
+          <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 8 }}>Related Tasks</div>
+
+          {relatedGroups.length === 0 ? (
+            <div style={{ color: '#aaa', fontSize: 14, marginBottom: 12 }}>No related tasks</div>
+          ) : (
+            relatedGroups.map((group) => (
+              <RelationshipGroup
+                key={group.label}
+                label={group.label}
+                tasks={group.tasks}
+                onOpenTask={onOpenTask}
+              />
+            ))
+          )}
+
+          <button
+            onClick={() => setShowModal(true)}
+            style={{
+              marginTop: 4,
+              padding: '8px 16px',
+              backgroundColor: '#1a73e8',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 8,
+              cursor: 'pointer',
+              fontSize: 14,
+            }}
+          >
+            Add Relationship
+          </button>
+        </div>
       </div>
+
+      {showModal && (
+        <RelationshipModal
+          currentTaskId={task.id}
+          allTasks={allTasks}
+          onClose={() => setShowModal(false)}
+        />
+      )}
     </>
   )
 }
