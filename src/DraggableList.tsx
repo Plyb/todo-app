@@ -48,6 +48,7 @@ export function DraggableList<T extends { id: number }>({
 
   function handlePointerDown(e: React.PointerEvent<HTMLLIElement>, taskId: number) {
     if (!isPrimaryButton(e)) return
+    e.preventDefault()
 
     const startY = e.clientY
     // React nullifies currentTarget after the event handler returns, so capture it now
@@ -135,6 +136,8 @@ export function DraggableList<T extends { id: number }>({
               onPointerCancel={handlePointerCancel}
               style={{
                 userSelect: 'none',
+                WebkitUserSelect: 'none',
+                WebkitTouchCallout: 'none',
                 touchAction: 'none',
                 cursor: dragState ? 'grabbing' : 'grab',
                 padding: '12px 16px',
