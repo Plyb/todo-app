@@ -9,10 +9,16 @@ type QuickSelectPanelProps = {
 
 export function QuickSelectPanel({ task, onClose, onRename }: QuickSelectPanelProps) {
   const [name, setName] = useState(task.name)
+  const [backdropReady, setBackdropReady] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     inputRef.current?.focus()
+  }, [])
+
+  useEffect(() => {
+    const t = setTimeout(() => setBackdropReady(true), 350)
+    return () => clearTimeout(t)
   }, [])
 
   function commitRename() {
@@ -39,12 +45,13 @@ export function QuickSelectPanel({ task, onClose, onRename }: QuickSelectPanelPr
   return (
     <>
       <div
-        onClick={onClose}
+        onClick={backdropReady ? onClose : undefined}
         style={{
           position: 'fixed',
           inset: 0,
           background: 'rgba(0,0,0,0.3)',
           zIndex: 10,
+          pointerEvents: backdropReady ? 'auto' : 'none',
         }}
       />
       <div
