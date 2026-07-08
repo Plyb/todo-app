@@ -7,13 +7,15 @@ type QuickSelectPanelProps = {
   allTasks: Task[]
   onClose: () => void
   onRename: (id: number, name: string) => void
+  onDelete: (id: number) => void
   onOpenTask: (id: number) => void
 }
 
-export function QuickSelectPanel({ task, allTasks, onClose, onRename, onOpenTask }: QuickSelectPanelProps) {
+export function QuickSelectPanel({ task, allTasks, onClose, onRename, onDelete, onOpenTask }: QuickSelectPanelProps) {
   const [name, setName] = useState(task.name)
   const [showModal, setShowModal] = useState(false)
   const [backdropReady, setBackdropReady] = useState(false)
+  const [showConfirm, setShowConfirm] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { inputRef.current?.focus() }, [])
@@ -74,7 +76,32 @@ export function QuickSelectPanel({ task, allTasks, onClose, onRename, onOpenTask
           }}
         />
 
-        <div>
+        {showConfirm ? (
+          <div style={{ marginTop: 16 }}>
+            <p style={{ margin: '0 0 12px' }}>Are you sure?</p>
+            <button
+              onClick={() => { onDelete(task.id); onClose() }}
+              style={{ marginRight: 8, color: '#fff', background: '#d32f2f', border: 'none', borderRadius: 4, padding: '8px 16px', cursor: 'pointer' }}
+            >
+              Confirm Delete
+            </button>
+            <button
+              onClick={() => setShowConfirm(false)}
+              style={{ border: '1px solid #ccc', borderRadius: 4, padding: '8px 16px', cursor: 'pointer' }}
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setShowConfirm(true)}
+            style={{ marginTop: 16, color: '#fff', background: '#d32f2f', border: 'none', borderRadius: 4, padding: '8px 16px', cursor: 'pointer' }}
+          >
+            Delete
+          </button>
+        )}
+
+        <div style={{ marginTop: 16 }}>
           <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 8 }}>Related Tasks</div>
 
           {relatedGroups.length === 0 ? (

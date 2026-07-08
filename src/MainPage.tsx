@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { createTask, updateTaskDone, updateTaskName, updateTaskRank, type Task } from './tasks'
+import { createTask, deleteTask, updateTaskDone, updateTaskName, updateTaskRank, type Task } from './tasks'
 import { DraggableList } from './DraggableList'
 import { AddTaskFab, NewTaskInputField, computeInsertRank, type NewTaskInput } from './AddTaskInput'
 import { rankBetween } from './rank-utils'
@@ -115,6 +115,12 @@ export default function MainPage({ tasks, setTasks, onNavigateToSettings }: Main
     setTasks(tasks.map((t) => (t.id === id ? { ...t, name } : t)))
   }
 
+  async function handleDelete(id: number) {
+    await deleteTask(id)
+    setTasks((prev) => prev.filter((t) => t.id !== id))
+    setSelectedTaskId(null)
+  }
+
   const selectedTask = selectedTaskId !== null ? tasks.find((t) => t.id === selectedTaskId) ?? null : null
 
   const insertSlot = newTaskInput !== null
@@ -181,6 +187,7 @@ export default function MainPage({ tasks, setTasks, onNavigateToSettings }: Main
           allTasks={tasks}
           onClose={() => setSelectedTaskId(null)}
           onRename={handleRename}
+          onDelete={handleDelete}
           onOpenTask={(id) => setSelectedTaskId(id)}
         />
       )}
