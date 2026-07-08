@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { LexoRank } from 'lexorank'
-import { updateTaskRank, type Task } from './tasks'
+import { updateTaskDone, updateTaskRank, type Task } from './tasks'
 import { DraggableList } from './DraggableList'
 
 type MainPageProps = {
@@ -25,8 +25,28 @@ function computeNewRank(tasks: Task[], insertIndex: number, draggedTaskId: numbe
   }
 }
 
+function TaskRow({ task, onDoneChange }: { task: Task; onDoneChange: (done: boolean) => void }) {
+  return (
+    <>
+      <input
+        type="checkbox"
+        checked={task.done}
+        onChange={(e) => onDoneChange(e.target.checked)}
+      />
+      <span style={task.done ? { color: '#aaa' } : undefined}>
+        {task.name}
+      </span>
+    </>
+  )
+}
+
 export default function MainPage({ tasks, setTasks, onNavigateToSettings }: MainPageProps) {
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null)
+
+  function handleDoneChange(id: number, done: boolean) {
+    updateTaskDone(id, done)
+    setTasks(tasks.map((t) => (t.id === id ? { ...t, done } : t)))
+  }
 
   function handleReorder(draggedId: number, insertIndex: number) {
     const newRank = computeNewRank(tasks, insertIndex, draggedId)
@@ -51,7 +71,9 @@ export default function MainPage({ tasks, setTasks, onNavigateToSettings }: Main
       <DraggableList
         items={tasks}
         onReorder={handleReorder}
-        renderItem={(task) => task.name}
+        renderItem={(task) => (
+          <TaskRow task={task} onDoneChange={(done) => handleDoneChange(task.id, done)} />
+        )}
         onItemClick={handleTaskClick}
         itemStyle={(task) => {
           const isSelected = task.id === selectedTaskId
