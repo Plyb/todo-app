@@ -63,6 +63,8 @@ export default function MainPage({
   const listRef = useRef<HTMLUListElement>(null)
   const inputKeyRef = useRef(0)
   const touchStartY = useRef<number | null>(null)
+  const isDraggingRef = useRef(false)
+  const pullIndicatorRef = useRef<HTMLDivElement>(null)
 
   const displayedTasks = tasks.filter((t) => t.statusSlug === currentStatusSlug)
 
@@ -143,16 +145,30 @@ export default function MainPage({
 
   function handleTouchMove(e: React.TouchEvent<HTMLElement>) {
     if (touchStartY.current === null) return
+    if (isDraggingRef.current) return
     if (window.scrollY > 0) return
-    const deltaY = e.touches[0].clientY - touchStartY.current
-    if (deltaY > 60) {
+    const deltaY = Math.max(0, e.touches[0].clientY - touchStartY.current)
+    const capped = Math.min(deltaY, 90)
+    if (pullIndicatorRef.current) {
+      pullIndicatorRef.current.style.height = `${capped}px`
+      pullIndicatorRef.current.style.opacity = String(capped / 90)
+    }
+    if (deltaY >= 90) {
       touchStartY.current = null
+      if (pullIndicatorRef.current) {
+        pullIndicatorRef.current.style.height = '0px'
+        pullIndicatorRef.current.style.opacity = '0'
+      }
       setStatusModalOpen(true)
     }
   }
 
   function handleTouchEnd() {
     touchStartY.current = null
+    if (pullIndicatorRef.current) {
+      pullIndicatorRef.current.style.height = '0px'
+      pullIndicatorRef.current.style.opacity = '0'
+    }
   }
 
   const selectedTask = selectedTaskId !== null ? tasks.find((t) => t.id === selectedTaskId) ?? null : null
@@ -193,6 +209,20 @@ export default function MainPage({
       onTouchEnd={handleTouchEnd}
       style={{ minHeight: '100vh' }}
     >
+      <div
+        ref={pullIndicatorRef}
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: 0,
+          background: 'rgba(26,115,232,0.15)',
+          zIndex: 0,
+          opacity: 0,
+          pointerEvents: 'none',
+        }}
+      />
       <DraggableList
         items={displayedTasks}
         onReorder={handleReorder}
@@ -202,6 +232,8 @@ export default function MainPage({
         listRef={listRef}
         insertSlot={insertSlot}
         onItemClick={selectedTaskId === null ? handleTaskClick : undefined}
+        onDragStart={() => { isDraggingRef.current = true }}
+        onDragEnd={() => { isDraggingRef.current = false }}
         itemStyle={(task) => {
           const isSelected = task.id === selectedTaskId
           const isFaded = selectedTaskId !== null && !isSelected

@@ -8,8 +8,16 @@ type Page = 'main' | 'settings'
 export default function App() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [statuses, setStatuses] = useState<Status[]>([])
-  const [currentStatusSlug, setCurrentStatusSlug] = useState('today')
-  const [recentStatusSlugs, setRecentStatusSlugs] = useState<string[]>(['today'])
+  const [currentStatusSlug, setCurrentStatusSlug] = useState(
+    () => localStorage.getItem('currentStatusSlug') ?? 'today'
+  )
+  const [recentStatusSlugs, setRecentStatusSlugs] = useState<string[]>(
+    () => {
+      try {
+        return JSON.parse(localStorage.getItem('recentStatusSlugs') ?? '["today"]')
+      } catch { return ['today'] }
+    }
+  )
   const [page, setPage] = useState<Page>('main')
 
   useEffect(() => {
@@ -29,7 +37,12 @@ export default function App() {
 
   function openStatus(slug: string) {
     setCurrentStatusSlug(slug)
-    setRecentStatusSlugs((prev) => [slug, ...prev.filter((s) => s !== slug)])
+    localStorage.setItem('currentStatusSlug', slug)
+    setRecentStatusSlugs((prev) => {
+      const next = [slug, ...prev.filter((s) => s !== slug)]
+      localStorage.setItem('recentStatusSlugs', JSON.stringify(next))
+      return next
+    })
   }
 
   if (page === 'settings') {
