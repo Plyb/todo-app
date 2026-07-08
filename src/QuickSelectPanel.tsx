@@ -53,15 +53,11 @@ export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, 
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          position: 'fixed',
-          bottom: 0,
-          left: 0,
-          right: 0,
           background: '#fff',
-          borderRadius: '16px 16px 0 0',
+          borderTop: '1px solid #eee',
           padding: 16,
-          boxShadow: '0 -4px 16px rgba(0,0,0,0.15)',
           zIndex: 11,
+          position: 'relative',
           maxHeight: '60vh',
           overflowY: 'auto',
         }}

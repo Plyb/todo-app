@@ -16,6 +16,7 @@ type DraggableListProps<T extends { id: number }> = {
   itemStyle?: (item: T) => React.CSSProperties
   onItemClick?: (id: number) => void
   insertSlot?: { index: number; content: React.ReactNode }
+  expandedSlot?: { afterItemId: number; content: React.ReactNode }
   listRef?: React.RefObject<HTMLUListElement | null>
   onDragStart?: () => void
   onDragEnd?: () => void
@@ -28,6 +29,7 @@ export function DraggableList<T extends { id: number }>({
   itemStyle,
   onItemClick,
   insertSlot,
+  expandedSlot,
   listRef,
   onDragStart,
   onDragEnd,
@@ -176,6 +178,9 @@ export function DraggableList<T extends { id: number }>({
               >
                 {renderItem(item)}
               </li>
+              {expandedSlot?.afterItemId === item.id && (
+                <li key="expanded" style={{ listStyle: 'none' }}>{expandedSlot.content}</li>
+              )}
             </React.Fragment>
           )
         })}
