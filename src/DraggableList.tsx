@@ -139,6 +139,7 @@ export function DraggableList<T extends { id: number }>({
           return (
             <li
               key={item.id}
+              onClick={(e) => e.stopPropagation()}
               ref={(el) => {
                 if (el) rowsByTaskId.current.set(item.id, el)
                 else rowsByTaskId.current.delete(item.id)
