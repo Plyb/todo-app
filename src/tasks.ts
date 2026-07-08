@@ -7,7 +7,7 @@ export type Task = {
   rank: string
 }
 
-type StoredTask = Pick<Task, 'name' | 'done' | 'rank'>
+type StoredTask = Omit<Task, 'id'>
 
 const DB_NAME = 'todo-app'
 const DB_VERSION = 3

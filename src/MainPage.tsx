@@ -24,6 +24,21 @@ function computeNewRank(tasks: Task[], insertIndex: number, draggedTaskId: numbe
   }
 }
 
+function TaskRow({ task, onDoneChange }: { task: Task; onDoneChange: (done: boolean) => void }) {
+  return (
+    <>
+      <input
+        type="checkbox"
+        checked={task.done}
+        onChange={(e) => onDoneChange(e.target.checked)}
+      />
+      <span style={task.done ? { color: '#aaa' } : undefined}>
+        {task.name}
+      </span>
+    </>
+  )
+}
+
 export default function MainPage({ tasks, setTasks, onNavigateToSettings }: MainPageProps) {
   function handleDoneChange(id: number, done: boolean) {
     updateTaskDone(id, done)
@@ -50,16 +65,7 @@ export default function MainPage({ tasks, setTasks, onNavigateToSettings }: Main
         items={tasks}
         onReorder={handleReorder}
         renderItem={(task) => (
-          <>
-            <input
-              type="checkbox"
-              checked={task.done}
-              onChange={(e) => handleDoneChange(task.id, e.target.checked)}
-            />
-            <span style={task.done ? { color: '#aaa' } : undefined}>
-              {task.name}
-            </span>
-          </>
+          <TaskRow task={task} onDoneChange={(done) => handleDoneChange(task.id, done)} />
         )}
       />
       <button
