@@ -67,7 +67,7 @@ export default function MainPage({ tasks, setTasks, onNavigateToSettings }: Main
   }
 
   return (
-    <main onClick={() => setSelectedTaskId(null)}>
+    <main onClick={() => setSelectedTaskId(null)} style={{ minHeight: '100vh' }}>
       <DraggableList
         items={tasks}
         onReorder={handleReorder}
