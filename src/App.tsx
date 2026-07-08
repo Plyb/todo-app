@@ -33,7 +33,7 @@ export default function App() {
               checked={task.done}
               onChange={(e) => handleDoneChange(task.id, e.target.checked)}
             />
-            <span style={task.done ? { textDecoration: 'line-through' } : undefined}>
+            <span style={task.done ? { color: '#aaa' } : undefined}>
               {task.name}
             </span>
           </li>
