@@ -16,7 +16,8 @@ type DraggableListProps<T extends { id: number }> = {
   items: T[]
   onReorder: (draggedId: number, insertIndex: number) => void
   renderItem: (item: T) => React.ReactNode
-  itemStyle?: React.CSSProperties
+  itemStyle?: (item: T) => React.CSSProperties
+  onItemClick?: (id: number) => void
 }
 
 export function DraggableList<T extends { id: number }>({
@@ -24,11 +25,13 @@ export function DraggableList<T extends { id: number }>({
   onReorder,
   renderItem,
   itemStyle,
+  onItemClick,
 }: DraggableListProps<T>) {
   const [dragState, setDragState] = useState<DragState | null>(null)
 
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const rowsByTaskId = useRef<Map<number, HTMLLIElement>>(new Map())
+  const didDragRef = useRef(false)
 
   function getRowHeight(): number {
     return rowsByTaskId.current.get(items[0]?.id)?.getBoundingClientRect().height ?? 48
@@ -50,11 +53,13 @@ export function DraggableList<T extends { id: number }>({
     if (!isPrimaryButton(e)) return
     e.preventDefault()
 
+    didDragRef.current = false
     const startY = e.clientY
     // React nullifies currentTarget after the event handler returns, so capture it now
     const target = e.currentTarget
 
     longPressTimerRef.current = setTimeout(() => {
+      didDragRef.current = true
       const rowHeight = getRowHeight()
       target.setPointerCapture(e.pointerId)
       setDragState({
@@ -78,13 +83,21 @@ export function DraggableList<T extends { id: number }>({
     setDragState((prev) => prev ? { ...prev, currentY: e.clientY, insertIndex } : null)
   }
 
-  function handlePointerUp(_e: React.PointerEvent<HTMLLIElement>) {
+  function handlePointerUp(e: React.PointerEvent<HTMLLIElement>, taskId: number) {
     if (longPressTimerRef.current) {
       clearTimeout(longPressTimerRef.current)
       longPressTimerRef.current = null
     }
 
-    if (!dragState) return
+    if (!dragState) {
+      if (!didDragRef.current && onItemClick) {
+        const target = e.target as HTMLElement
+        if (!target.closest('input[type="checkbox"]')) {
+          onItemClick(taskId)
+        }
+      }
+      return
+    }
 
     onReorder(dragState.taskId, dragState.insertIndex)
     setDragState(null)
@@ -126,13 +139,14 @@ export function DraggableList<T extends { id: number }>({
           return (
             <li
               key={item.id}
+              onClick={(e) => e.stopPropagation()}
               ref={(el) => {
                 if (el) rowsByTaskId.current.set(item.id, el)
                 else rowsByTaskId.current.delete(item.id)
               }}
               onPointerDown={(e) => handlePointerDown(e, item.id)}
               onPointerMove={handlePointerMove}
-              onPointerUp={handlePointerUp}
+              onPointerUp={(e) => handlePointerUp(e, item.id)}
               onPointerCancel={handlePointerCancel}
               style={{
                 userSelect: 'none',
@@ -143,12 +157,12 @@ export function DraggableList<T extends { id: number }>({
                 padding: '12px 16px',
                 borderBottom: '1px solid #eee',
                 boxSizing: 'border-box',
-                opacity: isDragged ? 0 : 1,
-                transform: isDragged ? 'none' : `translateY(${translateY}px)`,
-                transition: isDragged ? 'none' : 'transform 0.15s ease',
                 position: 'relative',
-                zIndex: isDragged ? 0 : 1,
-                ...itemStyle,
+                ...itemStyle?.(item),
+                ...(isDragged
+                  ? { opacity: 0, transform: 'none', transition: 'none', zIndex: 0 }
+                  : { transform: `translateY(${translateY}px)`, transition: 'transform 0.15s ease, all 0.2s ease', zIndex: 1 }
+                ),
               }}
             >
               {renderItem(item)}

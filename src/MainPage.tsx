@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { LexoRank } from 'lexorank'
 import { updateTaskDone, updateTaskRank, type Task } from './tasks'
 import { DraggableList } from './DraggableList'
@@ -40,6 +41,8 @@ function TaskRow({ task, onDoneChange }: { task: Task; onDoneChange: (done: bool
 }
 
 export default function MainPage({ tasks, setTasks, onNavigateToSettings }: MainPageProps) {
+  const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null)
+
   function handleDoneChange(id: number, done: boolean) {
     updateTaskDone(id, done)
     setTasks(tasks.map((t) => (t.id === id ? { ...t, done } : t)))
@@ -59,14 +62,27 @@ export default function MainPage({ tasks, setTasks, onNavigateToSettings }: Main
     updateTaskRank(draggedId, newRank)
   }
 
+  function handleTaskClick(taskId: number) {
+    setSelectedTaskId((prev) => (prev === taskId ? null : taskId))
+  }
+
   return (
-    <main>
+    <main onClick={() => setSelectedTaskId(null)} style={{ minHeight: '100vh' }}>
       <DraggableList
         items={tasks}
         onReorder={handleReorder}
         renderItem={(task) => (
           <TaskRow task={task} onDoneChange={(done) => handleDoneChange(task.id, done)} />
         )}
+        onItemClick={handleTaskClick}
+        itemStyle={(task) => {
+          const isSelected = task.id === selectedTaskId
+          const isFaded = selectedTaskId !== null && !isSelected
+          return {
+            opacity: isFaded ? 0.4 : 1,
+            backgroundColor: isSelected ? '#e8f0fe' : 'transparent',
+          }
+        }}
       />
       <button
         onClick={onNavigateToSettings}
