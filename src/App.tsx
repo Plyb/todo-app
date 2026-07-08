@@ -27,5 +27,5 @@ export default function App() {
     return <SettingsPage onBack={() => setPage('main')} />
   }
 
-  return <MainPage tasks={tasks} onNavigateToSettings={() => setPage('settings')} />
+  return <MainPage tasks={tasks} setTasks={setTasks} onNavigateToSettings={() => setPage('settings')} />
 }
