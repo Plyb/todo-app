@@ -38,6 +38,7 @@ export function DraggableList<T extends { id: number }>({
   const rowsByTaskId = useRef<Map<number, HTMLLIElement>>(new Map())
   const didDragRef = useRef(false)
   const onItemClickAtDownRef = useRef<((id: number) => void) | undefined>(undefined)
+  const longPressStartY = useRef(0)
 
   function getRowHeight(): number {
     return rowsByTaskId.current.get(items[0]?.id)?.getBoundingClientRect().height ?? 48
@@ -54,10 +55,10 @@ export function DraggableList<T extends { id: number }>({
 
   function handlePointerDown(e: React.PointerEvent<HTMLLIElement>, taskId: number) {
     if (!isPrimaryButton(e)) return
-    e.preventDefault()
 
     didDragRef.current = false
     onItemClickAtDownRef.current = onItemClick
+    longPressStartY.current = e.clientY
     const startY = e.clientY
     const target = e.currentTarget
 
@@ -77,6 +78,13 @@ export function DraggableList<T extends { id: number }>({
   }
 
   function handlePointerMove(e: React.PointerEvent<HTMLLIElement>) {
+    // Cancel long press if user moves significantly before drag starts
+    if (!dragState && longPressTimerRef.current !== null) {
+      if (Math.abs(e.clientY - longPressStartY.current) > 8) {
+        clearTimeout(longPressTimerRef.current)
+        longPressTimerRef.current = null
+      }
+    }
     if (!dragState) return
     const el = rowsByTaskId.current.get(dragState.taskId)
     const rect = el?.getBoundingClientRect()
@@ -161,7 +169,7 @@ export function DraggableList<T extends { id: number }>({
                   userSelect: 'none',
                   WebkitUserSelect: 'none',
                   WebkitTouchCallout: 'none',
-                  touchAction: 'none',
+                  touchAction: dragState ? 'none' : 'pan-y',
                   cursor: dragState ? 'grabbing' : 'grab',
                   padding: '12px 16px',
                   borderBottom: '1px solid #eee',
