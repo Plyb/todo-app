@@ -1,25 +1,39 @@
 import { LexoRank } from 'lexorank'
 
+export type Status = {
+  slug: string
+  name: string
+}
+
 export type Task = {
   id: number
   name: string
   done: boolean
   rank: string
+  statusSlug: string
   notes: string
 }
 
 type StoredTask = Omit<Task, 'id'>
 
 const DB_NAME = 'todo-app'
-const DB_VERSION = 4
+const DB_VERSION = 5
 const TASKS_STORE = 'tasks'
+const STATUSES_STORE = 'statuses'
+
+const DEFAULT_STATUSES: Status[] = [
+  { slug: 'today', name: 'Today' },
+  { slug: 'today-extra', name: 'Today Extra' },
+  { slug: 'backlog', name: 'Backlog' },
+  { slug: 'archived', name: 'Archived' },
+]
 
 const DEMO_TASKS: StoredTask[] = (() => {
   const middle = LexoRank.middle()
   return [
-    { name: 'Buy groceries', done: false, rank: middle.toString(), notes: '' },
-    { name: 'Walk the dog', done: false, rank: middle.genNext().toString(), notes: '' },
-    { name: 'Write weekly update', done: false, rank: middle.genNext().genNext().toString(), notes: '' },
+    { name: 'Buy groceries', done: false, rank: middle.toString(), statusSlug: 'today', notes: '' },
+    { name: 'Walk the dog', done: false, rank: middle.genNext().toString(), statusSlug: 'today', notes: '' },
+    { name: 'Write weekly update', done: false, rank: middle.genNext().genNext().toString(), statusSlug: 'backlog', notes: '' },
   ]
 })()
 
@@ -66,6 +80,36 @@ async function migrateAddRanks(_db: IDBDatabase, transaction: IDBTransaction): P
       if (!record.rank) {
         cursor.update({ ...record, rank: rankGen.toString() })
         rankGen = rankGen.genNext()
+      }
+      cursor.continue()
+    }
+
+    cursorRequest.onerror = () => reject(cursorRequest.error)
+  })
+}
+
+async function migrateAddStatuses(_db: IDBDatabase, transaction: IDBTransaction): Promise<void> {
+  // Seed default statuses into the newly created store
+  const statusStore = transaction.objectStore(STATUSES_STORE)
+  for (const status of DEFAULT_STATUSES) {
+    statusStore.put(status)
+  }
+
+  // Migrate existing tasks to have statusSlug: 'backlog'
+  const taskStore = transaction.objectStore(TASKS_STORE)
+  const cursorRequest = taskStore.openCursor()
+
+  await new Promise<void>((resolve, reject) => {
+    cursorRequest.onsuccess = () => {
+      const cursor = cursorRequest.result
+      if (!cursor) {
+        resolve()
+        return
+      }
+
+      const record = cursor.value as StoredTask & { statusSlug?: string }
+      if (!record.statusSlug) {
+        cursor.update({ ...record, statusSlug: 'backlog' })
       }
       cursor.continue()
     }
@@ -135,12 +179,29 @@ async function openTasksDatabase(): Promise<IDBDatabase> {
           })
         }
 
-        // v3 -> v4: add notes field to existing records
+        // v3 -> v4: add statuses store and statusSlug to tasks
         if (event.oldVersion < 4) {
+          migrateAddStatuses(db, transaction).catch(() => {
+            // Migration errors will surface as transaction abort
+          })
+        }
+
+        // v4 -> v5: add notes field to existing records
+        if (event.oldVersion < 5) {
           migrateAddNotes(transaction).catch(() => {
             // Migration errors will surface as transaction abort
           })
         }
+      }
+
+      // v3 -> v4: add statuses store
+      if (event.oldVersion < 4) {
+        if (!db.objectStoreNames.contains(STATUSES_STORE)) {
+          db.createObjectStore(STATUSES_STORE, { keyPath: 'slug' })
+        }
+        migrateAddStatuses(db, transaction).catch(() => {
+          // Migration errors will surface as transaction abort
+        })
       }
     }
 
@@ -178,6 +239,7 @@ export async function loadTasks(): Promise<Task[]> {
       name: task.name,
       done: task.done ?? false,
       rank: task.rank ?? LexoRank.middle().toString(),
+      statusSlug: task.statusSlug ?? 'backlog',
       notes: task.notes ?? '',
     }))
     tasks.sort((a, b) => (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0))
@@ -188,14 +250,25 @@ export async function loadTasks(): Promise<Task[]> {
   return loadTasks()
 }
 
-export async function createTask(name: string, rank: string): Promise<Task> {
+export async function loadStatuses(): Promise<Status[]> {
+  const db = await openTasksDatabase()
+
+  const transaction = db.transaction(STATUSES_STORE, 'readonly')
+  const store = transaction.objectStore(STATUSES_STORE)
+  const statuses = (await requestToPromise(store.getAll())) as Status[]
+  await transactionToPromise(transaction)
+
+  return statuses
+}
+
+export async function createTask(name: string, rank: string, statusSlug: string = 'backlog'): Promise<Task> {
   const db = await openTasksDatabase()
   const transaction = db.transaction(TASKS_STORE, 'readwrite')
   const store = transaction.objectStore(TASKS_STORE)
-  const request = store.add({ name, done: false, rank, notes: '' })
+  const request = store.add({ name, done: false, rank, statusSlug, notes: '' })
   const key = await requestToPromise(request)
   await transactionToPromise(transaction)
-  return { id: keyToTaskId(key), name, done: false, rank, notes: '' }
+  return { id: keyToTaskId(key), name, done: false, rank, statusSlug, notes: '' }
 }
 
 export async function saveTask(task: Task): Promise<void> {
@@ -203,7 +276,7 @@ export async function saveTask(task: Task): Promise<void> {
 
   const transaction = db.transaction(TASKS_STORE, 'readwrite')
   const store = transaction.objectStore(TASKS_STORE)
-  store.put({ name: task.name, done: task.done, rank: task.rank, notes: task.notes }, task.id)
+  store.put({ name: task.name, done: task.done, rank: task.rank, statusSlug: task.statusSlug, notes: task.notes }, task.id)
   await transactionToPromise(transaction)
 }
 
@@ -249,6 +322,18 @@ export async function updateTaskNotes(id: number, notes: string): Promise<void> 
   const existing = (await requestToPromise(store.get(id))) as StoredTask | undefined
   if (existing) {
     store.put({ ...existing, notes }, id)
+  }
+  await transactionToPromise(transaction)
+}
+
+export async function updateTaskStatus(id: number, statusSlug: string): Promise<void> {
+  const db = await openTasksDatabase()
+
+  const transaction = db.transaction(TASKS_STORE, 'readwrite')
+  const store = transaction.objectStore(TASKS_STORE)
+  const existing = (await requestToPromise(store.get(id))) as StoredTask | undefined
+  if (existing) {
+    store.put({ ...existing, statusSlug }, id)
   }
   await transactionToPromise(transaction)
 }
