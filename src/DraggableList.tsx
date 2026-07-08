@@ -102,20 +102,12 @@ export function DraggableList<T extends { id: number }>({
   function getTaskTranslateY(item: T): number {
     if (!dragState || item.id === dragState.taskId) return 0
 
-    const taskIndexInOthers = others.findIndex((t) => t.id === item.id)
-    const insertIndex = dragState.insertIndex
-    const rowHeight = dragState.rowHeight
+    const j = others.findIndex((t) => t.id === item.id)
+    const { insertIndex, rowHeight } = dragState
 
-    if (originalDraggedIndex <= taskIndexInOthers) {
-      if (taskIndexInOthers >= insertIndex) {
-        return rowHeight
-      }
-    } else {
-      if (taskIndexInOthers < insertIndex) {
-        return -rowHeight
-      }
-    }
-    return 0
+    const shiftUp = j >= originalDraggedIndex ? -rowHeight : 0
+    const shiftDown = j >= insertIndex ? rowHeight : 0
+    return shiftUp + shiftDown
   }
 
   return (
