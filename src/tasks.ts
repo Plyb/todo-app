@@ -196,3 +196,15 @@ export async function updateTaskRank(id: number, rank: string): Promise<void> {
   }
   await transactionToPromise(transaction)
 }
+
+export async function updateTaskName(id: number, name: string): Promise<void> {
+  const db = await openTasksDatabase()
+
+  const transaction = db.transaction(TASKS_STORE, 'readwrite')
+  const store = transaction.objectStore(TASKS_STORE)
+  const existing = (await requestToPromise(store.get(id))) as StoredTask | undefined
+  if (existing) {
+    store.put({ ...existing, name }, id)
+  }
+  await transactionToPromise(transaction)
+}
