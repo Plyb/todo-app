@@ -1,28 +1,36 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Task } from './tasks'
+import type { Task, Status } from './tasks'
+import { StatusModal } from './StatusModal'
 import { RelationshipModal, RelationshipGroup } from './RelationshipModal'
 
 type QuickSelectPanelProps = {
   task: Task
+  statuses: Status[]
+  recentStatusSlugs: string[]
   allTasks: Task[]
   onClose: () => void
   onRename: (id: number, name: string) => void
+  onChangeStatus: (id: number, statusSlug: string) => void
   onDelete: (id: number) => void
   onOpenTask: (id: number) => void
 }
 
-export function QuickSelectPanel({ task, allTasks, onClose, onRename, onDelete, onOpenTask }: QuickSelectPanelProps) {
+export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, onClose, onRename, onChangeStatus, onDelete, onOpenTask }: QuickSelectPanelProps) {
   const [name, setName] = useState(task.name)
   const [showModal, setShowModal] = useState(false)
   const [backdropReady, setBackdropReady] = useState(false)
+  const [statusModalOpen, setStatusModalOpen] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { inputRef.current?.focus() }, [])
+
   useEffect(() => {
     const t = setTimeout(() => setBackdropReady(true), 350)
     return () => clearTimeout(t)
   }, [])
+
+  const currentStatus = statuses.find((s) => s.slug === task.statusSlug)
 
   function commitRename() {
     const trimmed = name.trim()
@@ -75,6 +83,24 @@ export function QuickSelectPanel({ task, allTasks, onClose, onRename, onDelete, 
             marginBottom: 16,
           }}
         />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12 }}>
+          <span style={{ color: '#666', fontSize: 14 }}>Status:</span>
+          <button
+            onClick={() => setStatusModalOpen(true)}
+            style={{
+              background: '#e8f0fe',
+              border: 'none',
+              borderRadius: 6,
+              padding: '4px 10px',
+              cursor: 'pointer',
+              fontSize: 14,
+              color: '#1a73e8',
+              fontWeight: 500,
+            }}
+          >
+            {currentStatus?.name ?? task.statusSlug}
+          </button>
+        </div>
 
         {showConfirm ? (
           <div style={{ marginTop: 16 }}>
@@ -134,6 +160,16 @@ export function QuickSelectPanel({ task, allTasks, onClose, onRename, onDelete, 
           </button>
         </div>
       </div>
+
+      {statusModalOpen && (
+        <StatusModal
+          statuses={statuses}
+          recentStatusSlugs={recentStatusSlugs}
+          currentStatusSlug={task.statusSlug}
+          onSelect={(slug) => onChangeStatus(task.id, slug)}
+          onClose={() => setStatusModalOpen(false)}
+        />
+      )}
 
       {showModal && (
         <RelationshipModal
