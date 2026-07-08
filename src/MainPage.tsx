@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { createTask, updateTaskDone, updateTaskName, updateTaskRank, type Task } from './tasks'
+import { createTask, updateTaskDone, updateTaskName, updateTaskNotes, updateTaskRank, type Task } from './tasks'
 import { DraggableList } from './DraggableList'
 import { AddTaskFab, NewTaskInputField, computeInsertRank, type NewTaskInput } from './AddTaskInput'
 import { rankBetween } from './rank-utils'
@@ -59,6 +59,11 @@ export default function MainPage({ tasks, setTasks, onNavigateToSettings }: Main
     setTasks(tasks.map((t) => (t.id === id ? { ...t, done } : t)))
   }
 
+  function handleUpdateNotes(id: number, notes: string) {
+    updateTaskNotes(id, notes)
+    setTasks(tasks.map((t) => (t.id === id ? { ...t, notes } : t)))
+  }
+
   function handleReorder(draggedId: number, insertIndex: number) {
     const newRank = computeNewRank(tasks, insertIndex, draggedId)
     const others = tasks.filter((t) => t.id !== draggedId)
@@ -115,8 +120,6 @@ export default function MainPage({ tasks, setTasks, onNavigateToSettings }: Main
     setTasks(tasks.map((t) => (t.id === id ? { ...t, name } : t)))
   }
 
-  const selectedTask = selectedTaskId !== null ? tasks.find((t) => t.id === selectedTaskId) ?? null : null
-
   const insertSlot = newTaskInput !== null
     ? {
         index: newTaskInput.insertIndex,
@@ -144,6 +147,8 @@ export default function MainPage({ tasks, setTasks, onNavigateToSettings }: Main
         ),
       }
     : undefined
+
+  const selectedTask = selectedTaskId !== null ? tasks.find((t) => t.id === selectedTaskId) ?? null : null
 
   return (
     <main onClick={selectedTask === null ? () => setSelectedTaskId(null) : undefined} style={{ minHeight: '100vh' }}>
@@ -180,6 +185,7 @@ export default function MainPage({ tasks, setTasks, onNavigateToSettings }: Main
           task={selectedTask}
           onClose={() => setSelectedTaskId(null)}
           onRename={handleRename}
+          onUpdateNotes={handleUpdateNotes}
         />
       )}
     </main>

@@ -5,11 +5,13 @@ type QuickSelectPanelProps = {
   task: Task
   onClose: () => void
   onRename: (id: number, name: string) => void
+  onUpdateNotes: (id: number, notes: string) => void
 }
 
-export function QuickSelectPanel({ task, onClose, onRename }: QuickSelectPanelProps) {
+export function QuickSelectPanel({ task, onClose, onRename, onUpdateNotes }: QuickSelectPanelProps) {
   const [name, setName] = useState(task.name)
   const [backdropReady, setBackdropReady] = useState(false)
+  const [notes, setNotes] = useState(task.notes)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -38,8 +40,14 @@ export function QuickSelectPanel({ task, onClose, onRename }: QuickSelectPanelPr
     }
   }
 
-  function handleBlur() {
+  function handleNameBlur() {
     commitRename()
+  }
+
+  function handleNotesBlur() {
+    if (notes !== task.notes) {
+      onUpdateNotes(task.id, notes)
+    }
   }
 
   return (
@@ -72,7 +80,7 @@ export function QuickSelectPanel({ task, onClose, onRename }: QuickSelectPanelPr
           ref={inputRef}
           value={name}
           onChange={(e) => setName(e.target.value)}
-          onBlur={handleBlur}
+          onBlur={handleNameBlur}
           onKeyDown={handleKeyDown}
           style={{
             width: '100%',
@@ -82,6 +90,24 @@ export function QuickSelectPanel({ task, onClose, onRename }: QuickSelectPanelPr
             borderBottom: '2px solid #1a73e8',
             outline: 'none',
             boxSizing: 'border-box',
+          }}
+        />
+        <label style={{ display: 'block', fontSize: 14, color: '#555', marginTop: 12, marginBottom: 4 }}>
+          Notes
+        </label>
+        <textarea
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          onBlur={handleNotesBlur}
+          style={{
+            width: '100%',
+            minHeight: 80,
+            boxSizing: 'border-box',
+            fontSize: 15,
+            padding: '8px 10px',
+            border: '1px solid #ccc',
+            borderRadius: 6,
+            resize: 'vertical',
           }}
         />
       </div>
