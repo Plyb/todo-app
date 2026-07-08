@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { createTask, deleteTask, updateTaskDone, updateTaskName, updateTaskRank, updateTaskStatus, type Task, type Status } from './tasks'
+import { createTask, deleteTask, updateTaskDone, updateTaskName, updateTaskNotes, updateTaskRank, updateTaskStatus, type Task, type Status } from './tasks'
 import { DraggableList } from './DraggableList'
 import { AddTaskFab, NewTaskInputField, computeInsertRank, type NewTaskInput } from './AddTaskInput'
 import { rankBetween } from './rank-utils'
@@ -76,6 +76,11 @@ export default function MainPage({
   function handleDoneChange(id: number, done: boolean) {
     updateTaskDone(id, done)
     setTasks(tasks.map((t) => (t.id === id ? { ...t, done } : t)))
+  }
+
+  function handleUpdateNotes(id: number, notes: string) {
+    updateTaskNotes(id, notes)
+    setTasks(tasks.map((t) => (t.id === id ? { ...t, notes } : t)))
   }
 
   function handleReorder(draggedId: number, insertIndex: number) {
@@ -177,8 +182,6 @@ export default function MainPage({
     setSelectedTaskId(null)
   }
 
-  const selectedTask = selectedTaskId !== null ? tasks.find((t) => t.id === selectedTaskId) ?? null : null
-
   const insertSlot = newTaskInput !== null
     ? {
         index: newTaskInput.insertIndex,
@@ -206,6 +209,8 @@ export default function MainPage({
         ),
       }
     : undefined
+
+  const selectedTask = selectedTaskId !== null ? tasks.find((t) => t.id === selectedTaskId) ?? null : null
 
   return (
     <main
@@ -262,13 +267,14 @@ export default function MainPage({
       {selectedTask && (
         <QuickSelectPanel
           task={selectedTask}
-allTasks={tasks}
+          allTasks={tasks}
           statuses={statuses}
           recentStatusSlugs={recentStatusSlugs}
           onClose={() => setSelectedTaskId(null)}
           onRename={handleRename}
           onChangeStatus={handleChangeStatus}
           onDelete={handleDelete}
+          onUpdateNotes={handleUpdateNotes}
           onOpenTask={(id) => setSelectedTaskId(id)}
         />
       )}
