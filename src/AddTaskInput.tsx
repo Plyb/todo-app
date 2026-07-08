@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useRef, useState } from 'react'
 import { isPrimaryButton, findInsertIndex } from './pointer-utils'
 import { rankBetween } from './rank-utils'
 import type { Task } from './tasks'
@@ -32,6 +32,7 @@ type AddTaskFabProps = {
 
 export function AddTaskFab({ tasks, listRef, onRequestInsert, onDragInsertIndex }: AddTaskFabProps) {
   const [fabDragState, setFabDragState] = useState<FabDragState | null>(null)
+  const didMoveRef = useRef(false)
 
   function isNearFabStart(clientX: number, clientY: number): boolean {
     const vw = window.innerWidth
@@ -56,6 +57,7 @@ export function AddTaskFab({ tasks, listRef, onRequestInsert, onDragInsertIndex 
     e.preventDefault()
     const target = e.currentTarget
     target.setPointerCapture(e.pointerId)
+    didMoveRef.current = false
     setFabDragState({
       pointerX: e.clientX,
       pointerY: e.clientY,
@@ -65,6 +67,7 @@ export function AddTaskFab({ tasks, listRef, onRequestInsert, onDragInsertIndex 
 
   function handleFabPointerMove(e: React.PointerEvent<HTMLButtonElement>) {
     if (fabDragState === null) return
+    didMoveRef.current = true
     const atFab = isNearFabStart(e.clientX, e.clientY)
     const insertIndex = atFab ? null : getInsertIndexFromPointer(e.clientY)
     setFabDragState({
@@ -78,23 +81,19 @@ export function AddTaskFab({ tasks, listRef, onRequestInsert, onDragInsertIndex 
   function handleFabPointerUp(_e: React.PointerEvent<HTMLButtonElement>) {
     if (fabDragState === null) return
     onDragInsertIndex(null)
-    if (fabDragState.insertIndex === null) {
-      setFabDragState(null)
-      return
-    }
-    const insertIndex = fabDragState.insertIndex
+    const { insertIndex } = fabDragState
+    const moved = didMoveRef.current
     setFabDragState(null)
-    onRequestInsert(insertIndex)
+    if (insertIndex !== null) {
+      onRequestInsert(insertIndex)
+    } else if (!moved) {
+      onRequestInsert(0)
+    }
   }
 
   function handleFabPointerCancel() {
     onDragInsertIndex(null)
     setFabDragState(null)
-  }
-
-  function handleFabClick() {
-    if (fabDragState !== null) return
-    onRequestInsert(0)
   }
 
   return (
@@ -104,7 +103,6 @@ export function AddTaskFab({ tasks, listRef, onRequestInsert, onDragInsertIndex 
       onPointerMove={handleFabPointerMove}
       onPointerUp={handleFabPointerUp}
       onPointerCancel={handleFabPointerCancel}
-      onClick={handleFabClick}
       style={{
         position: 'fixed',
         ...(fabDragState !== null ? {
@@ -122,6 +120,7 @@ export function AddTaskFab({ tasks, listRef, onRequestInsert, onDragInsertIndex 
         border: 'none',
         fontSize: 28,
         lineHeight: 1,
+        zIndex: fabDragState !== null ? 2000 : undefined,
         cursor: fabDragState !== null ? 'grabbing' : 'pointer',
         boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
         display: 'flex',

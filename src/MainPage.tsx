@@ -45,6 +45,12 @@ export default function MainPage({ tasks, setTasks, onNavigateToSettings }: Main
   const [fabPlaceholderIndex, setFabPlaceholderIndex] = useState<number | null>(null)
 
   const listRef = useRef<HTMLUListElement>(null)
+  const inputKeyRef = useRef(0)
+
+  function openInput(insertIndex: number) {
+    inputKeyRef.current++
+    setNewTaskInput({ insertIndex })
+  }
 
   function handleDoneChange(id: number, done: boolean) {
     updateTaskDone(id, done)
@@ -79,7 +85,7 @@ export default function MainPage({ tasks, setTasks, onNavigateToSettings }: Main
       return next
     })
     if (andOpenAnother) {
-      setNewTaskInput({ insertIndex: insertIndex + 1 })
+      openInput(insertIndex + 1)
     } else {
       setNewTaskInput(null)
     }
@@ -103,6 +109,7 @@ export default function MainPage({ tasks, setTasks, onNavigateToSettings }: Main
         index: newTaskInput.insertIndex,
         content: (
           <NewTaskInputField
+            key={inputKeyRef.current}
             insertIndex={newTaskInput.insertIndex}
             onBlur={handleInputBlur}
             onKeyDown={handleInputKeyDown}
@@ -142,7 +149,7 @@ export default function MainPage({ tasks, setTasks, onNavigateToSettings }: Main
       <AddTaskFab
         tasks={tasks}
         listRef={listRef}
-        onRequestInsert={(insertIndex) => setNewTaskInput({ insertIndex })}
+        onRequestInsert={openInput}
         onDragInsertIndex={setFabPlaceholderIndex}
       />
     </main>
