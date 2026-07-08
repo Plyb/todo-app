@@ -94,6 +94,16 @@ export async function loadTasks(): Promise<Task[]> {
   return loadTasks()
 }
 
+export async function createTask(name: string): Promise<Task> {
+  const db = await openTasksDatabase()
+  const transaction = db.transaction(TASKS_STORE, 'readwrite')
+  const store = transaction.objectStore(TASKS_STORE)
+  const request = store.add({ name })
+  const key = await requestToPromise(request)
+  await transactionToPromise(transaction)
+  return { id: keyToTaskId(key), name }
+}
+
 export async function saveTask(task: Task): Promise<void> {
   const db = await openTasksDatabase()
 
