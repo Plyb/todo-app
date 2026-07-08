@@ -153,12 +153,12 @@ export function DraggableList<T extends { id: number }>({
                 padding: '12px 16px',
                 borderBottom: '1px solid #eee',
                 boxSizing: 'border-box',
-                opacity: isDragged ? 0 : 1,
-                transform: isDragged ? 'none' : `translateY(${translateY}px)`,
-                transition: isDragged ? 'none' : 'transform 0.15s ease, all 0.2s ease',
                 position: 'relative',
-                zIndex: isDragged ? 0 : 1,
                 ...itemStyle?.(item),
+                ...(isDragged
+                  ? { opacity: 0, transform: 'none', transition: 'none', zIndex: 0 }
+                  : { transform: `translateY(${translateY}px)`, transition: 'transform 0.15s ease, all 0.2s ease', zIndex: 1 }
+                ),
               }}
             >
               {renderItem(item)}
