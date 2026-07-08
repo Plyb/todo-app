@@ -3,21 +3,22 @@ import { LexoRank } from 'lexorank'
 export type Task = {
   id: number
   name: string
+  done: boolean
   rank: string
 }
 
-type StoredTask = Pick<Task, 'name' | 'rank'>
+type StoredTask = Omit<Task, 'id'>
 
 const DB_NAME = 'todo-app'
-const DB_VERSION = 2
+const DB_VERSION = 3
 const TASKS_STORE = 'tasks'
 
 const DEMO_TASKS: StoredTask[] = (() => {
   const middle = LexoRank.middle()
   return [
-    { name: 'Buy groceries', rank: middle.toString() },
-    { name: 'Walk the dog', rank: middle.genNext().toString() },
-    { name: 'Write weekly update', rank: middle.genNext().genNext().toString() },
+    { name: 'Buy groceries', done: false, rank: middle.toString() },
+    { name: 'Walk the dog', done: false, rank: middle.genNext().toString() },
+    { name: 'Write weekly update', done: false, rank: middle.genNext().genNext().toString() },
   ]
 })()
 
@@ -86,11 +87,29 @@ async function openTasksDatabase(): Promise<IDBDatabase> {
 
       if (!db.objectStoreNames.contains(TASKS_STORE)) {
         db.createObjectStore(TASKS_STORE, { autoIncrement: true })
-      } else if (event.oldVersion < 2) {
-        // Migrate existing records: assign rank to any records missing it
-        migrateAddRanks(db, transaction).catch(() => {
-          // Migration errors will surface as transaction abort
-        })
+      } else {
+        // v1 -> v2: add done field to existing records
+        if (event.oldVersion < 2) {
+          const store = transaction.objectStore(TASKS_STORE)
+          const cursorRequest = store.openCursor()
+          cursorRequest.onsuccess = () => {
+            const cursor = cursorRequest.result
+            if (cursor) {
+              const record = cursor.value as StoredTask
+              if (record.done === undefined) {
+                cursor.update({ ...record, done: false })
+              }
+              cursor.continue()
+            }
+          }
+        }
+
+        // v2 -> v3: add rank field to existing records
+        if (event.oldVersion < 3) {
+          migrateAddRanks(db, transaction).catch(() => {
+            // Migration errors will surface as transaction abort
+          })
+        }
       }
     }
 
@@ -126,6 +145,7 @@ export async function loadTasks(): Promise<Task[]> {
     const tasks = storedTasks.map((task, index) => ({
       id: keyToTaskId(taskKeys[index]),
       name: task.name,
+      done: task.done ?? false,
       rank: task.rank ?? LexoRank.middle().toString(),
     }))
     tasks.sort((a, b) => (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0))
@@ -140,10 +160,10 @@ export async function createTask(name: string, rank: string): Promise<Task> {
   const db = await openTasksDatabase()
   const transaction = db.transaction(TASKS_STORE, 'readwrite')
   const store = transaction.objectStore(TASKS_STORE)
-  const request = store.add({ name, rank })
+  const request = store.add({ name, done: false, rank })
   const key = await requestToPromise(request)
   await transactionToPromise(transaction)
-  return { id: keyToTaskId(key), name, rank }
+  return { id: keyToTaskId(key), name, done: false, rank }
 }
 
 export async function saveTask(task: Task): Promise<void> {
@@ -151,7 +171,17 @@ export async function saveTask(task: Task): Promise<void> {
 
   const transaction = db.transaction(TASKS_STORE, 'readwrite')
   const store = transaction.objectStore(TASKS_STORE)
-  store.put({ name: task.name, rank: task.rank }, task.id)
+  store.put({ name: task.name, done: task.done, rank: task.rank }, task.id)
+  await transactionToPromise(transaction)
+}
+
+export async function updateTaskDone(id: number, done: boolean): Promise<void> {
+  const db = await openTasksDatabase()
+
+  const transaction = db.transaction(TASKS_STORE, 'readwrite')
+  const store = transaction.objectStore(TASKS_STORE)
+  const record = await requestToPromise(store.get(id)) as StoredTask
+  store.put({ ...record, done }, id)
   await transactionToPromise(transaction)
 }
 

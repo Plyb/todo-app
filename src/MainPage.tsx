@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { createTask, updateTaskRank, type Task } from './tasks'
+import { createTask, updateTaskDone, updateTaskRank, type Task } from './tasks'
 import { DraggableList } from './DraggableList'
 import { AddTaskFab, NewTaskInputField, computeInsertRank, type NewTaskInput } from './AddTaskInput'
 import { rankBetween } from './rank-utils'
@@ -25,10 +25,31 @@ function SettingsButton({ onClick }: { onClick: () => void }) {
   )
 }
 
+function TaskRow({ task, onDoneChange }: { task: Task; onDoneChange: (done: boolean) => void }) {
+  return (
+    <>
+      <input
+        type="checkbox"
+        checked={task.done}
+        onChange={(e) => onDoneChange(e.target.checked)}
+      />
+      <span style={task.done ? { color: '#aaa' } : undefined}>
+        {task.name}
+      </span>
+    </>
+  )
+}
+
 export default function MainPage({ tasks, setTasks, onNavigateToSettings }: MainPageProps) {
   const [newTaskInput, setNewTaskInput] = useState<NewTaskInput | null>(null)
+  const [fabPlaceholderIndex, setFabPlaceholderIndex] = useState<number | null>(null)
 
   const listRef = useRef<HTMLUListElement>(null)
+
+  function handleDoneChange(id: number, done: boolean) {
+    updateTaskDone(id, done)
+    setTasks(tasks.map((t) => (t.id === id ? { ...t, done } : t)))
+  }
 
   function handleReorder(draggedId: number, insertIndex: number) {
     const newRank = computeNewRank(tasks, insertIndex, draggedId)
@@ -88,6 +109,20 @@ export default function MainPage({ tasks, setTasks, onNavigateToSettings }: Main
           />
         ),
       }
+    : fabPlaceholderIndex !== null
+    ? {
+        index: fabPlaceholderIndex,
+        content: (
+          <div style={{
+            height: 44,
+            background: 'rgba(26,115,232,0.08)',
+            borderRadius: 6,
+            border: '2px dashed #1a73e8',
+            margin: '4px 0',
+            transition: 'all 0.15s ease',
+          }} />
+        ),
+      }
     : undefined
 
   return (
@@ -95,7 +130,9 @@ export default function MainPage({ tasks, setTasks, onNavigateToSettings }: Main
       <DraggableList
         items={tasks}
         onReorder={handleReorder}
-        renderItem={(task) => task.name}
+        renderItem={(task) => (
+          <TaskRow task={task} onDoneChange={(done) => handleDoneChange(task.id, done)} />
+        )}
         listRef={listRef}
         insertSlot={insertSlot}
       />
@@ -106,6 +143,7 @@ export default function MainPage({ tasks, setTasks, onNavigateToSettings }: Main
         tasks={tasks}
         listRef={listRef}
         onRequestInsert={(insertIndex) => setNewTaskInput({ insertIndex })}
+        onDragInsertIndex={setFabPlaceholderIndex}
       />
     </main>
   )

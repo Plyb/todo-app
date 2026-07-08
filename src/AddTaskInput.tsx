@@ -27,9 +27,10 @@ type AddTaskFabProps = {
   tasks: Task[]
   listRef: React.RefObject<HTMLUListElement | null>
   onRequestInsert: (insertIndex: number) => void
+  onDragInsertIndex: (index: number | null) => void
 }
 
-export function AddTaskFab({ tasks, listRef, onRequestInsert }: AddTaskFabProps) {
+export function AddTaskFab({ tasks, listRef, onRequestInsert, onDragInsertIndex }: AddTaskFabProps) {
   const [fabDragState, setFabDragState] = useState<FabDragState | null>(null)
 
   function isNearFabStart(clientX: number, clientY: number): boolean {
@@ -65,15 +66,18 @@ export function AddTaskFab({ tasks, listRef, onRequestInsert }: AddTaskFabProps)
   function handleFabPointerMove(e: React.PointerEvent<HTMLButtonElement>) {
     if (fabDragState === null) return
     const atFab = isNearFabStart(e.clientX, e.clientY)
+    const insertIndex = atFab ? null : getInsertIndexFromPointer(e.clientY)
     setFabDragState({
       pointerX: e.clientX,
       pointerY: e.clientY,
-      insertIndex: atFab ? null : getInsertIndexFromPointer(e.clientY),
+      insertIndex,
     })
+    onDragInsertIndex(insertIndex)
   }
 
   function handleFabPointerUp(_e: React.PointerEvent<HTMLButtonElement>) {
     if (fabDragState === null) return
+    onDragInsertIndex(null)
     if (fabDragState.insertIndex === null) {
       setFabDragState(null)
       return
@@ -83,55 +87,54 @@ export function AddTaskFab({ tasks, listRef, onRequestInsert }: AddTaskFabProps)
     onRequestInsert(insertIndex)
   }
 
+  function handleFabPointerCancel() {
+    onDragInsertIndex(null)
+    setFabDragState(null)
+  }
+
   function handleFabClick() {
     if (fabDragState !== null) return
     onRequestInsert(0)
   }
 
-  const fabPlaceholderIndex =
-    fabDragState !== null && fabDragState.insertIndex !== null ? fabDragState.insertIndex : null
-
   return (
-    <>
-      {fabPlaceholderIndex !== null && (
-        <div
-          data-fab-placeholder
-          data-insert-index={fabPlaceholderIndex}
-          style={{ display: 'none' }}
-        />
-      )}
-      <button
-        aria-label="Add task"
-        onPointerDown={handleFabPointerDown}
-        onPointerMove={handleFabPointerMove}
-        onPointerUp={handleFabPointerUp}
-        onClick={handleFabClick}
-        style={{
-          position: 'fixed',
+    <button
+      aria-label="Add task"
+      onPointerDown={handleFabPointerDown}
+      onPointerMove={handleFabPointerMove}
+      onPointerUp={handleFabPointerUp}
+      onPointerCancel={handleFabPointerCancel}
+      onClick={handleFabClick}
+      style={{
+        position: 'fixed',
+        ...(fabDragState !== null ? {
+          top: fabDragState.pointerY - FAB_SIZE / 2,
+          left: fabDragState.pointerX - FAB_SIZE / 2,
+        } : {
           bottom: FAB_BOTTOM,
           right: FAB_RIGHT,
-          width: FAB_SIZE,
-          height: FAB_SIZE,
-          borderRadius: '50%',
-          background: '#1a73e8',
-          color: '#fff',
-          border: 'none',
-          fontSize: 28,
-          lineHeight: 1,
-          cursor: fabDragState !== null ? 'grabbing' : 'pointer',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          userSelect: 'none',
-          touchAction: 'none',
-          transition: 'box-shadow 0.15s ease, transform 0.15s ease',
-          transform: fabDragState !== null ? 'scale(1.1)' : 'scale(1)',
-        }}
-      >
-        +
-      </button>
-    </>
+        }),
+        width: FAB_SIZE,
+        height: FAB_SIZE,
+        borderRadius: '50%',
+        background: '#1a73e8',
+        color: '#fff',
+        border: 'none',
+        fontSize: 28,
+        lineHeight: 1,
+        cursor: fabDragState !== null ? 'grabbing' : 'pointer',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        userSelect: 'none',
+        touchAction: 'none',
+        transition: fabDragState !== null ? 'none' : 'box-shadow 0.15s ease, transform 0.15s ease',
+        transform: fabDragState !== null ? 'scale(1.1)' : 'scale(1)',
+      }}
+    >
+      +
+    </button>
   )
 }
 
