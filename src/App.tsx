@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { loadTasks, type Task } from './tasks'
+import MainPage from './MainPage'
+import SettingsPage from './SettingsPage'
 
 type Page = 'main' | 'settings'
 
@@ -22,31 +24,8 @@ export default function App() {
   }, [])
 
   if (page === 'settings') {
-    return (
-      <main>
-        <button
-          onClick={() => setPage('main')}
-          style={{ position: 'fixed', top: 16, left: 16 }}
-        >
-          ← Back
-        </button>
-      </main>
-    )
+    return <SettingsPage onBack={() => setPage('main')} />
   }
 
-  return (
-    <main>
-      <ul>
-        {tasks.map((task) => (
-          <li key={task.id}>{task.name}</li>
-        ))}
-      </ul>
-      <button
-        onClick={() => setPage('settings')}
-        style={{ position: 'fixed', bottom: 16, left: 16 }}
-      >
-        ⚙ Settings
-      </button>
-    </main>
-  )
+  return <MainPage tasks={tasks} onNavigateToSettings={() => setPage('settings')} />
 }
