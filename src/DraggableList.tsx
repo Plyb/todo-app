@@ -34,14 +34,14 @@ export function DraggableList<T extends { id: number }>({
     return rowsByTaskId.current.get(items[0]?.id)?.getBoundingClientRect().height ?? 48
   }
 
-  function computeInsertIndex(pointerY: number, draggedTaskId: number): number {
+  function computeInsertIndex(probeY: number, draggedTaskId: number): number {
     const others = items.filter((t) => t.id !== draggedTaskId)
     const othersWithRects = others.flatMap((t, i) => {
       const el = rowsByTaskId.current.get(t.id)
       return el ? [{ index: i, rect: el.getBoundingClientRect() }] : []
     })
     for (const { index, rect } of othersWithRects) {
-      if (pointerY < rect.top + rect.height / 2) return index
+      if (probeY < rect.top + rect.height / 2) return index
     }
     return others.length
   }
@@ -68,7 +68,12 @@ export function DraggableList<T extends { id: number }>({
 
   function handlePointerMove(e: React.PointerEvent<HTMLLIElement>) {
     if (!dragState) return
-    const insertIndex = computeInsertIndex(e.clientY, dragState.taskId)
+    const el = rowsByTaskId.current.get(dragState.taskId)
+    const rect = el?.getBoundingClientRect()
+    const ghostMidY = rect
+      ? rect.top + (e.clientY - dragState.startY) + dragState.rowHeight / 2
+      : e.clientY
+    const insertIndex = computeInsertIndex(ghostMidY, dragState.taskId)
     setDragState((prev) => prev ? { ...prev, currentY: e.clientY, insertIndex } : null)
   }
 
