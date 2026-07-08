@@ -1,20 +1,24 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Task, Status } from './tasks'
 import { StatusModal } from './StatusModal'
+import { RelationshipModal, RelationshipGroup } from './RelationshipModal'
 
 type QuickSelectPanelProps = {
   task: Task
   statuses: Status[]
   recentStatusSlugs: string[]
+  allTasks: Task[]
   onClose: () => void
   onRename: (id: number, name: string) => void
   onChangeStatus: (id: number, statusSlug: string) => void
   onDelete: (id: number) => void
   onUpdateNotes: (id: number, notes: string) => void
+  onOpenTask: (id: number) => void
 }
 
-export function QuickSelectPanel({ task, statuses, recentStatusSlugs, onClose, onRename, onChangeStatus, onDelete, onUpdateNotes }: QuickSelectPanelProps) {
+export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, onClose, onRename, onChangeStatus, onDelete, onUpdateNotes, onOpenTask }: QuickSelectPanelProps) {
   const [name, setName] = useState(task.name)
+  const [showModal, setShowModal] = useState(false)
   const [backdropReady, setBackdropReady] = useState(false)
   const [statusModalOpen, setStatusModalOpen] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
@@ -40,7 +44,10 @@ export function QuickSelectPanel({ task, statuses, recentStatusSlugs, onClose, o
     else if (e.key === 'Escape') { setName(task.name); onClose() }
   }
 
-  function handleBlur() { commitRename() }  // no onClose() here
+  function handleBlur() { commitRename() }
+
+  // Placeholder: no related tasks yet
+  const relatedGroups: Array<{ label: string; tasks: Task[] }> = []
 
   function handleNotesBlur() {
     if (notes !== task.notes) {
@@ -50,16 +57,7 @@ export function QuickSelectPanel({ task, statuses, recentStatusSlugs, onClose, o
 
   return (
     <>
-      <div
-        onClick={backdropReady ? onClose : undefined}
-        style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(0,0,0,0.3)',
-          zIndex: 10,
-          pointerEvents: backdropReady ? 'auto' : 'none',
-        }}
-      />
+      <div onClick={backdropReady ? onClose : undefined} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 10, pointerEvents: backdropReady ? 'auto' : 'none' }} />
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
@@ -72,6 +70,8 @@ export function QuickSelectPanel({ task, statuses, recentStatusSlugs, onClose, o
           padding: 16,
           boxShadow: '0 -4px 16px rgba(0,0,0,0.15)',
           zIndex: 11,
+          maxHeight: '60vh',
+          overflowY: 'auto',
         }}
       >
         <input
@@ -88,6 +88,7 @@ export function QuickSelectPanel({ task, statuses, recentStatusSlugs, onClose, o
             borderBottom: '2px solid #1a73e8',
             outline: 'none',
             boxSizing: 'border-box',
+            marginBottom: 16,
           }}
         />
         <label style={{ display: 'block', fontSize: 14, color: '#555', marginTop: 12, marginBottom: 4 }}>
@@ -151,6 +152,39 @@ export function QuickSelectPanel({ task, statuses, recentStatusSlugs, onClose, o
             Delete
           </button>
         )}
+
+        <div style={{ marginTop: 16 }}>
+          <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 8 }}>Related Tasks</div>
+
+          {relatedGroups.length === 0 ? (
+            <div style={{ color: '#aaa', fontSize: 14, marginBottom: 12 }}>No related tasks</div>
+          ) : (
+            relatedGroups.map((group) => (
+              <RelationshipGroup
+                key={group.label}
+                label={group.label}
+                tasks={group.tasks}
+                onOpenTask={onOpenTask}
+              />
+            ))
+          )}
+
+          <button
+            onClick={() => setShowModal(true)}
+            style={{
+              marginTop: 4,
+              padding: '8px 16px',
+              backgroundColor: '#1a73e8',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 8,
+              cursor: 'pointer',
+              fontSize: 14,
+            }}
+          >
+            Add Relationship
+          </button>
+        </div>
       </div>
 
       {statusModalOpen && (
@@ -160,6 +194,14 @@ export function QuickSelectPanel({ task, statuses, recentStatusSlugs, onClose, o
           currentStatusSlug={task.statusSlug}
           onSelect={(slug) => onChangeStatus(task.id, slug)}
           onClose={() => setStatusModalOpen(false)}
+        />
+      )}
+
+      {showModal && (
+        <RelationshipModal
+          currentTaskId={task.id}
+          allTasks={allTasks}
+          onClose={() => setShowModal(false)}
         />
       )}
     </>

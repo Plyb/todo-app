@@ -267,6 +267,7 @@ export default function MainPage({
       {selectedTask && (
         <QuickSelectPanel
           task={selectedTask}
+          allTasks={tasks}
           statuses={statuses}
           recentStatusSlugs={recentStatusSlugs}
           onClose={() => setSelectedTaskId(null)}
@@ -274,6 +275,7 @@ export default function MainPage({
           onChangeStatus={handleChangeStatus}
           onDelete={handleDelete}
           onUpdateNotes={handleUpdateNotes}
+          onOpenTask={(id) => setSelectedTaskId(id)}
         />
       )}
 
