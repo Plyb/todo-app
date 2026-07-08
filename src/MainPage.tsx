@@ -1,13 +1,18 @@
 import { useRef, useState } from 'react'
-import { createTask, updateTaskDone, updateTaskName, updateTaskRank, type Task } from './tasks'
+import { createTask, updateTaskDone, updateTaskName, updateTaskRank, updateTaskStatus, type Task, type Status } from './tasks'
 import { DraggableList } from './DraggableList'
 import { AddTaskFab, NewTaskInputField, computeInsertRank, type NewTaskInput } from './AddTaskInput'
 import { rankBetween } from './rank-utils'
 import { QuickSelectPanel } from './QuickSelectPanel'
+import { StatusModal } from './StatusModal'
 
 type MainPageProps = {
   tasks: Task[]
   setTasks: React.Dispatch<React.SetStateAction<Task[]>>
+  statuses: Status[]
+  currentStatusSlug: string
+  recentStatusSlugs: string[]
+  onOpenStatus: (slug: string) => void
   onNavigateToSettings: () => void
 }
 
@@ -41,13 +46,25 @@ function TaskRow({ task, onDoneChange }: { task: Task; onDoneChange: (done: bool
   )
 }
 
-export default function MainPage({ tasks, setTasks, onNavigateToSettings }: MainPageProps) {
+export default function MainPage({
+  tasks,
+  setTasks,
+  statuses,
+  currentStatusSlug,
+  recentStatusSlugs,
+  onOpenStatus,
+  onNavigateToSettings,
+}: MainPageProps) {
   const [newTaskInput, setNewTaskInput] = useState<NewTaskInput | null>(null)
   const [fabPlaceholderIndex, setFabPlaceholderIndex] = useState<number | null>(null)
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null)
+  const [statusModalOpen, setStatusModalOpen] = useState(false)
 
   const listRef = useRef<HTMLUListElement>(null)
   const inputKeyRef = useRef(0)
+  const touchStartY = useRef<number | null>(null)
+
+  const displayedTasks = tasks.filter((t) => t.statusSlug === currentStatusSlug)
 
   function openInput(insertIndex: number) {
     inputKeyRef.current++
@@ -60,17 +77,27 @@ export default function MainPage({ tasks, setTasks, onNavigateToSettings }: Main
   }
 
   function handleReorder(draggedId: number, insertIndex: number) {
-    const newRank = computeNewRank(tasks, insertIndex, draggedId)
+    const newRank = computeNewRank(displayedTasks, insertIndex, draggedId)
     const others = tasks.filter((t) => t.id !== draggedId)
     const draggedTask = tasks.find((t) => t.id === draggedId)!
     const updatedDragged = { ...draggedTask, rank: newRank }
-    const newTasks = [
-      ...others.slice(0, insertIndex),
-      updatedDragged,
-      ...others.slice(insertIndex),
-    ]
+    const newTasks = others.map((t) => t)
+    // insert updatedDragged at correct position in full tasks array preserving sort
+    newTasks.push(updatedDragged)
+    newTasks.sort((a, b) => (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0))
     setTasks(newTasks)
     updateTaskRank(draggedId, newRank)
+  }
+
+  function handleRename(id: number, name: string) {
+    updateTaskName(id, name)
+    setTasks(tasks.map((t) => (t.id === id ? { ...t, name } : t)))
+  }
+
+  async function handleChangeStatus(id: number, statusSlug: string) {
+    await updateTaskStatus(id, statusSlug)
+    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, statusSlug } : t)))
+    setSelectedTaskId(null)
   }
 
   async function commitInput(value: string, insertIndex: number, andOpenAnother: boolean) {
@@ -79,11 +106,11 @@ export default function MainPage({ tasks, setTasks, onNavigateToSettings }: Main
       setNewTaskInput(null)
       return
     }
-    const rank = computeInsertRank(tasks, insertIndex)
-    const task = await createTask(trimmed, rank)
+    const rank = computeInsertRank(displayedTasks, insertIndex)
+    const task = await createTask(trimmed, rank, currentStatusSlug)
     setTasks((prev) => {
-      const next = [...prev]
-      next.splice(insertIndex, 0, task)
+      const next = [...prev, task]
+      next.sort((a, b) => (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0))
       return next
     })
     if (andOpenAnother) {
@@ -110,9 +137,22 @@ export default function MainPage({ tasks, setTasks, onNavigateToSettings }: Main
     setSelectedTaskId((prev) => (prev === taskId ? null : taskId))
   }
 
-  function handleRename(id: number, name: string) {
-    updateTaskName(id, name)
-    setTasks(tasks.map((t) => (t.id === id ? { ...t, name } : t)))
+  function handleTouchStart(e: React.TouchEvent<HTMLElement>) {
+    touchStartY.current = e.touches[0].clientY
+  }
+
+  function handleTouchMove(e: React.TouchEvent<HTMLElement>) {
+    if (touchStartY.current === null) return
+    if (window.scrollY > 0) return
+    const deltaY = e.touches[0].clientY - touchStartY.current
+    if (deltaY > 60) {
+      touchStartY.current = null
+      setStatusModalOpen(true)
+    }
+  }
+
+  function handleTouchEnd() {
+    touchStartY.current = null
   }
 
   const selectedTask = selectedTaskId !== null ? tasks.find((t) => t.id === selectedTaskId) ?? null : null
@@ -146,9 +186,15 @@ export default function MainPage({ tasks, setTasks, onNavigateToSettings }: Main
     : undefined
 
   return (
-    <main onClick={selectedTask === null ? () => setSelectedTaskId(null) : undefined} style={{ minHeight: '100vh' }}>
+    <main
+      onClick={selectedTask === null ? () => setSelectedTaskId(null) : undefined}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      style={{ minHeight: '100vh' }}
+    >
       <DraggableList
-        items={tasks}
+        items={displayedTasks}
         onReorder={handleReorder}
         renderItem={(task) => (
           <TaskRow task={task} onDoneChange={(done) => handleDoneChange(task.id, done)} />
@@ -169,7 +215,7 @@ export default function MainPage({ tasks, setTasks, onNavigateToSettings }: Main
       <SettingsButton onClick={onNavigateToSettings} />
 
       <AddTaskFab
-        tasks={tasks}
+        tasks={displayedTasks}
         listRef={listRef}
         onRequestInsert={openInput}
         onDragInsertIndex={setFabPlaceholderIndex}
@@ -178,8 +224,21 @@ export default function MainPage({ tasks, setTasks, onNavigateToSettings }: Main
       {selectedTask && (
         <QuickSelectPanel
           task={selectedTask}
+          statuses={statuses}
+          recentStatusSlugs={recentStatusSlugs}
           onClose={() => setSelectedTaskId(null)}
           onRename={handleRename}
+          onChangeStatus={handleChangeStatus}
+        />
+      )}
+
+      {statusModalOpen && (
+        <StatusModal
+          statuses={statuses}
+          recentStatusSlugs={recentStatusSlugs}
+          currentStatusSlug={currentStatusSlug}
+          onSelect={onOpenStatus}
+          onClose={() => setStatusModalOpen(false)}
         />
       )}
     </main>
