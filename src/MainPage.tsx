@@ -1,8 +1,9 @@
 import { useRef, useState } from 'react'
-import { createTask, updateTaskDone, updateTaskRank, type Task } from './tasks'
+import { createTask, updateTaskDone, updateTaskName, updateTaskRank, type Task } from './tasks'
 import { DraggableList } from './DraggableList'
 import { AddTaskFab, NewTaskInputField, computeInsertRank, type NewTaskInput } from './AddTaskInput'
 import { rankBetween } from './rank-utils'
+import { QuickSelectPanel } from './QuickSelectPanel'
 
 type MainPageProps = {
   tasks: Task[]
@@ -109,6 +110,13 @@ export default function MainPage({ tasks, setTasks, onNavigateToSettings }: Main
     setSelectedTaskId((prev) => (prev === taskId ? null : taskId))
   }
 
+  function handleRename(id: number, name: string) {
+    updateTaskName(id, name)
+    setTasks(tasks.map((t) => (t.id === id ? { ...t, name } : t)))
+  }
+
+  const selectedTask = selectedTaskId !== null ? tasks.find((t) => t.id === selectedTaskId) ?? null : null
+
   const insertSlot = newTaskInput !== null
     ? {
         index: newTaskInput.insertIndex,
@@ -147,7 +155,7 @@ export default function MainPage({ tasks, setTasks, onNavigateToSettings }: Main
         )}
         listRef={listRef}
         insertSlot={insertSlot}
-        onItemClick={handleTaskClick}
+        onItemClick={selectedTaskId === null ? handleTaskClick : undefined}
         itemStyle={(task) => {
           const isSelected = task.id === selectedTaskId
           const isFaded = selectedTaskId !== null && !isSelected
@@ -166,6 +174,14 @@ export default function MainPage({ tasks, setTasks, onNavigateToSettings }: Main
         onRequestInsert={openInput}
         onDragInsertIndex={setFabPlaceholderIndex}
       />
+
+      {selectedTask && (
+        <QuickSelectPanel
+          task={selectedTask}
+          onClose={() => setSelectedTaskId(null)}
+          onRename={handleRename}
+        />
+      )}
     </main>
   )
 }

@@ -33,6 +33,7 @@ export function DraggableList<T extends { id: number }>({
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const rowsByTaskId = useRef<Map<number, HTMLLIElement>>(new Map())
   const didDragRef = useRef(false)
+  const onItemClickAtDownRef = useRef<((id: number) => void) | undefined>(undefined)
 
   function getRowHeight(): number {
     return rowsByTaskId.current.get(items[0]?.id)?.getBoundingClientRect().height ?? 48
@@ -52,6 +53,7 @@ export function DraggableList<T extends { id: number }>({
     e.preventDefault()
 
     didDragRef.current = false
+    onItemClickAtDownRef.current = onItemClick
     const startY = e.clientY
     const target = e.currentTarget
 
@@ -87,10 +89,10 @@ export function DraggableList<T extends { id: number }>({
     }
 
     if (!dragState) {
-      if (!didDragRef.current && onItemClick) {
+      if (!didDragRef.current && onItemClickAtDownRef.current) {
         const target = e.target as HTMLElement
         if (!target.closest('input[type="checkbox"]')) {
-          onItemClick(taskId)
+          onItemClickAtDownRef.current(taskId)
         }
       }
       return
@@ -105,6 +107,7 @@ export function DraggableList<T extends { id: number }>({
       clearTimeout(longPressTimerRef.current)
       longPressTimerRef.current = null
     }
+    onItemClickAtDownRef.current = undefined
     setDragState(null)
   }
 
