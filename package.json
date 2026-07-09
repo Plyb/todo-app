@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "lexorank": "^1.0.5",
-    "pulltorefresh": "^0.1.1",
+    "pulltorefreshjs": "github:BoxFactura/pulltorefresh.js",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import PullToRefresh from 'pulltorefresh'
+import PullToRefresh from 'pulltorefreshjs'
 import { createTask, deleteTask, updateTaskDone, updateTaskName, updateTaskNotes, updateTaskRank, updateTaskStatus, type Task, type Status } from './tasks'
 import { DraggableList } from './DraggableList'
 import { AddTaskFab, NewTaskInputField, computeInsertRank, type NewTaskInput } from './AddTaskInput'

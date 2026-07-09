@@ -1,4 +1,4 @@
-declare module 'pulltorefresh' {
+declare module 'pulltorefreshjs' {
   interface PullToRefreshInstance {
     destroy(): void
   }
