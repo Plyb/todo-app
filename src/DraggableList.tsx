@@ -79,7 +79,7 @@ export function DraggableList<T extends { id: number }>({
 
   function handlePointerMove(e: React.PointerEvent<HTMLLIElement>) {
     // Cancel long press if user moves significantly before drag starts
-    if (!dragState && longPressTimerRef.current !== null) {
+    if (!dragState && !didDragRef.current && longPressTimerRef.current !== null) {
       if (Math.abs(e.clientY - longPressStartY.current) > 8) {
         clearTimeout(longPressTimerRef.current)
         longPressTimerRef.current = null
