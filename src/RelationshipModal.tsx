@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { Task } from './tasks'
+import { addRelationship } from './tasks'
 
 type RelatedTaskEntryProps = { task: Task; onOpen: (id: number) => void }
 
@@ -39,9 +40,10 @@ type RelationshipModalProps = {
   currentTaskId: number
   allTasks: Task[]
   onClose: () => void
+  onRelationshipAdded?: () => void
 }
 
-export function RelationshipModal({ currentTaskId, allTasks, onClose }: RelationshipModalProps) {
+export function RelationshipModal({ currentTaskId, allTasks, onClose, onRelationshipAdded }: RelationshipModalProps) {
   const [state, setState] = useState<RelationshipModalState>({ view: 'search' })
   const [query, setQuery] = useState('')
 
@@ -131,9 +133,25 @@ export function RelationshipModal({ currentTaskId, allTasks, onClose }: Relation
             <div style={{ color: '#888', fontSize: 14, marginBottom: 8 }}>
               Relating to: <strong>{state.selectedTask.name}</strong>
             </div>
-            <div style={{ color: '#aaa', textAlign: 'center', padding: '16px 0' }}>
-              No relationship types available yet
-            </div>
+            <button
+              onClick={async () => {
+                await addRelationship(currentTaskId, state.selectedTask.id, 'blocks')
+                onRelationshipAdded?.()
+                onClose()
+              }}
+              style={{
+                width: '100%',
+                padding: '12px 16px',
+                textAlign: 'left',
+                background: '#f5f5f5',
+                border: '1px solid #ddd',
+                borderRadius: 8,
+                cursor: 'pointer',
+                fontSize: 15,
+              }}
+            >
+              Blocks — this task blocks <strong>{state.selectedTask.name}</strong>
+            </button>
           </>
         )}
       </div>
