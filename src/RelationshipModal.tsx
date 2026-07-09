@@ -1,31 +1,39 @@
 import { useState } from 'react'
 import type { Task } from './tasks'
 
-type RelatedTaskEntryProps = { task: Task; onOpen: (id: number) => void }
+type RelatedTaskEntryProps = { task: Task; onOpen: (id: number) => void; onDoneChange: (id: number, done: boolean) => void }
 
-export function RelatedTaskEntry({ task, onOpen }: RelatedTaskEntryProps) {
+export function RelatedTaskEntry({ task, onOpen, onDoneChange }: RelatedTaskEntryProps) {
   return (
     <div
-      onClick={() => onOpen(task.id)}
       style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
         padding: '8px 0',
-        cursor: 'pointer',
         borderBottom: '1px solid #eee',
       }}
     >
-      {task.name}
+      <input
+        type="checkbox"
+        checked={task.done}
+        onChange={(e) => onDoneChange(task.id, e.target.checked)}
+      />
+      <span onClick={() => onOpen(task.id)} style={{ cursor: 'pointer', color: task.done ? '#aaa' : undefined }}>
+        {task.name}
+      </span>
     </div>
   )
 }
 
-type RelationshipGroupProps = { label: string; tasks: Task[]; onOpenTask: (id: number) => void }
+type RelationshipGroupProps = { label: string; tasks: Task[]; onOpenTask: (id: number) => void; onDoneChange: (id: number, done: boolean) => void }
 
-export function RelationshipGroup({ label, tasks, onOpenTask }: RelationshipGroupProps) {
+export function RelationshipGroup({ label, tasks, onOpenTask, onDoneChange }: RelationshipGroupProps) {
   return (
     <div style={{ marginBottom: 12 }}>
       <div style={{ fontWeight: 600, fontSize: 13, color: '#555', marginBottom: 4 }}>{label}</div>
       {tasks.map((task) => (
-        <RelatedTaskEntry key={task.id} task={task} onOpen={onOpenTask} />
+        <RelatedTaskEntry key={task.id} task={task} onOpen={onOpenTask} onDoneChange={onDoneChange} />
       ))}
     </div>
   )
