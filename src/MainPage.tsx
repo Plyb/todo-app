@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import PullToRefresh from 'pulltorefreshjs'
-import { createTask, deleteTask, loadAllRelationships, updateTaskDone, updateTaskName, updateTaskNotes, updateTaskRank, updateTaskStatus, type Relationship, type Task, type Status } from './tasks'
+import { createTask, deleteTask, loadAllBlocks, updateTaskDone, updateTaskName, updateTaskNotes, updateTaskRank, updateTaskStatus, type BlockingRelationship, type Task, type Status } from './tasks'
 import { DraggableList } from './DraggableList'
 import { AddTaskFab, NewTaskInputField, computeInsertRank, type NewTaskInput } from './AddTaskInput'
 import { rankBetween } from './rank-utils'
@@ -61,10 +61,10 @@ export default function MainPage({
   const [fabPlaceholderIndex, setFabPlaceholderIndex] = useState<number | null>(null)
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null)
   const [statusModalOpen, setStatusModalOpen] = useState(false)
-  const [allRelationships, setAllRelationships] = useState<Relationship[]>([])
+  const [allBlocks, setAllBlocks] = useState<BlockingRelationship[]>([])
 
   useEffect(() => {
-    loadAllRelationships().then(setAllRelationships)
+    loadAllBlocks().then(setAllBlocks)
   }, [])
 
   const listRef = useRef<HTMLUListElement>(null)
@@ -214,7 +214,7 @@ export default function MainPage({
           <TaskRow
             task={task}
             onDoneChange={(done) => handleDoneChange(task.id, done)}
-            isBlocked={allRelationships.some((r) => r.toTaskId === task.id)}
+            isBlocked={allBlocks.some((r) => r.toTaskId === task.id)}
           />
         )}
         listRef={listRef}
@@ -245,7 +245,7 @@ export default function MainPage({
               onUpdateNotes={handleUpdateNotes}
               onOpenTask={(id) => setSelectedTaskId(id)}
               onDoneChange={handleDoneChange}
-              onRelationshipAdded={() => loadAllRelationships().then(setAllRelationships)}
+              onBlockAdded={() => loadAllBlocks().then(setAllBlocks)}
             />
           ),
         } : undefined}

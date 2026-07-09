@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { Task } from './tasks'
-import { addRelationship } from './tasks'
+import { addBlock } from './tasks'
 
 type RelatedTaskEntryProps = { task: Task; onOpen: (id: number) => void }
 
@@ -19,9 +19,9 @@ export function RelatedTaskEntry({ task, onOpen }: RelatedTaskEntryProps) {
   )
 }
 
-type RelationshipGroupProps = { label: string; tasks: Task[]; onOpenTask: (id: number) => void }
+type BlockingGroupProps = { label: string; tasks: Task[]; onOpenTask: (id: number) => void }
 
-export function RelationshipGroup({ label, tasks, onOpenTask }: RelationshipGroupProps) {
+export function BlockingGroup({ label, tasks, onOpenTask }: BlockingGroupProps) {
   return (
     <div style={{ marginBottom: 12 }}>
       <div style={{ fontWeight: 600, fontSize: 13, color: '#555', marginBottom: 4 }}>{label}</div>
@@ -32,19 +32,42 @@ export function RelationshipGroup({ label, tasks, onOpenTask }: RelationshipGrou
   )
 }
 
-type RelationshipModalState =
-  | { view: 'search' }
-  | { view: 'choose-type'; selectedTask: Task }
+type DirectionButtonProps = { label: string; description: React.ReactNode; onClick: () => void }
 
-type RelationshipModalProps = {
+function DirectionButton({ label, description, onClick }: DirectionButtonProps) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        width: '100%',
+        padding: '12px 16px',
+        textAlign: 'left',
+        background: '#f5f5f5',
+        border: '1px solid #ddd',
+        borderRadius: 8,
+        cursor: 'pointer',
+        fontSize: 15,
+        marginBottom: 8,
+      }}
+    >
+      <strong>{label}</strong> — {description}
+    </button>
+  )
+}
+
+type BlockingModalState =
+  | { view: 'search' }
+  | { view: 'choose-direction'; selectedTask: Task }
+
+type BlockingModalProps = {
   currentTaskId: number
   allTasks: Task[]
   onClose: () => void
-  onRelationshipAdded?: () => void
+  onBlockAdded?: () => void
 }
 
-export function RelationshipModal({ currentTaskId, allTasks, onClose, onRelationshipAdded }: RelationshipModalProps) {
-  const [state, setState] = useState<RelationshipModalState>({ view: 'search' })
+export function BlockingModal({ currentTaskId, allTasks, onClose, onBlockAdded }: BlockingModalProps) {
+  const [state, setState] = useState<BlockingModalState>({ view: 'search' })
   const [query, setQuery] = useState('')
 
   const otherTasks = allTasks.filter((t) => t.id !== currentTaskId)
@@ -78,7 +101,7 @@ export function RelationshipModal({ currentTaskId, allTasks, onClose, onRelation
         {state.view === 'search' && (
           <>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <span style={{ fontWeight: 700, fontSize: 16 }}>Add Relationship</span>
+              <span style={{ fontWeight: 700, fontSize: 16 }}>Add Blocking Relationship</span>
               <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer' }}>
                 ✕
               </button>
@@ -105,7 +128,7 @@ export function RelationshipModal({ currentTaskId, allTasks, onClose, onRelation
               filtered.map((task) => (
                 <div
                   key={task.id}
-                  onClick={() => setState({ view: 'choose-type', selectedTask: task })}
+                  onClick={() => setState({ view: 'choose-direction', selectedTask: task })}
                   style={{
                     padding: '10px 0',
                     borderBottom: '1px solid #eee',
@@ -119,7 +142,7 @@ export function RelationshipModal({ currentTaskId, allTasks, onClose, onRelation
           </>
         )}
 
-        {state.view === 'choose-type' && (
+        {state.view === 'choose-direction' && (
           <>
             <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12, gap: 8 }}>
               <button
@@ -128,30 +151,29 @@ export function RelationshipModal({ currentTaskId, allTasks, onClose, onRelation
               >
                 ←
               </button>
-              <span style={{ fontWeight: 700, fontSize: 16 }}>Choose relationship type</span>
+              <span style={{ fontWeight: 700, fontSize: 16 }}>Choose blocking direction</span>
             </div>
             <div style={{ color: '#888', fontSize: 14, marginBottom: 8 }}>
               Relating to: <strong>{state.selectedTask.name}</strong>
             </div>
-            <button
+            <DirectionButton
+              label="Blocks"
+              description={<>this task blocks <strong>{state.selectedTask.name}</strong></>}
               onClick={async () => {
-                await addRelationship(currentTaskId, state.selectedTask.id, 'blocks')
-                onRelationshipAdded?.()
+                await addBlock(currentTaskId, state.selectedTask.id, 'blocks')
+                onBlockAdded?.()
                 onClose()
               }}
-              style={{
-                width: '100%',
-                padding: '12px 16px',
-                textAlign: 'left',
-                background: '#f5f5f5',
-                border: '1px solid #ddd',
-                borderRadius: 8,
-                cursor: 'pointer',
-                fontSize: 15,
+            />
+            <DirectionButton
+              label="Blocked By"
+              description={<><strong>{state.selectedTask.name}</strong> blocks this task</>}
+              onClick={async () => {
+                await addBlock(state.selectedTask.id, currentTaskId, 'blocks')
+                onBlockAdded?.()
+                onClose()
               }}
-            >
-              Blocks — this task blocks <strong>{state.selectedTask.name}</strong>
-            </button>
+            />
           </>
         )}
       </div>

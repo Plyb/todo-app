@@ -14,10 +14,10 @@ export type Task = {
   notes: string
 }
 
-export type Relationship = { id: number; fromTaskId: number; toTaskId: number; type: 'blocks' }
+export type BlockingRelationship = { id: number; fromTaskId: number; toTaskId: number; type: 'blocks' }
 
 type StoredTask = Omit<Task, 'id'>
-type StoredRelationship = Omit<Relationship, 'id'>
+type StoredBlockingRelationship = Omit<BlockingRelationship, 'id'>
 
 const DB_NAME = 'todo-app'
 const DB_VERSION = 6
@@ -359,7 +359,7 @@ export async function deleteTask(id: number): Promise<void> {
   await transactionToPromise(transaction)
 }
 
-export async function loadRelationships(taskId: number): Promise<Relationship[]> {
+export async function loadBlocks(taskId: number): Promise<BlockingRelationship[]> {
   const db = await openTasksDatabase()
   const transaction = db.transaction(RELATIONSHIPS_STORE, 'readonly')
   const store = transaction.objectStore(RELATIONSHIPS_STORE)
@@ -367,9 +367,9 @@ export async function loadRelationships(taskId: number): Promise<Relationship[]>
   const fromIndex = store.index('fromTaskId')
   const toIndex = store.index('toTaskId')
 
-  const fromRecords = (await requestToPromise(fromIndex.getAll(taskId))) as StoredRelationship[]
+  const fromRecords = (await requestToPromise(fromIndex.getAll(taskId))) as StoredBlockingRelationship[]
   const fromKeys = await requestToPromise(fromIndex.getAllKeys(taskId))
-  const toRecords = (await requestToPromise(toIndex.getAll(taskId))) as StoredRelationship[]
+  const toRecords = (await requestToPromise(toIndex.getAll(taskId))) as StoredBlockingRelationship[]
   const toKeys = await requestToPromise(toIndex.getAllKeys(taskId))
   await transactionToPromise(transaction)
 
@@ -378,29 +378,29 @@ export async function loadRelationships(taskId: number): Promise<Relationship[]>
   return [...from, ...to]
 }
 
-export async function loadAllRelationships(): Promise<Relationship[]> {
+export async function loadAllBlocks(): Promise<BlockingRelationship[]> {
   const db = await openTasksDatabase()
   const transaction = db.transaction(RELATIONSHIPS_STORE, 'readonly')
   const store = transaction.objectStore(RELATIONSHIPS_STORE)
 
-  const records = (await requestToPromise(store.getAll())) as StoredRelationship[]
+  const records = (await requestToPromise(store.getAll())) as StoredBlockingRelationship[]
   const keys = await requestToPromise(store.getAllKeys())
   await transactionToPromise(transaction)
 
   return records.map((r, i) => ({ ...r, id: keyToTaskId(keys[i]) }))
 }
 
-export async function addRelationship(fromTaskId: number, toTaskId: number, type: 'blocks'): Promise<Relationship> {
+export async function addBlock(fromTaskId: number, toTaskId: number, type: 'blocks'): Promise<BlockingRelationship> {
   const db = await openTasksDatabase()
   const transaction = db.transaction(RELATIONSHIPS_STORE, 'readwrite')
   const store = transaction.objectStore(RELATIONSHIPS_STORE)
-  const stored: StoredRelationship = { fromTaskId, toTaskId, type }
+  const stored: StoredBlockingRelationship = { fromTaskId, toTaskId, type }
   const key = await requestToPromise(store.add(stored))
   await transactionToPromise(transaction)
   return { id: keyToTaskId(key), fromTaskId, toTaskId, type }
 }
 
-export async function deleteRelationship(id: number): Promise<void> {
+export async function deleteBlock(id: number): Promise<void> {
   const db = await openTasksDatabase()
   const transaction = db.transaction(RELATIONSHIPS_STORE, 'readwrite')
   const store = transaction.objectStore(RELATIONSHIPS_STORE)
