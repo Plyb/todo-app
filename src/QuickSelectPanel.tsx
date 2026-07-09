@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Task, Status, Relationship } from './tasks'
-import { loadRelationships } from './tasks'
+import type { Task, Status } from './tasks'
 import { StatusModal } from './StatusModal'
 import { RelationshipModal, RelationshipGroup } from './RelationshipModal'
 
@@ -16,17 +15,15 @@ type QuickSelectPanelProps = {
   onUpdateNotes: (id: number, notes: string) => void
   onOpenTask: (id: number) => void
   onDoneChange: (id: number, done: boolean) => void
-  onRelationshipAdded?: () => void
 }
 
-export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, onClose, onRename, onChangeStatus, onDelete, onUpdateNotes, onOpenTask, onDoneChange, onRelationshipAdded }: QuickSelectPanelProps) {
+export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, onClose, onRename, onChangeStatus, onDelete, onUpdateNotes, onOpenTask, onDoneChange }: QuickSelectPanelProps) {
   const [name, setName] = useState(task.name)
   const [showModal, setShowModal] = useState(false)
   const [backdropReady, setBackdropReady] = useState(false)
   const [statusModalOpen, setStatusModalOpen] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
   const [notes, setNotes] = useState(task.notes)
-  const [relationships, setRelationships] = useState<Relationship[]>([])
   const [expanded, setExpanded] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -39,15 +36,6 @@ export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, 
     const t = setTimeout(() => setBackdropReady(true), 350)
     return () => clearTimeout(t)
   }, [])
-
-  useEffect(() => {
-    loadRelationships(task.id).then(setRelationships)
-  }, [task.id])
-
-  function reloadRelationships() {
-    loadRelationships(task.id).then(setRelationships)
-    onRelationshipAdded?.()
-  }
 
   const currentStatus = statuses.find((s) => s.slug === task.statusSlug)
 
@@ -68,26 +56,8 @@ export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, 
 
   function handleBlur() { commitRename() }
 
-  const blocksGroup = {
-    label: 'Blocks',
-    tasks: relationships
-      .filter((r) => r.fromTaskId === task.id)
-      .map((r) => allTasks.find((t) => t.id === r.toTaskId))
-      .filter((t): t is Task => t !== undefined),
-  }
-
-  const blockedByGroup = {
-    label: 'Blocked by',
-    tasks: relationships
-      .filter((r) => r.toTaskId === task.id)
-      .map((r) => allTasks.find((t) => t.id === r.fromTaskId))
-      .filter((t): t is Task => t !== undefined),
-  }
-
-  const relatedGroups: Array<{ label: string; tasks: Task[] }> = [
-    ...(blocksGroup.tasks.length > 0 ? [blocksGroup] : []),
-    ...(blockedByGroup.tasks.length > 0 ? [blockedByGroup] : []),
-  ]
+  // Placeholder: no related tasks yet
+  const relatedGroups: Array<{ label: string; tasks: Task[] }> = []
 
   function handleNotesBlur() {
     if (notes !== task.notes) {
@@ -243,7 +213,6 @@ export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, 
           currentTaskId={task.id}
           allTasks={allTasks}
           onClose={() => setShowModal(false)}
-          onRelationshipAdded={reloadRelationships}
         />
       )}
     </>
