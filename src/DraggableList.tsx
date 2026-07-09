@@ -13,23 +13,22 @@ import {
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 
-type DraggableListProps<T extends { id: number }> = {
+type Section<T> = {
+  header?: React.ReactNode
   items: T[]
-  onReorder: (draggedId: number, insertIndex: number) => void
+}
+
+type DraggableListProps<T extends { id: number }> = {
+  sections: Section<T>[]
+  onReorder: (draggedId: number, toSectionIndex: number, insertIndex: number) => void
   renderItem: (item: T) => React.ReactNode
   itemStyle?: (item: T) => React.CSSProperties
   onItemClick?: (id: number) => void
-  insertSlot?: { index: number; content: React.ReactNode }
+  insertSlot?: { index: number; sectionIndex: number; content: React.ReactNode }
   expandedSlot?: { afterItemId: number; content: React.ReactNode }
   listRef?: React.RefObject<HTMLUListElement | null>
   onDragStart?: () => void
   onDragEnd?: () => void
-  /**
-   * When true, skip creating an internal DndContext/DragOverlay.
-   * The component expects a parent DndContext to already exist.
-   * Used by MainPage to enable cross-section dragging via a shared context.
-   */
-  skipContext?: boolean
 }
 
 function SortableItem<T extends { id: number }>({
@@ -82,53 +81,8 @@ function SortableItem<T extends { id: number }>({
   )
 }
 
-function SortableListContent<T extends { id: number }>({
-  items,
-  renderItem,
-  itemStyle,
-  onItemClick,
-  insertSlot,
-  expandedSlot,
-  listRef,
-}: Omit<DraggableListProps<T>, 'onReorder' | 'onDragStart' | 'onDragEnd' | 'skipContext'>) {
-  return (
-    <SortableContext items={items.map((t) => t.id)} strategy={verticalListSortingStrategy}>
-      <ul ref={listRef} style={{ listStyle: 'none', padding: 0, margin: 0, position: 'relative' }}>
-        {items.map((item, i) => {
-          const isExpanded = expandedSlot?.afterItemId === item.id
-          return (
-            <React.Fragment key={item.id}>
-              {insertSlot?.index === i && (
-                <li data-insert-slot style={{ listStyle: 'none' }}>{insertSlot.content}</li>
-              )}
-              {isExpanded ? (
-                <li
-                  style={{ listStyle: 'none', position: 'relative', zIndex: 11 }}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {expandedSlot!.content}
-                </li>
-              ) : (
-                <SortableItem
-                  item={item}
-                  renderItem={renderItem}
-                  itemStyle={itemStyle}
-                  onItemClick={onItemClick}
-                />
-              )}
-            </React.Fragment>
-          )
-        })}
-        {insertSlot?.index === items.length && (
-          <li data-insert-slot style={{ listStyle: 'none' }}>{insertSlot.content}</li>
-        )}
-      </ul>
-    </SortableContext>
-  )
-}
-
 export function DraggableList<T extends { id: number }>({
-  items,
+  sections,
   onReorder,
   renderItem,
   itemStyle,
@@ -138,7 +92,6 @@ export function DraggableList<T extends { id: number }>({
   listRef,
   onDragStart,
   onDragEnd,
-  skipContext,
 }: DraggableListProps<T>) {
   const [activeId, setActiveId] = useState<number | null>(null)
 
@@ -147,7 +100,8 @@ export function DraggableList<T extends { id: number }>({
     useSensor(TouchSensor, { activationConstraint: { delay: 400, tolerance: 8 } }),
   )
 
-  const activeItem = activeId !== null ? items.find((t) => t.id === activeId) ?? null : null
+  const allItems = sections.flatMap((s) => s.items)
+  const activeItem = activeId !== null ? allItems.find((t) => t.id === activeId) ?? null : null
 
   function handleDragStart({ active }: DragStartEvent) {
     setActiveId(active.id as number)
@@ -156,13 +110,27 @@ export function DraggableList<T extends { id: number }>({
 
   function handleDragEnd({ active, over }: DragEndEvent) {
     if (over && active.id !== over.id) {
-      const oldIndex = items.findIndex((t) => t.id === active.id)
-      const overIndex = items.findIndex((t) => t.id === over.id)
-      const others = items.filter((t) => t.id !== active.id)
-      const othersOverIndex = others.findIndex((t) => t.id === over.id)
-      // dragging down → insert after over; dragging up → insert before over
-      const insertIndex = oldIndex < overIndex ? othersOverIndex + 1 : othersOverIndex
-      onReorder(active.id as number, insertIndex)
+      const toSectionIndex = sections.findIndex((s) => s.items.some((t) => t.id === over.id))
+      if (toSectionIndex !== -1) {
+        const toSection = sections[toSectionIndex]
+        const fromSectionIndex = sections.findIndex((s) => s.items.some((t) => t.id === active.id))
+
+        let insertIndex: number
+        if (fromSectionIndex === toSectionIndex) {
+          const sectionItems = toSection.items
+          const oldIndex = sectionItems.findIndex((t) => t.id === active.id)
+          const overIndex = sectionItems.findIndex((t) => t.id === over.id)
+          const others = sectionItems.filter((t) => t.id !== active.id)
+          const othersOverIndex = others.findIndex((t) => t.id === over.id)
+          // dragging down → insert after over; dragging up → insert before over
+          insertIndex = oldIndex < overIndex ? othersOverIndex + 1 : othersOverIndex
+        } else {
+          // cross-section: dragged item is not in target section, insert before the over item
+          insertIndex = toSection.items.findIndex((t) => t.id === over.id)
+        }
+
+        onReorder(active.id as number, toSectionIndex, insertIndex)
+      }
     }
     setActiveId(null)
     onDragEnd?.()
@@ -173,12 +141,6 @@ export function DraggableList<T extends { id: number }>({
     onDragEnd?.()
   }
 
-  const contentProps = { items, renderItem, itemStyle, onItemClick, insertSlot, expandedSlot, listRef }
-
-  if (skipContext) {
-    return <SortableListContent {...contentProps} />
-  }
-
   return (
     <DndContext
       sensors={sensors}
@@ -187,7 +149,46 @@ export function DraggableList<T extends { id: number }>({
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
     >
-      <SortableListContent {...contentProps} />
+      {sections.map((section, sectionIndex) => (
+        <React.Fragment key={sectionIndex}>
+          {section.header}
+          <SortableContext items={section.items.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+            <ul
+              ref={sectionIndex === 0 ? listRef : undefined}
+              style={{ listStyle: 'none', padding: 0, margin: 0, position: 'relative' }}
+            >
+              {section.items.map((item, i) => {
+                const isExpanded = expandedSlot?.afterItemId === item.id
+                return (
+                  <React.Fragment key={item.id}>
+                    {insertSlot?.sectionIndex === sectionIndex && insertSlot.index === i && (
+                      <li data-insert-slot style={{ listStyle: 'none' }}>{insertSlot.content}</li>
+                    )}
+                    {isExpanded ? (
+                      <li
+                        style={{ listStyle: 'none', position: 'relative', zIndex: 11 }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {expandedSlot!.content}
+                      </li>
+                    ) : (
+                      <SortableItem
+                        item={item}
+                        renderItem={renderItem}
+                        itemStyle={itemStyle}
+                        onItemClick={onItemClick}
+                      />
+                    )}
+                  </React.Fragment>
+                )
+              })}
+              {insertSlot?.sectionIndex === sectionIndex && insertSlot.index === section.items.length && (
+                <li data-insert-slot style={{ listStyle: 'none' }}>{insertSlot.content}</li>
+              )}
+            </ul>
+          </SortableContext>
+        </React.Fragment>
+      ))}
 
       <DragOverlay>
         {activeItem && (

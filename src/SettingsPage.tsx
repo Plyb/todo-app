@@ -179,7 +179,7 @@ export default function SettingsPage({ onBack, statuses, views, onViewsChange }:
     setEditingView({ slug, name: '', statusSlugs: [] })
   }
 
-  async function handleReorderViews(draggedId: number, insertIndex: number) {
+  async function handleReorderViews(draggedId: number, _toSectionIndex: number, insertIndex: number) {
     const others = views.filter((_, i) => i !== draggedId)
     const dragged = views[draggedId]
     const reordered = [...others.slice(0, insertIndex), dragged, ...others.slice(insertIndex)]
@@ -223,7 +223,7 @@ export default function SettingsPage({ onBack, statuses, views, onViewsChange }:
         </div>
 
         <DraggableList
-          items={viewListItems}
+          sections={[{ items: viewListItems }]}
           onReorder={handleReorderViews}
           renderItem={(item) => (
             <div style={{ display: 'flex', alignItems: 'center', width: '100%' }}>
