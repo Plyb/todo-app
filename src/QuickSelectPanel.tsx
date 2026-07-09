@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Task, Status, Relationship } from './tasks'
-import { loadRelationships } from './tasks'
+import type { Task, Status } from './tasks'
 import { StatusModal } from './StatusModal'
 import { RelationshipModal, RelationshipGroup } from './RelationshipModal'
 
@@ -16,9 +15,10 @@ type QuickSelectPanelProps = {
   onUpdateNotes: (id: number, notes: string) => void
   onOpenTask: (id: number) => void
   onDoneChange: (id: number, done: boolean) => void
+  onParentChanged: (childTaskId: number, parentId: number | null) => void
 }
 
-export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, onClose, onRename, onChangeStatus, onDelete, onUpdateNotes, onOpenTask, onDoneChange }: QuickSelectPanelProps) {
+export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, onClose, onRename, onChangeStatus, onDelete, onUpdateNotes, onOpenTask, onDoneChange, onParentChanged }: QuickSelectPanelProps) {
   const [name, setName] = useState(task.name)
   const [showModal, setShowModal] = useState(false)
   const [backdropReady, setBackdropReady] = useState(false)
@@ -26,17 +26,12 @@ export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, 
   const [showConfirm, setShowConfirm] = useState(false)
   const [notes, setNotes] = useState(task.notes)
   const [expanded, setExpanded] = useState(false)
-  const [relationships, setRelationships] = useState<Relationship[]>([])
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     const id = requestAnimationFrame(() => setExpanded(true))
     return () => cancelAnimationFrame(id)
   }, [])
-
-  useEffect(() => {
-    loadRelationships(task.id).then(setRelationships)
-  }, [task.id])
 
   useEffect(() => {
     const t = setTimeout(() => setBackdropReady(true), 350)
@@ -62,21 +57,11 @@ export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, 
 
   function handleBlur() { commitRename() }
 
-  const taskById = new Map(allTasks.map((t) => [t.id, t]))
-
-  const parentTasks = relationships
-    .filter((r) => r.type === 'parent-of' && r.toTaskId === task.id)
-    .map((r) => taskById.get(r.fromTaskId))
-    .filter((t): t is Task => t !== undefined)
-    .slice(0, 1)
-
-  const subtasks = relationships
-    .filter((r) => r.type === 'parent-of' && r.fromTaskId === task.id)
-    .map((r) => taskById.get(r.toTaskId))
-    .filter((t): t is Task => t !== undefined)
+  const parentTask = task.parentId !== null ? allTasks.find((t) => t.id === task.parentId) : undefined
+  const subtasks = allTasks.filter((t) => t.parentId === task.id)
 
   const relatedGroups: Array<{ label: string; tasks: Task[] }> = [
-    ...(parentTasks.length > 0 ? [{ label: 'Parent', tasks: parentTasks }] : []),
+    ...(parentTask !== undefined ? [{ label: 'Parent', tasks: [parentTask] }] : []),
     ...(subtasks.length > 0 ? [{ label: 'Subtasks', tasks: subtasks }] : []),
   ]
 
@@ -234,7 +219,7 @@ export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, 
           currentTaskId={task.id}
           allTasks={allTasks}
           onClose={() => setShowModal(false)}
-          onRelationshipAdded={() => loadRelationships(task.id).then(setRelationships)}
+          onParentChanged={onParentChanged}
         />
       )}
     </>

@@ -12,18 +12,16 @@ export type Task = {
   rank: string
   statusSlug: string
   notes: string
+  parentId: number | null
 }
 
 type StoredTask = Omit<Task, 'id'>
 
 const DB_NAME = 'todo-app'
-const DB_VERSION = 6
+const DB_VERSION = 7
 const TASKS_STORE = 'tasks'
 const STATUSES_STORE = 'statuses'
 const RELATIONSHIPS_STORE = 'relationships'
-
-export type Relationship = { id: number; fromTaskId: number; toTaskId: number; type: string }
-type StoredRelationship = Omit<Relationship, 'id'>
 
 const DEFAULT_STATUSES: Status[] = [
   { slug: 'today', name: 'Today' },
@@ -35,9 +33,9 @@ const DEFAULT_STATUSES: Status[] = [
 const DEMO_TASKS: StoredTask[] = (() => {
   const middle = LexoRank.middle()
   return [
-    { name: 'Buy groceries', done: false, rank: middle.toString(), statusSlug: 'today', notes: '' },
-    { name: 'Walk the dog', done: false, rank: middle.genNext().toString(), statusSlug: 'today', notes: '' },
-    { name: 'Write weekly update', done: false, rank: middle.genNext().genNext().toString(), statusSlug: 'backlog', notes: '' },
+    { name: 'Buy groceries', done: false, rank: middle.toString(), statusSlug: 'today', notes: '', parentId: null },
+    { name: 'Walk the dog', done: false, rank: middle.genNext().toString(), statusSlug: 'today', notes: '', parentId: null },
+    { name: 'Write weekly update', done: false, rank: middle.genNext().genNext().toString(), statusSlug: 'backlog', notes: '', parentId: null },
   ]
 })()
 
@@ -145,6 +143,29 @@ async function migrateAddNotes(transaction: IDBTransaction): Promise<void> {
   })
 }
 
+async function migrateAddParentId(transaction: IDBTransaction): Promise<void> {
+  const store = transaction.objectStore(TASKS_STORE)
+  const cursorRequest = store.openCursor()
+
+  await new Promise<void>((resolve, reject) => {
+    cursorRequest.onsuccess = () => {
+      const cursor = cursorRequest.result
+      if (!cursor) {
+        resolve()
+        return
+      }
+
+      const record = cursor.value as StoredTask & { parentId?: number | null }
+      if (record.parentId === undefined) {
+        cursor.update({ ...record, parentId: null })
+      }
+      cursor.continue()
+    }
+
+    cursorRequest.onerror = () => reject(cursorRequest.error)
+  })
+}
+
 async function openTasksDatabase(): Promise<IDBDatabase> {
   if (openDatabasePromise) {
     return openDatabasePromise
@@ -196,14 +217,19 @@ async function openTasksDatabase(): Promise<IDBDatabase> {
             // Migration errors will surface as transaction abort
           })
         }
+
+        // v6 -> v7: add parentId field to existing records
+        if (event.oldVersion < 7) {
+          migrateAddParentId(transaction).catch(() => {
+            // Migration errors will surface as transaction abort
+          })
+        }
       }
 
-      // v5 -> v6: add relationships store
-      if (event.oldVersion < 6) {
-        if (!db.objectStoreNames.contains(RELATIONSHIPS_STORE)) {
-          const relStore = db.createObjectStore(RELATIONSHIPS_STORE, { autoIncrement: true })
-          relStore.createIndex('by-from', 'fromTaskId')
-          relStore.createIndex('by-to', 'toTaskId')
+      // v6 -> v7: remove relationships store (parent-child now stored on task)
+      if (event.oldVersion < 7) {
+        if (db.objectStoreNames.contains(RELATIONSHIPS_STORE)) {
+          db.deleteObjectStore(RELATIONSHIPS_STORE)
         }
       }
 
@@ -254,6 +280,7 @@ export async function loadTasks(): Promise<Task[]> {
       rank: task.rank ?? LexoRank.middle().toString(),
       statusSlug: task.statusSlug ?? 'backlog',
       notes: task.notes ?? '',
+      parentId: task.parentId ?? null,
     }))
     tasks.sort((a, b) => (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0))
     return tasks
@@ -278,10 +305,10 @@ export async function createTask(name: string, rank: string, statusSlug: string 
   const db = await openTasksDatabase()
   const transaction = db.transaction(TASKS_STORE, 'readwrite')
   const store = transaction.objectStore(TASKS_STORE)
-  const request = store.add({ name, done: false, rank, statusSlug, notes: '' })
+  const request = store.add({ name, done: false, rank, statusSlug, notes: '', parentId: null })
   const key = await requestToPromise(request)
   await transactionToPromise(transaction)
-  return { id: keyToTaskId(key), name, done: false, rank, statusSlug, notes: '' }
+  return { id: keyToTaskId(key), name, done: false, rank, statusSlug, notes: '', parentId: null }
 }
 
 export async function saveTask(task: Task): Promise<void> {
@@ -289,7 +316,7 @@ export async function saveTask(task: Task): Promise<void> {
 
   const transaction = db.transaction(TASKS_STORE, 'readwrite')
   const store = transaction.objectStore(TASKS_STORE)
-  store.put({ name: task.name, done: task.done, rank: task.rank, statusSlug: task.statusSlug, notes: task.notes }, task.id)
+  store.put({ name: task.name, done: task.done, rank: task.rank, statusSlug: task.statusSlug, notes: task.notes, parentId: task.parentId }, task.id)
   await transactionToPromise(transaction)
 }
 
@@ -359,47 +386,13 @@ export async function deleteTask(id: number): Promise<void> {
   await transactionToPromise(transaction)
 }
 
-export async function loadRelationships(taskId: number): Promise<Relationship[]> {
+export async function updateTaskParent(id: number, parentId: number | null): Promise<void> {
   const db = await openTasksDatabase()
-  const transaction = db.transaction(RELATIONSHIPS_STORE, 'readonly')
-  const store = transaction.objectStore(RELATIONSHIPS_STORE)
-
-  const [fromResults, fromKeys, toResults, toKeys] = await Promise.all([
-    requestToPromise(store.index('by-from').getAll(taskId)),
-    requestToPromise(store.index('by-from').getAllKeys(taskId)),
-    requestToPromise(store.index('by-to').getAll(taskId)),
-    requestToPromise(store.index('by-to').getAllKeys(taskId)),
-  ])
-  await transactionToPromise(transaction)
-
-  const fromRels = (fromResults as StoredRelationship[]).map((r, i) => ({ id: keyToTaskId(fromKeys[i]), ...r }))
-  const toRels = (toResults as StoredRelationship[]).map((r, i) => ({ id: keyToTaskId(toKeys[i]), ...r }))
-
-  const seen = new Set<number>()
-  const merged: Relationship[] = []
-  for (const rel of [...fromRels, ...toRels]) {
-    if (!seen.has(rel.id)) {
-      seen.add(rel.id)
-      merged.push(rel)
-    }
+  const transaction = db.transaction(TASKS_STORE, 'readwrite')
+  const store = transaction.objectStore(TASKS_STORE)
+  const existing = (await requestToPromise(store.get(id))) as StoredTask | undefined
+  if (existing) {
+    store.put({ ...existing, parentId }, id)
   }
-  return merged
-}
-
-export async function addRelationship(fromTaskId: number, toTaskId: number, type: string): Promise<Relationship> {
-  const db = await openTasksDatabase()
-  const transaction = db.transaction(RELATIONSHIPS_STORE, 'readwrite')
-  const store = transaction.objectStore(RELATIONSHIPS_STORE)
-  const stored: StoredRelationship = { fromTaskId, toTaskId, type }
-  const key = await requestToPromise(store.add(stored))
-  await transactionToPromise(transaction)
-  return { id: keyToTaskId(key), ...stored }
-}
-
-export async function deleteRelationship(id: number): Promise<void> {
-  const db = await openTasksDatabase()
-  const transaction = db.transaction(RELATIONSHIPS_STORE, 'readwrite')
-  const store = transaction.objectStore(RELATIONSHIPS_STORE)
-  store.delete(id)
   await transactionToPromise(transaction)
 }

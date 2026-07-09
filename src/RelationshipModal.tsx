@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { Task } from './tasks'
-import { addRelationship } from './tasks'
+import { updateTaskParent } from './tasks'
 
 type RelatedTaskEntryProps = { task: Task; onOpen: (id: number) => void }
 
@@ -40,10 +40,10 @@ type RelationshipModalProps = {
   currentTaskId: number
   allTasks: Task[]
   onClose: () => void
-  onRelationshipAdded?: () => void
+  onParentChanged: (childTaskId: number, parentId: number | null) => void
 }
 
-export function RelationshipModal({ currentTaskId, allTasks, onClose, onRelationshipAdded }: RelationshipModalProps) {
+export function RelationshipModal({ currentTaskId, allTasks, onClose, onParentChanged }: RelationshipModalProps) {
   const [state, setState] = useState<RelationshipModalState>({ view: 'search' })
   const [query, setQuery] = useState('')
 
@@ -136,8 +136,8 @@ export function RelationshipModal({ currentTaskId, allTasks, onClose, onRelation
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <button
                 onClick={async () => {
-                  await addRelationship(currentTaskId, state.selectedTask.id, 'parent-of')
-                  onRelationshipAdded?.()
+                  await updateTaskParent(state.selectedTask.id, currentTaskId)
+                  onParentChanged(state.selectedTask.id, currentTaskId)
                   onClose()
                 }}
                 style={{ padding: '10px 16px', fontSize: 14, cursor: 'pointer', borderRadius: 8, border: '1px solid #ddd', background: '#fff', textAlign: 'left' }}
@@ -146,8 +146,8 @@ export function RelationshipModal({ currentTaskId, allTasks, onClose, onRelation
               </button>
               <button
                 onClick={async () => {
-                  await addRelationship(state.selectedTask.id, currentTaskId, 'parent-of')
-                  onRelationshipAdded?.()
+                  await updateTaskParent(currentTaskId, state.selectedTask.id)
+                  onParentChanged(currentTaskId, state.selectedTask.id)
                   onClose()
                 }}
                 style={{ padding: '10px 16px', fontSize: 14, cursor: 'pointer', borderRadius: 8, border: '1px solid #ddd', background: '#fff', textAlign: 'left' }}

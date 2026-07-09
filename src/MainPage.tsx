@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import PullToRefresh from 'pulltorefreshjs'
-import { createTask, deleteTask, updateTaskDone, updateTaskName, updateTaskNotes, updateTaskRank, updateTaskStatus, type Task, type Status } from './tasks'
+import { createTask, deleteTask, updateTaskDone, updateTaskName, updateTaskNotes, updateTaskParent, updateTaskRank, updateTaskStatus, type Task, type Status } from './tasks'
 import { DraggableList } from './DraggableList'
 import { AddTaskFab, NewTaskInputField, computeInsertRank, type NewTaskInput } from './AddTaskInput'
 import { rankBetween } from './rank-utils'
@@ -166,6 +166,11 @@ export default function MainPage({
     setSelectedTaskId(null)
   }
 
+  function handleParentChanged(childTaskId: number, parentId: number | null) {
+    updateTaskParent(childTaskId, parentId)
+    setTasks((prev) => prev.map((t) => (t.id === childTaskId ? { ...t, parentId } : t)))
+  }
+
   const insertSlot = newTaskInput !== null
     ? {
         index: newTaskInput.insertIndex,
@@ -235,6 +240,7 @@ export default function MainPage({
               onUpdateNotes={handleUpdateNotes}
               onOpenTask={(id) => setSelectedTaskId(id)}
               onDoneChange={handleDoneChange}
+              onParentChanged={handleParentChanged}
             />
           ),
         } : undefined}
