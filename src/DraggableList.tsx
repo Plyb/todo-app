@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import {
   DndContext,
   DragOverlay,
-  PointerSensor,
+  MouseSensor,
   TouchSensor,
   useSensor,
   useSensors,
@@ -89,7 +89,7 @@ export function DraggableList<T extends { id: number }>({
   const [activeId, setActiveId] = useState<number | null>(null)
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 400, tolerance: 8 } }),
   )
 
