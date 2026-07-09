@@ -229,19 +229,35 @@ export async function loadTasks(): Promise<Task[]> {
 
   const transaction = db.transaction(TASKS_STORE, 'readonly')
   const store = transaction.objectStore(TASKS_STORE)
-  const storedTasks = (await requestToPromise(store.getAll())) as StoredTask[]
-  const taskKeys = await requestToPromise(store.getAllKeys())
+
+  const tasks = await new Promise<Task[]>((resolve, reject) => {
+    const cursorRequest = store.openCursor()
+    const collected: Task[] = []
+
+    cursorRequest.onsuccess = () => {
+      const cursor = cursorRequest.result
+      if (!cursor) {
+        resolve(collected)
+        return
+      }
+      const task = cursor.value as StoredTask
+      collected.push({
+        id: keyToTaskId(cursor.key),
+        name: task.name,
+        done: task.done ?? false,
+        rank: task.rank ?? LexoRank.middle().toString(),
+        statusSlug: task.statusSlug ?? 'backlog',
+        notes: task.notes ?? '',
+      })
+      cursor.continue()
+    }
+
+    cursorRequest.onerror = () => reject(cursorRequest.error)
+  })
+
   await transactionToPromise(transaction)
 
-  if (storedTasks.length > 0) {
-    const tasks = storedTasks.map((task, index) => ({
-      id: keyToTaskId(taskKeys[index]),
-      name: task.name,
-      done: task.done ?? false,
-      rank: task.rank ?? LexoRank.middle().toString(),
-      statusSlug: task.statusSlug ?? 'backlog',
-      notes: task.notes ?? '',
-    }))
+  if (tasks.length > 0) {
     tasks.sort((a, b) => (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0))
     return tasks
   }
