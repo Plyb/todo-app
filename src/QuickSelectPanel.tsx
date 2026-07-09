@@ -15,11 +15,11 @@ type QuickSelectPanelProps = {
   onDelete: (id: number) => void
   onUpdateNotes: (id: number, notes: string) => void
   onOpenTask: (id: number) => void
-  onDoneChange?: (id: number, done: boolean) => void
+  onDoneChange: (id: number, done: boolean) => void
   onRelationshipAdded?: () => void
 }
 
-export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, onClose, onRename, onChangeStatus, onDelete, onUpdateNotes, onOpenTask, onRelationshipAdded }: QuickSelectPanelProps) {
+export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, onClose, onRename, onChangeStatus, onDelete, onUpdateNotes, onOpenTask, onDoneChange, onRelationshipAdded }: QuickSelectPanelProps) {
   const [name, setName] = useState(task.name)
   const [showModal, setShowModal] = useState(false)
   const [backdropReady, setBackdropReady] = useState(false)
@@ -27,9 +27,13 @@ export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, 
   const [showConfirm, setShowConfirm] = useState(false)
   const [notes, setNotes] = useState(task.notes)
   const [relationships, setRelationships] = useState<Relationship[]>([])
+  const [expanded, setExpanded] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => { inputRef.current?.focus() }, [])
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setExpanded(true))
+    return () => cancelAnimationFrame(id)
+  }, [])
 
   useEffect(() => {
     const t = setTimeout(() => setBackdropReady(true), 350)
@@ -47,14 +51,19 @@ export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, 
 
   const currentStatus = statuses.find((s) => s.slug === task.statusSlug)
 
+  function handleClose() {
+    setExpanded(false)
+    setTimeout(onClose, 200)
+  }
+
   function commitRename() {
     const trimmed = name.trim()
     if (trimmed && trimmed !== task.name) onRename(task.id, trimmed)
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === 'Enter') { commitRename(); onClose() }
-    else if (e.key === 'Escape') { setName(task.name); onClose() }
+    if (e.key === 'Enter') { commitRename(); handleClose() }
+    else if (e.key === 'Escape') { setName(task.name); handleClose() }
   }
 
   function handleBlur() { commitRename() }
@@ -88,133 +97,134 @@ export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, 
 
   return (
     <>
-      <div onClick={backdropReady ? onClose : undefined} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 10, pointerEvents: backdropReady ? 'auto' : 'none' }} />
+      <div onClick={backdropReady ? handleClose : undefined} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 10, pointerEvents: backdropReady ? 'auto' : 'none' }} />
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          position: 'fixed',
-          bottom: 0,
-          left: 0,
-          right: 0,
           background: '#fff',
-          borderRadius: '16px 16px 0 0',
           padding: 16,
-          boxShadow: '0 -4px 16px rgba(0,0,0,0.15)',
           zIndex: 11,
-          maxHeight: '60vh',
-          overflowY: 'auto',
+          position: 'relative',
         }}
       >
-        <input
-          ref={inputRef}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onBlur={handleBlur}
-          onKeyDown={handleKeyDown}
-          style={{
-            width: '100%',
-            fontSize: 16,
-            padding: '8px 4px',
-            border: 'none',
-            borderBottom: '2px solid #1a73e8',
-            outline: 'none',
-            boxSizing: 'border-box',
-            marginBottom: 16,
-          }}
-        />
-        <label style={{ display: 'block', fontSize: 14, color: '#555', marginTop: 12, marginBottom: 4 }}>
-          Notes
-        </label>
-        <textarea
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          onBlur={handleNotesBlur}
-          style={{
-            width: '100%',
-            minHeight: 80,
-            boxSizing: 'border-box',
-            fontSize: 15,
-            padding: '8px 10px',
-            border: '1px solid #ccc',
-            borderRadius: 6,
-            resize: 'vertical',
-          }}
-        />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12 }}>
-          <span style={{ color: '#666', fontSize: 14 }}>Status:</span>
-          <button
-            onClick={() => setStatusModalOpen(true)}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 16px', borderBottom: '1px solid #eee', margin: '-16px -16px 0' }}>
+          <input type="checkbox" checked={task.done} onChange={(e) => onDoneChange(task.id, e.target.checked)} />
+          <input
+            ref={inputRef}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onBlur={handleBlur}
+            onKeyDown={handleKeyDown}
             style={{
-              background: '#e8f0fe',
+              flex: 1,
+              fontSize: 16,
               border: 'none',
-              borderRadius: 6,
-              padding: '4px 10px',
-              cursor: 'pointer',
-              fontSize: 14,
-              color: '#1a73e8',
-              fontWeight: 500,
+              outline: 'none',
+              background: 'transparent',
+              color: task.done ? '#aaa' : undefined,
             }}
-          >
-            {currentStatus?.name ?? task.statusSlug}
-          </button>
+          />
         </div>
 
-        {showConfirm ? (
-          <div style={{ marginTop: 16 }}>
-            <p style={{ margin: '0 0 12px' }}>Are you sure?</p>
+        <div style={{
+          overflow: 'hidden',
+          maxHeight: expanded ? '1000px' : '0',
+          transition: 'max-height 0.2s ease',
+        }}>
+          <label style={{ display: 'block', fontSize: 14, color: '#555', marginTop: 12, marginBottom: 4 }}>
+            Notes
+          </label>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            onBlur={handleNotesBlur}
+            style={{
+              width: '100%',
+              minHeight: 80,
+              boxSizing: 'border-box',
+              fontSize: 15,
+              padding: '8px 10px',
+              border: '1px solid #ccc',
+              borderRadius: 6,
+              resize: 'vertical',
+            }}
+          />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12 }}>
+            <span style={{ color: '#666', fontSize: 14 }}>Status:</span>
             <button
-              onClick={() => { onDelete(task.id); onClose() }}
-              style={{ marginRight: 8, color: '#fff', background: '#d32f2f', border: 'none', borderRadius: 4, padding: '8px 16px', cursor: 'pointer' }}
+              onClick={() => setStatusModalOpen(true)}
+              style={{
+                background: '#e8f0fe',
+                border: 'none',
+                borderRadius: 6,
+                padding: '4px 10px',
+                cursor: 'pointer',
+                fontSize: 14,
+                color: '#1a73e8',
+                fontWeight: 500,
+              }}
             >
-              Confirm Delete
-            </button>
-            <button
-              onClick={() => setShowConfirm(false)}
-              style={{ border: '1px solid #ccc', borderRadius: 4, padding: '8px 16px', cursor: 'pointer' }}
-            >
-              Cancel
+              {currentStatus?.name ?? task.statusSlug}
             </button>
           </div>
-        ) : (
-          <button
-            onClick={() => setShowConfirm(true)}
-            style={{ marginTop: 16, color: '#fff', background: '#d32f2f', border: 'none', borderRadius: 4, padding: '8px 16px', cursor: 'pointer' }}
-          >
-            Delete
-          </button>
-        )}
 
-        <div style={{ marginTop: 16 }}>
-          <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 8 }}>Related Tasks</div>
-
-          {relatedGroups.length === 0 ? (
-            <div style={{ color: '#aaa', fontSize: 14, marginBottom: 12 }}>No related tasks</div>
+          {showConfirm ? (
+            <div style={{ marginTop: 16 }}>
+              <p style={{ margin: '0 0 12px' }}>Are you sure?</p>
+              <button
+                onClick={() => { onDelete(task.id); handleClose() }}
+                style={{ marginRight: 8, color: '#fff', background: '#d32f2f', border: 'none', borderRadius: 4, padding: '8px 16px', cursor: 'pointer' }}
+              >
+                Confirm Delete
+              </button>
+              <button
+                onClick={() => setShowConfirm(false)}
+                style={{ border: '1px solid #ccc', borderRadius: 4, padding: '8px 16px', cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+            </div>
           ) : (
-            relatedGroups.map((group) => (
-              <RelationshipGroup
-                key={group.label}
-                label={group.label}
-                tasks={group.tasks}
-                onOpenTask={onOpenTask}
-              />
-            ))
+            <button
+              onClick={() => setShowConfirm(true)}
+              style={{ marginTop: 16, color: '#fff', background: '#d32f2f', border: 'none', borderRadius: 4, padding: '8px 16px', cursor: 'pointer' }}
+            >
+              Delete
+            </button>
           )}
 
-          <button
-            onClick={() => setShowModal(true)}
-            style={{
-              marginTop: 4,
-              padding: '8px 16px',
-              backgroundColor: '#1a73e8',
-              color: '#fff',
-              border: 'none',
-              borderRadius: 8,
-              cursor: 'pointer',
-              fontSize: 14,
-            }}
-          >
-            Add Relationship
-          </button>
+          <div style={{ marginTop: 16 }}>
+            <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 8 }}>Related Tasks</div>
+
+            {relatedGroups.length === 0 ? (
+              <div style={{ color: '#aaa', fontSize: 14, marginBottom: 12 }}>No related tasks</div>
+            ) : (
+              relatedGroups.map((group) => (
+                <RelationshipGroup
+                  key={group.label}
+                  label={group.label}
+                  tasks={group.tasks}
+                  onOpenTask={onOpenTask}
+                />
+              ))
+            )}
+
+            <button
+              onClick={() => setShowModal(true)}
+              style={{
+                marginTop: 4,
+                padding: '8px 16px',
+                backgroundColor: '#1a73e8',
+                color: '#fff',
+                border: 'none',
+                borderRadius: 8,
+                cursor: 'pointer',
+                fontSize: 14,
+              }}
+            >
+              Add Relationship
+            </button>
+          </div>
         </div>
       </div>
 

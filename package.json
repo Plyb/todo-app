@@ -13,6 +13,7 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "lexorank": "^1.0.5",
+    "pulltorefreshjs": "github:BoxFactura/pulltorefresh.js",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

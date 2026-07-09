@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import PullToRefresh from 'pulltorefreshjs'
 import { createTask, deleteTask, loadAllRelationships, updateTaskDone, updateTaskName, updateTaskNotes, updateTaskRank, updateTaskStatus, type Relationship, type Task, type Status } from './tasks'
 import { DraggableList } from './DraggableList'
 import { AddTaskFab, NewTaskInputField, computeInsertRank, type NewTaskInput } from './AddTaskInput'
@@ -68,9 +69,24 @@ export default function MainPage({
 
   const listRef = useRef<HTMLUListElement>(null)
   const inputKeyRef = useRef(0)
-  const touchStartY = useRef<number | null>(null)
   const isDraggingRef = useRef(false)
-  const pullIndicatorRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const ptr = PullToRefresh.init({
+      mainElement: 'main',
+      instructionsPullToRefresh: ' ',
+      instructionsReleaseToRefresh: ' ',
+      instructionsRefreshing: ' ',
+      refreshTimeout: 100,
+      onRefresh() {
+        setStatusModalOpen(true)
+      },
+      shouldPullToRefresh() {
+        return !isDraggingRef.current && window.scrollY === 0
+      },
+    })
+    return () => ptr.destroy()
+  }, [])
 
   const displayedTasks = tasks.filter((t) => t.statusSlug === currentStatusSlug)
 
@@ -150,38 +166,6 @@ export default function MainPage({
     setSelectedTaskId((prev) => (prev === taskId ? null : taskId))
   }
 
-  function handleTouchStart(e: React.TouchEvent<HTMLElement>) {
-    touchStartY.current = e.touches[0].clientY
-  }
-
-  function handleTouchMove(e: React.TouchEvent<HTMLElement>) {
-    if (touchStartY.current === null) return
-    if (isDraggingRef.current) return
-    if (window.scrollY > 0) return
-    const deltaY = Math.max(0, e.touches[0].clientY - touchStartY.current)
-    const capped = Math.min(deltaY, 90)
-    if (pullIndicatorRef.current) {
-      pullIndicatorRef.current.style.height = `${capped}px`
-      pullIndicatorRef.current.style.opacity = String(capped / 90)
-    }
-    if (deltaY >= 90) {
-      touchStartY.current = null
-      if (pullIndicatorRef.current) {
-        pullIndicatorRef.current.style.height = '0px'
-        pullIndicatorRef.current.style.opacity = '0'
-      }
-      setStatusModalOpen(true)
-    }
-  }
-
-  function handleTouchEnd() {
-    touchStartY.current = null
-    if (pullIndicatorRef.current) {
-      pullIndicatorRef.current.style.height = '0px'
-      pullIndicatorRef.current.style.opacity = '0'
-    }
-  }
-
   async function handleDelete(id: number) {
     await deleteTask(id)
     setTasks((prev) => prev.filter((t) => t.id !== id))
@@ -221,25 +205,8 @@ export default function MainPage({
   return (
     <main
       onClick={selectedTask === null ? () => setSelectedTaskId(null) : undefined}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
       style={{ minHeight: '100vh' }}
     >
-      <div
-        ref={pullIndicatorRef}
-        style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          height: 0,
-          background: 'rgba(26,115,232,0.15)',
-          zIndex: 0,
-          opacity: 0,
-          pointerEvents: 'none',
-        }}
-      />
       <DraggableList
         items={displayedTasks}
         onReorder={handleReorder}
@@ -263,6 +230,24 @@ export default function MainPage({
             backgroundColor: isSelected ? '#e8f0fe' : 'transparent',
           }
         }}
+        expandedSlot={selectedTask ? {
+          afterItemId: selectedTask.id,
+          content: (
+            <QuickSelectPanel
+              task={selectedTask}
+              allTasks={tasks}
+              statuses={statuses}
+              recentStatusSlugs={recentStatusSlugs}
+              onClose={() => setSelectedTaskId(null)}
+              onRename={handleRename}
+              onChangeStatus={handleChangeStatus}
+              onDelete={handleDelete}
+              onUpdateNotes={handleUpdateNotes}
+              onOpenTask={(id) => setSelectedTaskId(id)}
+              onDoneChange={handleDoneChange}
+            />
+          ),
+        } : undefined}
       />
 
       <SettingsButton onClick={onNavigateToSettings} />
@@ -273,22 +258,6 @@ export default function MainPage({
         onRequestInsert={openInput}
         onDragInsertIndex={setFabPlaceholderIndex}
       />
-
-      {selectedTask && (
-        <QuickSelectPanel
-          task={selectedTask}
-          allTasks={tasks}
-          statuses={statuses}
-          recentStatusSlugs={recentStatusSlugs}
-          onClose={() => setSelectedTaskId(null)}
-          onRename={handleRename}
-          onChangeStatus={handleChangeStatus}
-          onDelete={handleDelete}
-          onUpdateNotes={handleUpdateNotes}
-          onOpenTask={(id) => setSelectedTaskId(id)}
-          onRelationshipAdded={() => loadAllRelationships().then(setAllRelationships)}
-        />
-      )}
 
       {statusModalOpen && (
         <StatusModal

@@ -20,6 +20,7 @@ type DraggableListProps<T extends { id: number }> = {
   itemStyle?: (item: T) => React.CSSProperties
   onItemClick?: (id: number) => void
   insertSlot?: { index: number; content: React.ReactNode }
+  expandedSlot?: { afterItemId: number; content: React.ReactNode }
   listRef?: React.RefObject<HTMLUListElement | null>
   onDragStart?: () => void
   onDragEnd?: () => void
@@ -82,6 +83,7 @@ export function DraggableList<T extends { id: number }>({
   itemStyle,
   onItemClick,
   insertSlot,
+  expandedSlot,
   listRef,
   onDragStart,
   onDragEnd,
@@ -129,19 +131,31 @@ export function DraggableList<T extends { id: number }>({
     >
       <SortableContext items={items.map((t) => t.id)} strategy={verticalListSortingStrategy}>
         <ul ref={listRef} style={{ listStyle: 'none', padding: 0, margin: 0, position: 'relative' }}>
-          {items.map((item, i) => (
-            <React.Fragment key={item.id}>
-              {insertSlot?.index === i && (
-                <li data-insert-slot style={{ listStyle: 'none' }}>{insertSlot.content}</li>
-              )}
-              <SortableItem
-                item={item}
-                renderItem={renderItem}
-                itemStyle={itemStyle}
-                onItemClick={onItemClick}
-              />
-            </React.Fragment>
-          ))}
+          {items.map((item, i) => {
+            const isExpanded = expandedSlot?.afterItemId === item.id
+            return (
+              <React.Fragment key={item.id}>
+                {insertSlot?.index === i && (
+                  <li data-insert-slot style={{ listStyle: 'none' }}>{insertSlot.content}</li>
+                )}
+                {isExpanded ? (
+                  <li
+                    style={{ listStyle: 'none', position: 'relative', zIndex: 11 }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {expandedSlot!.content}
+                  </li>
+                ) : (
+                  <SortableItem
+                    item={item}
+                    renderItem={renderItem}
+                    itemStyle={itemStyle}
+                    onItemClick={onItemClick}
+                  />
+                )}
+              </React.Fragment>
+            )
+          })}
           {insertSlot?.index === items.length && (
             <li data-insert-slot style={{ listStyle: 'none' }}>{insertSlot.content}</li>
           )}
