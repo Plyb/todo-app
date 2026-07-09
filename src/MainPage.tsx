@@ -71,7 +71,7 @@ export default function MainPage({
       instructionsPullToRefresh: ' ',
       instructionsReleaseToRefresh: ' ',
       instructionsRefreshing: ' ',
-      refreshTimeout: 0,
+      refreshTimeout: 100,
       onRefresh() {
         setStatusModalOpen(true)
       },
