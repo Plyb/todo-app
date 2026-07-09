@@ -4,6 +4,10 @@ declare module 'pulltorefreshjs' {
   }
   interface PullToRefreshOptions {
     mainElement?: string
+    instructionsPullToRefresh?: string
+    instructionsReleaseToRefresh?: string
+    instructionsRefreshing?: string
+    refreshTimeout?: number
     onRefresh?: () => void
     shouldPullToRefresh?: () => boolean
   }

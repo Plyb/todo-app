@@ -68,6 +68,10 @@ export default function MainPage({
   useEffect(() => {
     const ptr = PullToRefresh.init({
       mainElement: 'main',
+      instructionsPullToRefresh: ' ',
+      instructionsReleaseToRefresh: ' ',
+      instructionsRefreshing: ' ',
+      refreshTimeout: 0,
       onRefresh() {
         setStatusModalOpen(true)
       },
