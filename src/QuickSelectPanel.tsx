@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Task, Status } from './tasks'
+import type { Task, Status, ScheduledTransition } from './tasks'
+import { loadScheduledTransitions } from './tasks'
 import { StatusModal } from './StatusModal'
 import { RelationshipModal, RelationshipGroup } from './RelationshipModal'
+import { ScheduleModal } from './ScheduleModal'
 
 type QuickSelectPanelProps = {
   task: Task
@@ -22,9 +24,11 @@ export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, 
   const [showModal, setShowModal] = useState(false)
   const [backdropReady, setBackdropReady] = useState(false)
   const [statusModalOpen, setStatusModalOpen] = useState(false)
+  const [scheduleModalOpen, setScheduleModalOpen] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
   const [notes, setNotes] = useState(task.notes)
   const [expanded, setExpanded] = useState(false)
+  const [scheduledTransitions, setScheduledTransitions] = useState<ScheduledTransition[]>([])
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -36,6 +40,10 @@ export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, 
     const t = setTimeout(() => setBackdropReady(true), 350)
     return () => clearTimeout(t)
   }, [])
+
+  useEffect(() => {
+    loadScheduledTransitions(task.id).then(setScheduledTransitions)
+  }, [task.id])
 
   const currentStatus = statuses.find((s) => s.slug === task.statusSlug)
 
@@ -136,6 +144,21 @@ export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, 
             >
               {currentStatus?.name ?? task.statusSlug}
             </button>
+            <button
+              onClick={() => setScheduleModalOpen(true)}
+              style={{
+                background: '#f3e8ff',
+                border: 'none',
+                borderRadius: 6,
+                padding: '4px 10px',
+                cursor: 'pointer',
+                fontSize: 14,
+                color: '#7b1fa2',
+                fontWeight: 500,
+              }}
+            >
+              {scheduledTransitions.length > 0 ? `Schedule (${scheduledTransitions.length})` : 'Schedule'}
+            </button>
           </div>
 
           {showConfirm ? (
@@ -213,6 +236,15 @@ export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, 
           currentTaskId={task.id}
           allTasks={allTasks}
           onClose={() => setShowModal(false)}
+        />
+      )}
+
+      {scheduleModalOpen && (
+        <ScheduleModal
+          task={task}
+          statuses={statuses}
+          onClose={() => setScheduleModalOpen(false)}
+          onTransitionsChanged={() => loadScheduledTransitions(task.id).then(setScheduledTransitions)}
         />
       )}
     </>

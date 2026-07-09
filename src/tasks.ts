@@ -16,10 +16,20 @@ export type Task = {
 
 type StoredTask = Omit<Task, 'id'>
 
+export type ScheduledTransition = {
+  id: number
+  taskId: number
+  date: string  // ISO date string 'YYYY-MM-DD'
+  statusSlug: string
+}
+
+type StoredScheduledTransition = Omit<ScheduledTransition, 'id'>
+
 const DB_NAME = 'todo-app'
-const DB_VERSION = 5
+const DB_VERSION = 6
 const TASKS_STORE = 'tasks'
 const STATUSES_STORE = 'statuses'
+const SCHEDULED_TRANSITIONS_STORE = 'scheduledTransitions'
 
 const DEFAULT_STATUSES: Status[] = [
   { slug: 'today', name: 'Today' },
@@ -203,6 +213,11 @@ async function openTasksDatabase(): Promise<IDBDatabase> {
           // Migration errors will surface as transaction abort
         })
       }
+
+      // v5 -> v6: add scheduledTransitions store
+      if (event.oldVersion < 6) {
+        db.createObjectStore(SCHEDULED_TRANSITIONS_STORE, { autoIncrement: true })
+      }
     }
 
     request.onsuccess = () => resolve(request.result)
@@ -344,4 +359,50 @@ export async function deleteTask(id: number): Promise<void> {
   const store = transaction.objectStore(TASKS_STORE)
   store.delete(id)
   await transactionToPromise(transaction)
+}
+
+export async function loadScheduledTransitions(taskId: number): Promise<ScheduledTransition[]> {
+  const db = await openTasksDatabase()
+  const transaction = db.transaction(SCHEDULED_TRANSITIONS_STORE, 'readonly')
+  const store = transaction.objectStore(SCHEDULED_TRANSITIONS_STORE)
+  const records = (await requestToPromise(store.getAll())) as StoredScheduledTransition[]
+  const keys = await requestToPromise(store.getAllKeys())
+  await transactionToPromise(transaction)
+
+  return records
+    .map((record, index) => ({ id: keyToTaskId(keys[index]), ...record }))
+    .filter((t) => t.taskId === taskId)
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+}
+
+export async function addScheduledTransition(taskId: number, date: string, statusSlug: string): Promise<ScheduledTransition> {
+  const db = await openTasksDatabase()
+  const transaction = db.transaction(SCHEDULED_TRANSITIONS_STORE, 'readwrite')
+  const store = transaction.objectStore(SCHEDULED_TRANSITIONS_STORE)
+  const stored: StoredScheduledTransition = { taskId, date, statusSlug }
+  const key = await requestToPromise(store.add(stored))
+  await transactionToPromise(transaction)
+  return { id: keyToTaskId(key), taskId, date, statusSlug }
+}
+
+export async function deleteScheduledTransition(id: number): Promise<void> {
+  const db = await openTasksDatabase()
+  const transaction = db.transaction(SCHEDULED_TRANSITIONS_STORE, 'readwrite')
+  const store = transaction.objectStore(SCHEDULED_TRANSITIONS_STORE)
+  store.delete(id)
+  await transactionToPromise(transaction)
+}
+
+export async function loadAllDueTransitions(): Promise<ScheduledTransition[]> {
+  const db = await openTasksDatabase()
+  const transaction = db.transaction(SCHEDULED_TRANSITIONS_STORE, 'readonly')
+  const store = transaction.objectStore(SCHEDULED_TRANSITIONS_STORE)
+  const records = (await requestToPromise(store.getAll())) as StoredScheduledTransition[]
+  const keys = await requestToPromise(store.getAllKeys())
+  await transactionToPromise(transaction)
+
+  const today = new Date().toISOString().slice(0, 10)
+  return records
+    .map((record, index) => ({ id: keyToTaskId(keys[index]), ...record }))
+    .filter((t) => t.date <= today)
 }

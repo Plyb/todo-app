@@ -15,6 +15,8 @@ type MainPageProps = {
   recentStatusSlugs: string[]
   onOpenStatus: (slug: string) => void
   onNavigateToSettings: () => void
+  autoTransitionedTaskIds?: Set<number>
+  onClearAutoTransitionIndicator?: (id: number) => void
 }
 
 function computeNewRank(tasks: Task[], insertIndex: number, draggedTaskId: number): string {
@@ -32,7 +34,7 @@ function SettingsButton({ onClick }: { onClick: () => void }) {
   )
 }
 
-function TaskRow({ task, onDoneChange }: { task: Task; onDoneChange: (done: boolean) => void }) {
+function TaskRow({ task, onDoneChange, showIndicator }: { task: Task; onDoneChange: (done: boolean) => void; showIndicator?: boolean }) {
   return (
     <>
       <input
@@ -43,6 +45,11 @@ function TaskRow({ task, onDoneChange }: { task: Task; onDoneChange: (done: bool
       <span style={task.done ? { color: '#aaa' } : undefined}>
         {task.name}
       </span>
+      {showIndicator && (
+        <span style={{ marginLeft: 6, fontSize: 12, background: '#7b1fa2', color: '#fff', borderRadius: 4, padding: '1px 5px', verticalAlign: 'middle' }}>
+          auto
+        </span>
+      )}
     </>
   )
 }
@@ -55,6 +62,8 @@ export default function MainPage({
   recentStatusSlugs,
   onOpenStatus,
   onNavigateToSettings,
+  autoTransitionedTaskIds,
+  onClearAutoTransitionIndicator,
 }: MainPageProps) {
   const [newTaskInput, setNewTaskInput] = useState<NewTaskInput | null>(null)
   const [fabPlaceholderIndex, setFabPlaceholderIndex] = useState<number | null>(null)
@@ -158,6 +167,7 @@ export default function MainPage({
 
   function handleTaskClick(taskId: number) {
     setSelectedTaskId((prev) => (prev === taskId ? null : taskId))
+    onClearAutoTransitionIndicator?.(taskId)
   }
 
   async function handleDelete(id: number) {
@@ -205,7 +215,7 @@ export default function MainPage({
         items={displayedTasks}
         onReorder={handleReorder}
         renderItem={(task) => (
-          <TaskRow task={task} onDoneChange={(done) => handleDoneChange(task.id, done)} />
+          <TaskRow task={task} onDoneChange={(done) => handleDoneChange(task.id, done)} showIndicator={autoTransitionedTaskIds?.has(task.id)} />
         )}
         listRef={listRef}
         insertSlot={insertSlot}
