@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import PullToRefresh from 'pulltorefreshjs'
-import { createTask, deleteTask, updateTaskDone, updateTaskName, updateTaskNotes, updateTaskParent, updateTaskRank, updateTaskStatus, type Task, type Status } from './tasks'
+import { createTask, deleteTask, updateTaskDone, updateTaskName, updateTaskNotes, updateTaskRank, updateTaskStatus, type Task, type Status } from './tasks'
 import { DraggableList } from './DraggableList'
 import { AddTaskFab, NewTaskInputField, computeInsertRank, type NewTaskInput } from './AddTaskInput'
 import { rankBetween } from './rank-utils'
@@ -166,11 +166,6 @@ export default function MainPage({
     setSelectedTaskId(null)
   }
 
-  function handleParentChanged(childTaskId: number, parentId: number | null) {
-    updateTaskParent(childTaskId, parentId)
-    setTasks((prev) => prev.map((t) => (t.id === childTaskId ? { ...t, parentId } : t)))
-  }
-
   const insertSlot = newTaskInput !== null
     ? {
         index: newTaskInput.insertIndex,
@@ -230,7 +225,6 @@ export default function MainPage({
           content: (
             <QuickSelectPanel
               task={selectedTask}
-              allTasks={tasks}
               statuses={statuses}
               recentStatusSlugs={recentStatusSlugs}
               onClose={() => setSelectedTaskId(null)}
@@ -238,9 +232,7 @@ export default function MainPage({
               onChangeStatus={handleChangeStatus}
               onDelete={handleDelete}
               onUpdateNotes={handleUpdateNotes}
-              onOpenTask={(id) => setSelectedTaskId(id)}
               onDoneChange={handleDoneChange}
-              onParentChanged={handleParentChanged}
             />
           ),
         } : undefined}
