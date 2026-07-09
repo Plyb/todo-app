@@ -245,6 +245,7 @@ export default function MainPage({
               onUpdateNotes={handleUpdateNotes}
               onOpenTask={(id) => setSelectedTaskId(id)}
               onDoneChange={handleDoneChange}
+              onRelationshipAdded={() => loadAllRelationships().then(setAllRelationships)}
             />
           ),
         } : undefined}
