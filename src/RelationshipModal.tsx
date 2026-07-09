@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { Task } from './tasks'
+import { addRelationship } from './tasks'
 
 type RelatedTaskEntryProps = { task: Task; onOpen: (id: number) => void }
 
@@ -39,9 +40,10 @@ type RelationshipModalProps = {
   currentTaskId: number
   allTasks: Task[]
   onClose: () => void
+  onRelationshipAdded?: () => void
 }
 
-export function RelationshipModal({ currentTaskId, allTasks, onClose }: RelationshipModalProps) {
+export function RelationshipModal({ currentTaskId, allTasks, onClose, onRelationshipAdded }: RelationshipModalProps) {
   const [state, setState] = useState<RelationshipModalState>({ view: 'search' })
   const [query, setQuery] = useState('')
 
@@ -131,8 +133,27 @@ export function RelationshipModal({ currentTaskId, allTasks, onClose }: Relation
             <div style={{ color: '#888', fontSize: 14, marginBottom: 8 }}>
               Relating to: <strong>{state.selectedTask.name}</strong>
             </div>
-            <div style={{ color: '#aaa', textAlign: 'center', padding: '16px 0' }}>
-              No relationship types available yet
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <button
+                onClick={async () => {
+                  await addRelationship(currentTaskId, state.selectedTask.id, 'parent-of')
+                  onRelationshipAdded?.()
+                  onClose()
+                }}
+                style={{ padding: '10px 16px', fontSize: 14, cursor: 'pointer', borderRadius: 8, border: '1px solid #ddd', background: '#fff', textAlign: 'left' }}
+              >
+                Parent of <strong>{state.selectedTask.name}</strong>
+              </button>
+              <button
+                onClick={async () => {
+                  await addRelationship(state.selectedTask.id, currentTaskId, 'parent-of')
+                  onRelationshipAdded?.()
+                  onClose()
+                }}
+                style={{ padding: '10px 16px', fontSize: 14, cursor: 'pointer', borderRadius: 8, border: '1px solid #ddd', background: '#fff', textAlign: 'left' }}
+              >
+                Child of <strong>{state.selectedTask.name}</strong>
+              </button>
             </div>
           </>
         )}

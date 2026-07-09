@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Task, Status } from './tasks'
+import type { Task, Status, Relationship } from './tasks'
+import { loadRelationships } from './tasks'
 import { StatusModal } from './StatusModal'
 import { RelationshipModal, RelationshipGroup } from './RelationshipModal'
 
@@ -25,12 +26,17 @@ export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, 
   const [showConfirm, setShowConfirm] = useState(false)
   const [notes, setNotes] = useState(task.notes)
   const [expanded, setExpanded] = useState(false)
+  const [relationships, setRelationships] = useState<Relationship[]>([])
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     const id = requestAnimationFrame(() => setExpanded(true))
     return () => cancelAnimationFrame(id)
   }, [])
+
+  useEffect(() => {
+    loadRelationships(task.id).then(setRelationships)
+  }, [task.id])
 
   useEffect(() => {
     const t = setTimeout(() => setBackdropReady(true), 350)
@@ -56,8 +62,23 @@ export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, 
 
   function handleBlur() { commitRename() }
 
-  // Placeholder: no related tasks yet
-  const relatedGroups: Array<{ label: string; tasks: Task[] }> = []
+  const taskById = new Map(allTasks.map((t) => [t.id, t]))
+
+  const parentTasks = relationships
+    .filter((r) => r.type === 'parent-of' && r.toTaskId === task.id)
+    .map((r) => taskById.get(r.fromTaskId))
+    .filter((t): t is Task => t !== undefined)
+    .slice(0, 1)
+
+  const subtasks = relationships
+    .filter((r) => r.type === 'parent-of' && r.fromTaskId === task.id)
+    .map((r) => taskById.get(r.toTaskId))
+    .filter((t): t is Task => t !== undefined)
+
+  const relatedGroups: Array<{ label: string; tasks: Task[] }> = [
+    ...(parentTasks.length > 0 ? [{ label: 'Parent', tasks: parentTasks }] : []),
+    ...(subtasks.length > 0 ? [{ label: 'Subtasks', tasks: subtasks }] : []),
+  ]
 
   function handleNotesBlur() {
     if (notes !== task.notes) {
@@ -213,6 +234,7 @@ export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, 
           currentTaskId={task.id}
           allTasks={allTasks}
           onClose={() => setShowModal(false)}
+          onRelationshipAdded={() => loadRelationships(task.id).then(setRelationships)}
         />
       )}
     </>
