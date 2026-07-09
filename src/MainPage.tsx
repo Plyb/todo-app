@@ -267,6 +267,7 @@ export default function MainPage({
               onDelete={handleDelete}
               onUpdateNotes={handleUpdateNotes}
               onOpenTask={(id) => setSelectedTaskId(id)}
+              onDoneChange={handleDoneChange}
             />
           ),
         } : undefined}

@@ -186,7 +186,7 @@ export function DraggableList<T extends { id: number }>({
                     ...itemStyle?.(item),
                     ...(isDragged
                       ? { opacity: 0, transform: 'none', transition: 'none', zIndex: 0 }
-                      : { transform: `translateY(${translateY}px)`, transition: 'transform 0.15s ease, all 0.2s ease', zIndex: 1 }
+                      : { transform: `translateY(${translateY}px)`, transition: dragState ? 'transform 0.15s ease' : 'none', zIndex: 1 }
                     ),
                   }}
                 >
