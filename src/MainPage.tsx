@@ -1,5 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import PullToRefresh from 'pulltorefreshjs'
+import {
+  DndContext,
+  DragOverlay,
+  MouseSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  closestCenter,
+  type DragEndEvent,
+  type DragStartEvent,
+} from '@dnd-kit/core'
 import { createTask, deleteTask, updateTaskDone, updateTaskName, updateTaskNotes, updateTaskRank, updateTaskStatus, type Task, type Status, type View } from './db'
 import { DraggableList } from './DraggableList'
 import { AddTaskFab, NewTaskInputField, computeInsertRank, type NewTaskInput } from './AddTaskInput'
@@ -62,10 +73,16 @@ export default function MainPage({
   const [fabPlaceholderIndex, setFabPlaceholderIndex] = useState<number | null>(null)
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null)
   const [viewModalOpen, setViewModalOpen] = useState(false)
+  const [dragActiveId, setDragActiveId] = useState<number | null>(null)
 
   const listRef = useRef<HTMLUListElement>(null)
   const inputKeyRef = useRef(0)
   const isDraggingRef = useRef(false)
+
+  const sensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 400, tolerance: 8 } }),
+  )
 
   useEffect(() => {
     const ptr = PullToRefresh.init({
@@ -85,12 +102,17 @@ export default function MainPage({
   }, [])
 
   const currentView = views.find((v) => v.slug === currentViewSlug)
-  const currentStatusSlug = currentView?.statusSlugs[0] ?? 'today'
-  const isMultiSection = currentView !== undefined && currentView.statusSlugs.length > 1
 
-  const displayedTasks = isMultiSection
-    ? []
-    : tasks.filter((t) => t.statusSlug === currentStatusSlug)
+  if (!currentView) {
+    return (
+      <main style={{ minHeight: '100vh' }}>
+        <SettingsButton onClick={onNavigateToSettings} />
+      </main>
+    )
+  }
+
+  const currentStatusSlug = currentView.statusSlugs[0]
+  const displayedTasks = tasks.filter((t) => t.statusSlug === currentStatusSlug)
 
   function openInput(insertIndex: number) {
     inputKeyRef.current++
@@ -172,6 +194,47 @@ export default function MainPage({
     setSelectedTaskId(null)
   }
 
+  function handleOuterDragStart({ active }: DragStartEvent) {
+    setDragActiveId(active.id as number)
+    isDraggingRef.current = true
+  }
+
+  function handleOuterDragEnd({ active, over }: DragEndEvent) {
+    if (over && active.id !== over.id) {
+      const activeTask = tasks.find((t) => t.id === active.id)!
+      const overTask = tasks.find((t) => t.id === over.id)!
+
+      if (activeTask.statusSlug === overTask.statusSlug) {
+        const sectionTasks = tasks.filter((t) => t.statusSlug === activeTask.statusSlug)
+        const oldIndex = sectionTasks.findIndex((t) => t.id === active.id)
+        const overIndex = sectionTasks.findIndex((t) => t.id === over.id)
+        const others = sectionTasks.filter((t) => t.id !== active.id)
+        const othersOverIndex = others.findIndex((t) => t.id === over.id)
+        const insertIndex = oldIndex < overIndex ? othersOverIndex + 1 : othersOverIndex
+        handleReorder(active.id as number, insertIndex, sectionTasks)
+      } else {
+        const destTasks = tasks.filter((t) => t.statusSlug === overTask.statusSlug)
+        const overIdx = destTasks.findIndex((t) => t.id === over.id)
+        const newRank = computeNewRank(destTasks, overIdx, active.id as number)
+        updateTaskStatus(active.id as number, overTask.statusSlug)
+        updateTaskRank(active.id as number, newRank)
+        setTasks((prev) => {
+          const updated = prev.map((t) =>
+            t.id === active.id ? { ...t, statusSlug: overTask.statusSlug, rank: newRank } : t
+          )
+          return updated.sort((a, b) => (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0))
+        })
+      }
+    }
+    setDragActiveId(null)
+    isDraggingRef.current = false
+  }
+
+  function handleOuterDragCancel() {
+    setDragActiveId(null)
+    isDraggingRef.current = false
+  }
+
   const selectedTask = selectedTaskId !== null ? tasks.find((t) => t.id === selectedTaskId) ?? null : null
 
   const quickSelectPanelProps = selectedTask
@@ -198,59 +261,7 @@ export default function MainPage({
     }
   }
 
-  const viewModal = viewModalOpen && (
-    <ViewModal
-      views={views}
-      recentViewSlugs={recentViewSlugs}
-      currentViewSlug={currentViewSlug}
-      onSelect={onOpenView}
-      onClose={() => setViewModalOpen(false)}
-    />
-  )
-
-  if (isMultiSection) {
-    return (
-      <main
-        onClick={() => setSelectedTaskId(null)}
-        style={{ minHeight: '100vh' }}
-      >
-        {currentView.statusSlugs.map((slug) => {
-          const status = statuses.find((s) => s.slug === slug)
-          const sectionTasks = tasks.filter((t) => t.statusSlug === slug)
-
-          return (
-            <section key={slug}>
-              <h2 style={{ padding: '16px 16px 8px', margin: 0, fontSize: 18, fontWeight: 700 }}>
-                {status?.name ?? slug}
-              </h2>
-              <DraggableList
-                items={sectionTasks}
-                onReorder={(id, idx) => handleReorder(id, idx, sectionTasks)}
-                renderItem={(task) => (
-                  <TaskRow task={task} onDoneChange={(done) => handleDoneChange(task.id, done)} />
-                )}
-                onItemClick={selectedTaskId === null ? handleTaskClick : undefined}
-                onDragStart={() => { isDraggingRef.current = true }}
-                onDragEnd={() => { isDraggingRef.current = false }}
-                itemStyle={itemStyleFn}
-                expandedSlot={
-                  quickSelectPanelProps && sectionTasks.some((t) => t.id === selectedTaskId)
-                    ? {
-                        afterItemId: selectedTaskId!,
-                        content: <QuickSelectPanel {...quickSelectPanelProps} />,
-                      }
-                    : undefined
-                }
-              />
-            </section>
-          )
-        })}
-
-        <SettingsButton onClick={onNavigateToSettings} />
-        {viewModal}
-      </main>
-    )
-  }
+  const isSingleSection = currentView.statusSlugs.length === 1
 
   const insertSlot = newTaskInput !== null
     ? {
@@ -280,37 +291,95 @@ export default function MainPage({
       }
     : undefined
 
+  const viewModal = viewModalOpen && (
+    <ViewModal
+      views={views}
+      recentViewSlugs={recentViewSlugs}
+      currentViewSlug={currentViewSlug}
+      onSelect={onOpenView}
+      onClose={() => setViewModalOpen(false)}
+    />
+  )
+
+  const dragActiveTask = dragActiveId !== null ? tasks.find((t) => t.id === dragActiveId) ?? null : null
+
   return (
     <main
-      onClick={selectedTask === null ? () => setSelectedTaskId(null) : undefined}
+      onClick={() => setSelectedTaskId(null)}
       style={{ minHeight: '100vh' }}
     >
-      <DraggableList
-        items={displayedTasks}
-        onReorder={(id, idx) => handleReorder(id, idx, displayedTasks)}
-        renderItem={(task) => (
-          <TaskRow task={task} onDoneChange={(done) => handleDoneChange(task.id, done)} />
-        )}
-        listRef={listRef}
-        insertSlot={insertSlot}
-        onItemClick={selectedTaskId === null ? handleTaskClick : undefined}
-        onDragStart={() => { isDraggingRef.current = true }}
-        onDragEnd={() => { isDraggingRef.current = false }}
-        itemStyle={itemStyleFn}
-        expandedSlot={selectedTask ? {
-          afterItemId: selectedTask.id,
-          content: quickSelectPanelProps ? <QuickSelectPanel {...quickSelectPanelProps} /> : null,
-        } : undefined}
-      />
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragStart={handleOuterDragStart}
+        onDragEnd={handleOuterDragEnd}
+        onDragCancel={handleOuterDragCancel}
+      >
+        {currentView.statusSlugs.map((slug) => {
+          const status = statuses.find((s) => s.slug === slug)
+          const sectionTasks = tasks.filter((t) => t.statusSlug === slug)
+
+          return (
+            <section key={slug}>
+              {!isSingleSection && (
+                <h2 style={{ padding: '16px 16px 8px', margin: 0, fontSize: 18, fontWeight: 700 }}>
+                  {status?.name ?? slug}
+                </h2>
+              )}
+              <DraggableList
+                items={sectionTasks}
+                onReorder={() => {}}
+                renderItem={(task) => (
+                  <TaskRow task={task} onDoneChange={(done) => handleDoneChange(task.id, done)} />
+                )}
+                listRef={isSingleSection ? listRef : undefined}
+                insertSlot={isSingleSection ? insertSlot : undefined}
+                onItemClick={selectedTaskId === null ? handleTaskClick : undefined}
+                itemStyle={itemStyleFn}
+                expandedSlot={
+                  quickSelectPanelProps && sectionTasks.some((t) => t.id === selectedTaskId)
+                    ? {
+                        afterItemId: selectedTaskId!,
+                        content: <QuickSelectPanel {...quickSelectPanelProps} />,
+                      }
+                    : undefined
+                }
+                skipContext={true}
+              />
+            </section>
+          )
+        })}
+
+        <DragOverlay>
+          {dragActiveTask && (
+            <div
+              style={{
+                padding: '12px 16px',
+                boxSizing: 'border-box',
+                borderBottom: '1px solid #eee',
+                backgroundColor: 'white',
+                opacity: 0.85,
+                transform: 'scale(1.05)',
+                transformOrigin: 'center center',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
+              }}
+            >
+              <TaskRow task={dragActiveTask} onDoneChange={(done) => handleDoneChange(dragActiveTask.id, done)} />
+            </div>
+          )}
+        </DragOverlay>
+      </DndContext>
 
       <SettingsButton onClick={onNavigateToSettings} />
 
-      <AddTaskFab
-        tasks={displayedTasks}
-        listRef={listRef}
-        onRequestInsert={openInput}
-        onDragInsertIndex={setFabPlaceholderIndex}
-      />
+      {isSingleSection && (
+        <AddTaskFab
+          tasks={displayedTasks}
+          listRef={listRef}
+          onRequestInsert={openInput}
+          onDragInsertIndex={setFabPlaceholderIndex}
+        />
+      )}
 
       {viewModal}
     </main>

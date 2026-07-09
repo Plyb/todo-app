@@ -17,14 +17,13 @@ export type Task = {
 type StoredTask = Omit<Task, 'id'>
 
 export type View = {
-  id: string
   slug: string
   name: string
   statusSlugs: string[]
 }
 
 const DB_NAME = 'todo-app'
-const DB_VERSION = 6
+const DB_VERSION = 7
 const TASKS_STORE = 'tasks'
 const STATUSES_STORE = 'statuses'
 const VIEWS_STORE = 'views'
@@ -212,11 +211,19 @@ async function openTasksDatabase(): Promise<IDBDatabase> {
         })
       }
 
-      // v5 -> v6: add views store
+      // v5 -> v6: add views store (keyPath 'id', superseded by v7)
       if (event.oldVersion < 6) {
         if (!db.objectStoreNames.contains(VIEWS_STORE)) {
           db.createObjectStore(VIEWS_STORE, { keyPath: 'id' })
         }
+      }
+
+      // v6 -> v7: change views store keyPath from 'id' to 'slug'
+      if (event.oldVersion < 7) {
+        if (db.objectStoreNames.contains(VIEWS_STORE)) {
+          db.deleteObjectStore(VIEWS_STORE)
+        }
+        db.createObjectStore(VIEWS_STORE, { keyPath: 'slug' })
       }
     }
 
@@ -378,10 +385,10 @@ export async function saveView(view: View): Promise<void> {
   await transactionToPromise(transaction)
 }
 
-export async function deleteView(id: string): Promise<void> {
+export async function deleteView(slug: string): Promise<void> {
   const db = await openTasksDatabase()
   const transaction = db.transaction(VIEWS_STORE, 'readwrite')
   const store = transaction.objectStore(VIEWS_STORE)
-  store.delete(id)
+  store.delete(slug)
   await transactionToPromise(transaction)
 }

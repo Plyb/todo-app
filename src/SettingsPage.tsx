@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { saveView, deleteView, type Status, type View } from './db'
 import { DraggableList } from './DraggableList'
 
@@ -19,6 +19,12 @@ type ViewEditorModalProps = {
 function ViewEditorModal({ view, statuses, onSave, onClose }: ViewEditorModalProps) {
   const [name, setName] = useState(view.name)
   const [slugs, setSlugs] = useState<string[]>(view.statusSlugs)
+
+  useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
+  }, [])
 
   const selectedStatuses = slugs
     .map((s) => statuses.find((st) => st.slug === s))
@@ -153,15 +159,15 @@ type ViewListItem = { id: number; view: View }
 export default function SettingsPage({ onBack, statuses, views, onViewsChange }: SettingsPageProps) {
   const [editingView, setEditingView] = useState<View | null>(null)
 
-  async function handleDeleteView(id: string) {
-    await deleteView(id)
-    onViewsChange(views.filter((v) => v.id !== id))
+  async function handleDeleteView(slug: string) {
+    await deleteView(slug)
+    onViewsChange(views.filter((v) => v.slug !== slug))
   }
 
   async function handleSaveView(view: View) {
     await saveView(view)
-    if (views.some((v) => v.id === view.id)) {
-      onViewsChange(views.map((v) => (v.id === view.id ? view : v)))
+    if (views.some((v) => v.slug === view.slug)) {
+      onViewsChange(views.map((v) => (v.slug === view.slug ? view : v)))
     } else {
       onViewsChange([...views, view])
     }
@@ -169,8 +175,8 @@ export default function SettingsPage({ onBack, statuses, views, onViewsChange }:
   }
 
   function handleNewView() {
-    const id = crypto.randomUUID()
-    setEditingView({ id, slug: id, name: '', statusSlugs: [] })
+    const slug = crypto.randomUUID()
+    setEditingView({ slug, name: '', statusSlugs: [] })
   }
 
   async function handleReorderViews(draggedId: number, insertIndex: number) {
@@ -236,7 +242,7 @@ export default function SettingsPage({ onBack, statuses, views, onViewsChange }:
                 {item.view.name}
               </button>
               <button
-                onClick={(e) => { e.stopPropagation(); handleDeleteView(item.view.id) }}
+                onClick={(e) => { e.stopPropagation(); handleDeleteView(item.view.slug) }}
                 style={{
                   background: 'none',
                   border: 'none',

@@ -59,7 +59,7 @@ export function ViewModal({ views, recentViewSlugs, currentViewSlug, onSelect, o
 
         {sortedViews.map((view) => (
           <button
-            key={view.id}
+            key={view.slug}
             onClick={() => { onSelect(view.slug); onClose() }}
             style={{
               display: 'block',

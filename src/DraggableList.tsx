@@ -24,6 +24,12 @@ type DraggableListProps<T extends { id: number }> = {
   listRef?: React.RefObject<HTMLUListElement | null>
   onDragStart?: () => void
   onDragEnd?: () => void
+  /**
+   * When true, skip creating an internal DndContext/DragOverlay.
+   * The component expects a parent DndContext to already exist.
+   * Used by MainPage to enable cross-section dragging via a shared context.
+   */
+  skipContext?: boolean
 }
 
 function SortableItem<T extends { id: number }>({
@@ -76,6 +82,51 @@ function SortableItem<T extends { id: number }>({
   )
 }
 
+function SortableListContent<T extends { id: number }>({
+  items,
+  renderItem,
+  itemStyle,
+  onItemClick,
+  insertSlot,
+  expandedSlot,
+  listRef,
+}: Omit<DraggableListProps<T>, 'onReorder' | 'onDragStart' | 'onDragEnd' | 'skipContext'>) {
+  return (
+    <SortableContext items={items.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+      <ul ref={listRef} style={{ listStyle: 'none', padding: 0, margin: 0, position: 'relative' }}>
+        {items.map((item, i) => {
+          const isExpanded = expandedSlot?.afterItemId === item.id
+          return (
+            <React.Fragment key={item.id}>
+              {insertSlot?.index === i && (
+                <li data-insert-slot style={{ listStyle: 'none' }}>{insertSlot.content}</li>
+              )}
+              {isExpanded ? (
+                <li
+                  style={{ listStyle: 'none', position: 'relative', zIndex: 11 }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {expandedSlot!.content}
+                </li>
+              ) : (
+                <SortableItem
+                  item={item}
+                  renderItem={renderItem}
+                  itemStyle={itemStyle}
+                  onItemClick={onItemClick}
+                />
+              )}
+            </React.Fragment>
+          )
+        })}
+        {insertSlot?.index === items.length && (
+          <li data-insert-slot style={{ listStyle: 'none' }}>{insertSlot.content}</li>
+        )}
+      </ul>
+    </SortableContext>
+  )
+}
+
 export function DraggableList<T extends { id: number }>({
   items,
   onReorder,
@@ -87,6 +138,7 @@ export function DraggableList<T extends { id: number }>({
   listRef,
   onDragStart,
   onDragEnd,
+  skipContext,
 }: DraggableListProps<T>) {
   const [activeId, setActiveId] = useState<number | null>(null)
 
@@ -121,6 +173,12 @@ export function DraggableList<T extends { id: number }>({
     onDragEnd?.()
   }
 
+  const contentProps = { items, renderItem, itemStyle, onItemClick, insertSlot, expandedSlot, listRef }
+
+  if (skipContext) {
+    return <SortableListContent {...contentProps} />
+  }
+
   return (
     <DndContext
       sensors={sensors}
@@ -129,38 +187,7 @@ export function DraggableList<T extends { id: number }>({
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
     >
-      <SortableContext items={items.map((t) => t.id)} strategy={verticalListSortingStrategy}>
-        <ul ref={listRef} style={{ listStyle: 'none', padding: 0, margin: 0, position: 'relative' }}>
-          {items.map((item, i) => {
-            const isExpanded = expandedSlot?.afterItemId === item.id
-            return (
-              <React.Fragment key={item.id}>
-                {insertSlot?.index === i && (
-                  <li data-insert-slot style={{ listStyle: 'none' }}>{insertSlot.content}</li>
-                )}
-                {isExpanded ? (
-                  <li
-                    style={{ listStyle: 'none', position: 'relative', zIndex: 11 }}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    {expandedSlot!.content}
-                  </li>
-                ) : (
-                  <SortableItem
-                    item={item}
-                    renderItem={renderItem}
-                    itemStyle={itemStyle}
-                    onItemClick={onItemClick}
-                  />
-                )}
-              </React.Fragment>
-            )
-          })}
-          {insertSlot?.index === items.length && (
-            <li data-insert-slot style={{ listStyle: 'none' }}>{insertSlot.content}</li>
-          )}
-        </ul>
-      </SortableContext>
+      <SortableListContent {...contentProps} />
 
       <DragOverlay>
         {activeItem && (
