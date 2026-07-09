@@ -220,6 +220,24 @@ export default function MainPage({
             backgroundColor: isSelected ? '#e8f0fe' : 'transparent',
           }
         }}
+        expandedSlot={selectedTask ? {
+          afterItemId: selectedTask.id,
+          content: (
+            <QuickSelectPanel
+              task={selectedTask}
+              allTasks={tasks}
+              statuses={statuses}
+              recentStatusSlugs={recentStatusSlugs}
+              onClose={() => setSelectedTaskId(null)}
+              onRename={handleRename}
+              onChangeStatus={handleChangeStatus}
+              onDelete={handleDelete}
+              onUpdateNotes={handleUpdateNotes}
+              onOpenTask={(id) => setSelectedTaskId(id)}
+              onDoneChange={handleDoneChange}
+            />
+          ),
+        } : undefined}
       />
 
       <SettingsButton onClick={onNavigateToSettings} />
@@ -230,21 +248,6 @@ export default function MainPage({
         onRequestInsert={openInput}
         onDragInsertIndex={setFabPlaceholderIndex}
       />
-
-      {selectedTask && (
-        <QuickSelectPanel
-          task={selectedTask}
-          allTasks={tasks}
-          statuses={statuses}
-          recentStatusSlugs={recentStatusSlugs}
-          onClose={() => setSelectedTaskId(null)}
-          onRename={handleRename}
-          onChangeStatus={handleChangeStatus}
-          onDelete={handleDelete}
-          onUpdateNotes={handleUpdateNotes}
-          onOpenTask={(id) => setSelectedTaskId(id)}
-        />
-      )}
 
       {statusModalOpen && (
         <StatusModal
