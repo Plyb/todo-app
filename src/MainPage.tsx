@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import PullToRefresh from 'pulltorefreshjs'
-import { createTask, deleteTask, updateTaskDone, updateTaskName, updateTaskNotes, updateTaskRank, updateTaskStatus, type Task, type Status } from './tasks'
+import { createTask, deleteTask, updateTaskDone, updateTaskName, updateTaskNotes, updateTaskRank, updateTaskStatus, type Task, type Status, type View } from './tasks'
 import { DraggableList } from './DraggableList'
 import { AddTaskFab, NewTaskInputField, computeInsertRank, type NewTaskInput } from './AddTaskInput'
 import { rankBetween } from './rank-utils'
@@ -11,14 +11,17 @@ type MainPageProps = {
   tasks: Task[]
   setTasks: React.Dispatch<React.SetStateAction<Task[]>>
   statuses: Status[]
+  views: View[]
   currentStatusSlug: string
+  currentView: View | undefined
   recentStatusSlugs: string[]
   onOpenStatus: (slug: string) => void
+  onOpenView: (id: string) => void
   onNavigateToSettings: () => void
 }
 
-function computeNewRank(tasks: Task[], insertIndex: number, draggedTaskId: number): string {
-  const others = tasks.filter((t) => t.id !== draggedTaskId)
+function computeNewRank(sectionTasks: Task[], insertIndex: number, draggedTaskId: number): string {
+  const others = sectionTasks.filter((t) => t.id !== draggedTaskId)
   const prev = insertIndex > 0 ? others[insertIndex - 1] : null
   const next = insertIndex < others.length ? others[insertIndex] : null
   return rankBetween(prev, next)
@@ -51,9 +54,12 @@ export default function MainPage({
   tasks,
   setTasks,
   statuses,
+  views,
   currentStatusSlug,
+  currentView,
   recentStatusSlugs,
   onOpenStatus,
+  onOpenView,
   onNavigateToSettings,
 }: MainPageProps) {
   const [newTaskInput, setNewTaskInput] = useState<NewTaskInput | null>(null)
@@ -82,7 +88,9 @@ export default function MainPage({
     return () => ptr.destroy()
   }, [])
 
-  const displayedTasks = tasks.filter((t) => t.statusSlug === currentStatusSlug)
+  const displayedTasks = currentView === undefined
+    ? tasks.filter((t) => t.statusSlug === currentStatusSlug)
+    : []
 
   function openInput(insertIndex: number) {
     inputKeyRef.current++
@@ -99,14 +107,12 @@ export default function MainPage({
     setTasks(tasks.map((t) => (t.id === id ? { ...t, notes } : t)))
   }
 
-  function handleReorder(draggedId: number, insertIndex: number) {
-    const newRank = computeNewRank(displayedTasks, insertIndex, draggedId)
+  function handleReorder(draggedId: number, insertIndex: number, sectionTasks: Task[]) {
+    const newRank = computeNewRank(sectionTasks, insertIndex, draggedId)
     const others = tasks.filter((t) => t.id !== draggedId)
     const draggedTask = tasks.find((t) => t.id === draggedId)!
     const updatedDragged = { ...draggedTask, rank: newRank }
-    const newTasks = others.map((t) => t)
-    // insert updatedDragged at correct position in full tasks array preserving sort
-    newTasks.push(updatedDragged)
+    const newTasks = [...others, updatedDragged]
     newTasks.sort((a, b) => (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0))
     setTasks(newTasks)
     updateTaskRank(draggedId, newRank)
@@ -166,6 +172,90 @@ export default function MainPage({
     setSelectedTaskId(null)
   }
 
+  const selectedTask = selectedTaskId !== null ? tasks.find((t) => t.id === selectedTaskId) ?? null : null
+
+  const quickSelectPanelProps = selectedTask
+    ? {
+        task: selectedTask,
+        allTasks: tasks,
+        statuses,
+        recentStatusSlugs,
+        onClose: () => setSelectedTaskId(null),
+        onRename: handleRename,
+        onChangeStatus: handleChangeStatus,
+        onDelete: handleDelete,
+        onUpdateNotes: handleUpdateNotes,
+        onOpenTask: (id: number) => setSelectedTaskId(id),
+        onDoneChange: handleDoneChange,
+      }
+    : null
+
+  const itemStyleFn = (task: Task) => {
+    const isSelected = task.id === selectedTaskId
+    const isFaded = selectedTaskId !== null && !isSelected
+    return {
+      opacity: isFaded ? 0.4 : 1,
+      backgroundColor: isSelected ? '#e8f0fe' : 'transparent',
+    }
+  }
+
+  const statusModal = statusModalOpen && (
+    <StatusModal
+      statuses={statuses}
+      views={views}
+      recentStatusSlugs={recentStatusSlugs}
+      currentStatusSlug={currentStatusSlug}
+      currentViewId={currentView?.id}
+      onSelect={onOpenStatus}
+      onSelectView={onOpenView}
+      onClose={() => setStatusModalOpen(false)}
+    />
+  )
+
+  if (currentView !== undefined) {
+    return (
+      <main
+        onClick={() => setSelectedTaskId(null)}
+        style={{ minHeight: '100vh' }}
+      >
+        {currentView.statusSlugs.map((slug) => {
+          const status = statuses.find((s) => s.slug === slug)
+          const sectionTasks = tasks.filter((t) => t.statusSlug === slug)
+
+          return (
+            <section key={slug}>
+              <h2 style={{ padding: '16px 16px 8px', margin: 0, fontSize: 18, fontWeight: 700 }}>
+                {status?.name ?? slug}
+              </h2>
+              <DraggableList
+                items={sectionTasks}
+                onReorder={(id, idx) => handleReorder(id, idx, sectionTasks)}
+                renderItem={(task) => (
+                  <TaskRow task={task} onDoneChange={(done) => handleDoneChange(task.id, done)} />
+                )}
+                onItemClick={selectedTaskId === null ? handleTaskClick : undefined}
+                onDragStart={() => { isDraggingRef.current = true }}
+                onDragEnd={() => { isDraggingRef.current = false }}
+                itemStyle={itemStyleFn}
+                expandedSlot={
+                  quickSelectPanelProps && sectionTasks.some((t) => t.id === selectedTaskId)
+                    ? {
+                        afterItemId: selectedTaskId!,
+                        content: <QuickSelectPanel {...quickSelectPanelProps} />,
+                      }
+                    : undefined
+                }
+              />
+            </section>
+          )
+        })}
+
+        <SettingsButton onClick={onNavigateToSettings} />
+        {statusModal}
+      </main>
+    )
+  }
+
   const insertSlot = newTaskInput !== null
     ? {
         index: newTaskInput.insertIndex,
@@ -194,8 +284,6 @@ export default function MainPage({
       }
     : undefined
 
-  const selectedTask = selectedTaskId !== null ? tasks.find((t) => t.id === selectedTaskId) ?? null : null
-
   return (
     <main
       onClick={selectedTask === null ? () => setSelectedTaskId(null) : undefined}
@@ -203,7 +291,7 @@ export default function MainPage({
     >
       <DraggableList
         items={displayedTasks}
-        onReorder={handleReorder}
+        onReorder={(id, idx) => handleReorder(id, idx, displayedTasks)}
         renderItem={(task) => (
           <TaskRow task={task} onDoneChange={(done) => handleDoneChange(task.id, done)} />
         )}
@@ -212,31 +300,10 @@ export default function MainPage({
         onItemClick={selectedTaskId === null ? handleTaskClick : undefined}
         onDragStart={() => { isDraggingRef.current = true }}
         onDragEnd={() => { isDraggingRef.current = false }}
-        itemStyle={(task) => {
-          const isSelected = task.id === selectedTaskId
-          const isFaded = selectedTaskId !== null && !isSelected
-          return {
-            opacity: isFaded ? 0.4 : 1,
-            backgroundColor: isSelected ? '#e8f0fe' : 'transparent',
-          }
-        }}
+        itemStyle={itemStyleFn}
         expandedSlot={selectedTask ? {
           afterItemId: selectedTask.id,
-          content: (
-            <QuickSelectPanel
-              task={selectedTask}
-              allTasks={tasks}
-              statuses={statuses}
-              recentStatusSlugs={recentStatusSlugs}
-              onClose={() => setSelectedTaskId(null)}
-              onRename={handleRename}
-              onChangeStatus={handleChangeStatus}
-              onDelete={handleDelete}
-              onUpdateNotes={handleUpdateNotes}
-              onOpenTask={(id) => setSelectedTaskId(id)}
-              onDoneChange={handleDoneChange}
-            />
-          ),
+          content: quickSelectPanelProps ? <QuickSelectPanel {...quickSelectPanelProps} /> : null,
         } : undefined}
       />
 
@@ -249,15 +316,7 @@ export default function MainPage({
         onDragInsertIndex={setFabPlaceholderIndex}
       />
 
-      {statusModalOpen && (
-        <StatusModal
-          statuses={statuses}
-          recentStatusSlugs={recentStatusSlugs}
-          currentStatusSlug={currentStatusSlug}
-          onSelect={onOpenStatus}
-          onClose={() => setStatusModalOpen(false)}
-        />
-      )}
+      {statusModal}
     </main>
   )
 }

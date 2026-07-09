@@ -16,10 +16,17 @@ export type Task = {
 
 type StoredTask = Omit<Task, 'id'>
 
+export type View = {
+  id: string
+  name: string
+  statusSlugs: string[]
+}
+
 const DB_NAME = 'todo-app'
-const DB_VERSION = 5
+const DB_VERSION = 6
 const TASKS_STORE = 'tasks'
 const STATUSES_STORE = 'statuses'
+const VIEWS_STORE = 'views'
 
 const DEFAULT_STATUSES: Status[] = [
   { slug: 'today', name: 'Today' },
@@ -203,6 +210,13 @@ async function openTasksDatabase(): Promise<IDBDatabase> {
           // Migration errors will surface as transaction abort
         })
       }
+
+      // v5 -> v6: add views store
+      if (event.oldVersion < 6) {
+        if (!db.objectStoreNames.contains(VIEWS_STORE)) {
+          db.createObjectStore(VIEWS_STORE, { keyPath: 'id' })
+        }
+      }
     }
 
     request.onsuccess = () => resolve(request.result)
@@ -342,6 +356,31 @@ export async function deleteTask(id: number): Promise<void> {
   const db = await openTasksDatabase()
   const transaction = db.transaction(TASKS_STORE, 'readwrite')
   const store = transaction.objectStore(TASKS_STORE)
+  store.delete(id)
+  await transactionToPromise(transaction)
+}
+
+export async function loadViews(): Promise<View[]> {
+  const db = await openTasksDatabase()
+  const transaction = db.transaction(VIEWS_STORE, 'readonly')
+  const store = transaction.objectStore(VIEWS_STORE)
+  const views = (await requestToPromise(store.getAll())) as View[]
+  await transactionToPromise(transaction)
+  return views
+}
+
+export async function saveView(view: View): Promise<void> {
+  const db = await openTasksDatabase()
+  const transaction = db.transaction(VIEWS_STORE, 'readwrite')
+  const store = transaction.objectStore(VIEWS_STORE)
+  store.put(view)
+  await transactionToPromise(transaction)
+}
+
+export async function deleteView(id: string): Promise<void> {
+  const db = await openTasksDatabase()
+  const transaction = db.transaction(VIEWS_STORE, 'readwrite')
+  const store = transaction.objectStore(VIEWS_STORE)
   store.delete(id)
   await transactionToPromise(transaction)
 }
