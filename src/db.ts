@@ -18,6 +18,7 @@ type StoredTask = Omit<Task, 'id'>
 
 export type View = {
   id: string
+  slug: string
   name: string
   statusSlugs: string[]
 }

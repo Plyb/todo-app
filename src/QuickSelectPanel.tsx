@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Task, Status } from './tasks'
+import type { Task, Status } from './db'
 import { StatusModal } from './StatusModal'
 import { RelationshipModal, RelationshipGroup } from './RelationshipModal'
 
 type QuickSelectPanelProps = {
   task: Task
   statuses: Status[]
-  recentStatusSlugs: string[]
   allTasks: Task[]
   onClose: () => void
   onRename: (id: number, name: string) => void
@@ -17,7 +16,7 @@ type QuickSelectPanelProps = {
   onDoneChange: (id: number, done: boolean) => void
 }
 
-export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, onClose, onRename, onChangeStatus, onDelete, onUpdateNotes, onOpenTask, onDoneChange }: QuickSelectPanelProps) {
+export function QuickSelectPanel({ task, statuses, allTasks, onClose, onRename, onChangeStatus, onDelete, onUpdateNotes, onOpenTask, onDoneChange }: QuickSelectPanelProps) {
   const [name, setName] = useState(task.name)
   const [showModal, setShowModal] = useState(false)
   const [backdropReady, setBackdropReady] = useState(false)
@@ -201,7 +200,6 @@ export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, 
       {statusModalOpen && (
         <StatusModal
           statuses={statuses}
-          recentStatusSlugs={recentStatusSlugs}
           currentStatusSlug={task.statusSlug}
           onSelect={(slug) => onChangeStatus(task.id, slug)}
           onClose={() => setStatusModalOpen(false)}

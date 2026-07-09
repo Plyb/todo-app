@@ -1,13 +1,23 @@
-import type { Status } from './db'
+import type { View } from './db'
 
-type StatusModalProps = {
-  statuses: Status[]
-  currentStatusSlug: string
+type ViewModalProps = {
+  views: View[]
+  recentViewSlugs: string[]
+  currentViewSlug: string
   onSelect: (slug: string) => void
   onClose: () => void
 }
 
-export function StatusModal({ statuses, currentStatusSlug, onSelect, onClose }: StatusModalProps) {
+export function ViewModal({ views, recentViewSlugs, currentViewSlug, onSelect, onClose }: ViewModalProps) {
+  const sortedViews = [...views].sort((a, b) => {
+    const aIndex = recentViewSlugs.indexOf(a.slug)
+    const bIndex = recentViewSlugs.indexOf(b.slug)
+    if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex
+    if (aIndex !== -1) return -1
+    if (bIndex !== -1) return 1
+    return 0
+  })
+
   return (
     <div
       onClick={onClose}
@@ -37,7 +47,7 @@ export function StatusModal({ statuses, currentStatusSlug, onSelect, onClose }: 
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 16px 4px' }}>
-          <span style={{ fontWeight: 600, fontSize: 16 }}>Set Status</span>
+          <span style={{ fontWeight: 600, fontSize: 16 }}>Open</span>
           <button
             onClick={onClose}
             style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: 4 }}
@@ -47,24 +57,24 @@ export function StatusModal({ statuses, currentStatusSlug, onSelect, onClose }: 
           </button>
         </div>
 
-        {statuses.map((status) => (
+        {sortedViews.map((view) => (
           <button
-            key={status.slug}
-            onClick={() => { onSelect(status.slug); onClose() }}
+            key={view.id}
+            onClick={() => { onSelect(view.slug); onClose() }}
             style={{
               display: 'block',
               width: '100%',
               textAlign: 'left',
-              background: status.slug === currentStatusSlug ? '#e8f0fe' : 'none',
+              background: view.slug === currentViewSlug ? '#e8f0fe' : 'none',
               border: 'none',
               padding: '12px 16px',
               cursor: 'pointer',
               fontSize: 15,
-              fontWeight: status.slug === currentStatusSlug ? 600 : 400,
+              fontWeight: view.slug === currentViewSlug ? 600 : 400,
             }}
           >
-            {status.name}
-            {status.slug === currentStatusSlug && (
+            {view.name}
+            {view.slug === currentViewSlug && (
               <span style={{ marginLeft: 8, color: '#1a73e8', fontSize: 12 }}>current</span>
             )}
           </button>

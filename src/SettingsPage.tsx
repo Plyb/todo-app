@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { saveView, deleteView, type Status, type View } from './tasks'
+import { saveView, deleteView, type Status, type View } from './db'
+import { DraggableList } from './DraggableList'
 
 type SettingsPageProps = {
   onBack: () => void
@@ -34,7 +35,7 @@ function ViewEditorModal({ view, statuses, onSave, onClose }: ViewEditorModalPro
     const idx = slugs.indexOf(slug)
     if (idx <= 0) return
     const next = [...slugs]
-    ;[next[idx - 1], next[idx]] = [next[idx], next[idx - 1]]
+    const a = next[idx - 1]; next[idx - 1] = next[idx]; next[idx] = a
     setSlugs(next)
   }
 
@@ -42,7 +43,7 @@ function ViewEditorModal({ view, statuses, onSave, onClose }: ViewEditorModalPro
     const idx = slugs.indexOf(slug)
     if (idx === -1 || idx >= slugs.length - 1) return
     const next = [...slugs]
-    ;[next[idx + 1], next[idx]] = [next[idx], next[idx + 1]]
+    const a = next[idx + 1]; next[idx + 1] = next[idx]; next[idx] = a
     setSlugs(next)
   }
 
@@ -147,6 +148,8 @@ function ViewEditorModal({ view, statuses, onSave, onClose }: ViewEditorModalPro
   )
 }
 
+type ViewListItem = { id: number; view: View }
+
 export default function SettingsPage({ onBack, statuses, views, onViewsChange }: SettingsPageProps) {
   const [editingView, setEditingView] = useState<View | null>(null)
 
@@ -166,8 +169,21 @@ export default function SettingsPage({ onBack, statuses, views, onViewsChange }:
   }
 
   function handleNewView() {
-    setEditingView({ id: crypto.randomUUID(), name: '', statusSlugs: [] })
+    const id = crypto.randomUUID()
+    setEditingView({ id, slug: id, name: '', statusSlugs: [] })
   }
+
+  async function handleReorderViews(draggedId: number, insertIndex: number) {
+    const others = views.filter((_, i) => i !== draggedId)
+    const dragged = views[draggedId]
+    const reordered = [...others.slice(0, insertIndex), dragged, ...others.slice(insertIndex)]
+    onViewsChange(reordered)
+    for (const view of reordered) {
+      await saveView(view)
+    }
+  }
+
+  const viewListItems: ViewListItem[] = views.map((view, i) => ({ id: i, view }))
 
   return (
     <main style={{ padding: 16, minHeight: '100vh' }}>
@@ -184,60 +200,58 @@ export default function SettingsPage({ onBack, statuses, views, onViewsChange }:
               background: '#1a73e8',
               color: '#fff',
               border: 'none',
-              borderRadius: 6,
-              padding: '6px 14px',
+              borderRadius: '50%',
+              width: 32,
+              height: 32,
               cursor: 'pointer',
-              fontSize: 14,
+              fontSize: 20,
+              lineHeight: 1,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 0,
             }}
           >
-            + New View
+            +
           </button>
         </div>
 
-        {views.length === 0 && (
-          <p style={{ color: '#999', fontSize: 14 }}>No views yet. Create one to combine multiple statuses.</p>
-        )}
-
-        {views.map((view) => (
-          <div
-            key={view.id}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              padding: '12px 0',
-              borderBottom: '1px solid #eee',
-            }}
-          >
-            <button
-              onClick={() => setEditingView(view)}
-              style={{
-                flex: 1,
-                textAlign: 'left',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                fontSize: 16,
-                padding: 0,
-              }}
-            >
-              {view.name}
-            </button>
-            <button
-              onClick={() => handleDeleteView(view.id)}
-              style={{
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                fontSize: 16,
-                color: '#999',
-                padding: '4px 8px',
-              }}
-              aria-label={`Delete ${view.name}`}
-            >
-              ✕
-            </button>
-          </div>
-        ))}
+        <DraggableList
+          items={viewListItems}
+          onReorder={handleReorderViews}
+          renderItem={(item) => (
+            <div style={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+              <button
+                onClick={() => setEditingView(item.view)}
+                style={{
+                  flex: 1,
+                  textAlign: 'left',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: 16,
+                  padding: 0,
+                }}
+              >
+                {item.view.name}
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); handleDeleteView(item.view.id) }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: 16,
+                  color: '#999',
+                  padding: '4px 8px',
+                }}
+                aria-label={`Delete ${item.view.name}`}
+              >
+                ✕
+              </button>
+            </div>
+          )}
+        />
       </div>
 
       {editingView && (

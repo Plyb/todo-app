@@ -1,27 +1,21 @@
 import { useEffect, useState } from 'react'
-import { loadTasks, loadStatuses, loadViews, type Task, type Status, type View } from './tasks'
+import { loadTasks, loadStatuses, loadViews, saveView, type Task, type Status, type View } from './db'
 import MainPage from './MainPage'
 import SettingsPage from './SettingsPage'
 
 type Page = 'main' | 'settings'
-type Selection = { type: 'status'; slug: string } | { type: 'view'; id: string }
 
 export default function App() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [statuses, setStatuses] = useState<Status[]>([])
   const [views, setViews] = useState<View[]>([])
-  const [currentSelection, setCurrentSelection] = useState<Selection>(() => {
-    const saved = localStorage.getItem('currentSelection')
-    if (saved) {
-      try { return JSON.parse(saved) as Selection } catch { /* fall through */ }
-    }
-    const slug = localStorage.getItem('currentStatusSlug') ?? 'today'
-    return { type: 'status', slug }
-  })
-  const [recentStatusSlugs, setRecentStatusSlugs] = useState<string[]>(
+  const [currentViewSlug, setCurrentViewSlug] = useState<string>(
+    () => localStorage.getItem('currentViewSlug') ?? 'today'
+  )
+  const [recentViewSlugs, setRecentViewSlugs] = useState<string[]>(
     () => {
       try {
-        return JSON.parse(localStorage.getItem('recentStatusSlugs') ?? '["today"]')
+        return JSON.parse(localStorage.getItem('recentViewSlugs') ?? '["today"]')
       } catch { return ['today'] }
     }
   )
@@ -30,12 +24,30 @@ export default function App() {
   useEffect(() => {
     let isMounted = true
 
-    Promise.all([loadTasks(), loadStatuses(), loadViews()]).then(([loadedTasks, loadedStatuses, loadedViews]) => {
-      if (isMounted) {
-        setTasks(loadedTasks)
-        setStatuses(loadedStatuses)
-        setViews(loadedViews)
+    Promise.all([loadTasks(), loadStatuses(), loadViews()]).then(async ([loadedTasks, loadedStatuses, loadedViews]) => {
+      if (!isMounted) return
+
+      const viewsToSave: View[] = []
+      for (const status of loadedStatuses) {
+        if (!loadedViews.some((v) => v.slug === status.slug)) {
+          const defaultView: View = {
+            id: crypto.randomUUID(),
+            slug: status.slug,
+            name: status.name,
+            statusSlugs: [status.slug],
+          }
+          viewsToSave.push(defaultView)
+        }
       }
+
+      for (const view of viewsToSave) {
+        await saveView(view)
+      }
+
+      const allViews = [...loadedViews, ...viewsToSave]
+      setTasks(loadedTasks)
+      setStatuses(loadedStatuses)
+      setViews(allViews)
     })
 
     return () => {
@@ -43,29 +55,19 @@ export default function App() {
     }
   }, [])
 
-  function openSelection(sel: Selection) {
-    setCurrentSelection(sel)
-    localStorage.setItem('currentSelection', JSON.stringify(sel))
-    if (sel.type === 'status') {
-      setRecentStatusSlugs((prev) => {
-        const next = [sel.slug, ...prev.filter((s) => s !== sel.slug)]
-        localStorage.setItem('recentStatusSlugs', JSON.stringify(next))
-        return next
-      })
-    }
+  function openView(slug: string) {
+    setCurrentViewSlug(slug)
+    localStorage.setItem('currentViewSlug', slug)
+    setRecentViewSlugs((prev) => {
+      const next = [slug, ...prev.filter((s) => s !== slug)]
+      localStorage.setItem('recentViewSlugs', JSON.stringify(next))
+      return next
+    })
   }
 
   async function handleViewsChange(newViews: View[]) {
     setViews(newViews)
   }
-
-  const currentView = currentSelection.type === 'view'
-    ? views.find((v) => v.id === currentSelection.id)
-    : undefined
-
-  const currentStatusSlug = currentSelection.type === 'status'
-    ? currentSelection.slug
-    : (currentView?.statusSlugs[0] ?? statuses[0]?.slug ?? 'today')
 
   if (page === 'settings') {
     return (
@@ -84,11 +86,9 @@ export default function App() {
       setTasks={setTasks}
       statuses={statuses}
       views={views}
-      currentStatusSlug={currentStatusSlug}
-      currentView={currentView}
-      recentStatusSlugs={recentStatusSlugs}
-      onOpenStatus={(slug) => openSelection({ type: 'status', slug })}
-      onOpenView={(id) => openSelection({ type: 'view', id })}
+      currentViewSlug={currentViewSlug}
+      recentViewSlugs={recentViewSlugs}
+      onOpenView={openView}
       onNavigateToSettings={() => setPage('settings')}
     />
   )

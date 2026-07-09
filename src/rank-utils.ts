@@ -1,5 +1,5 @@
 import { LexoRank } from 'lexorank'
-import type { Task } from './tasks'
+import type { Task } from './db'
 
 export function rankBetween(prev: Task | null, next: Task | null): string {
   if (prev && next) return LexoRank.parse(prev.rank).between(LexoRank.parse(next.rank)).toString()

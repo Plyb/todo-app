@@ -1,22 +1,20 @@
 import { useEffect, useRef, useState } from 'react'
 import PullToRefresh from 'pulltorefreshjs'
-import { createTask, deleteTask, updateTaskDone, updateTaskName, updateTaskNotes, updateTaskRank, updateTaskStatus, type Task, type Status, type View } from './tasks'
+import { createTask, deleteTask, updateTaskDone, updateTaskName, updateTaskNotes, updateTaskRank, updateTaskStatus, type Task, type Status, type View } from './db'
 import { DraggableList } from './DraggableList'
 import { AddTaskFab, NewTaskInputField, computeInsertRank, type NewTaskInput } from './AddTaskInput'
 import { rankBetween } from './rank-utils'
 import { QuickSelectPanel } from './QuickSelectPanel'
-import { StatusModal } from './StatusModal'
+import { ViewModal } from './ViewModal'
 
 type MainPageProps = {
   tasks: Task[]
   setTasks: React.Dispatch<React.SetStateAction<Task[]>>
   statuses: Status[]
   views: View[]
-  currentStatusSlug: string
-  currentView: View | undefined
-  recentStatusSlugs: string[]
-  onOpenStatus: (slug: string) => void
-  onOpenView: (id: string) => void
+  currentViewSlug: string
+  recentViewSlugs: string[]
+  onOpenView: (slug: string) => void
   onNavigateToSettings: () => void
 }
 
@@ -55,17 +53,15 @@ export default function MainPage({
   setTasks,
   statuses,
   views,
-  currentStatusSlug,
-  currentView,
-  recentStatusSlugs,
-  onOpenStatus,
+  currentViewSlug,
+  recentViewSlugs,
   onOpenView,
   onNavigateToSettings,
 }: MainPageProps) {
   const [newTaskInput, setNewTaskInput] = useState<NewTaskInput | null>(null)
   const [fabPlaceholderIndex, setFabPlaceholderIndex] = useState<number | null>(null)
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null)
-  const [statusModalOpen, setStatusModalOpen] = useState(false)
+  const [viewModalOpen, setViewModalOpen] = useState(false)
 
   const listRef = useRef<HTMLUListElement>(null)
   const inputKeyRef = useRef(0)
@@ -79,7 +75,7 @@ export default function MainPage({
       instructionsRefreshing: ' ',
       refreshTimeout: 100,
       onRefresh() {
-        setStatusModalOpen(true)
+        setViewModalOpen(true)
       },
       shouldPullToRefresh() {
         return !isDraggingRef.current && window.scrollY === 0
@@ -88,9 +84,13 @@ export default function MainPage({
     return () => ptr.destroy()
   }, [])
 
-  const displayedTasks = currentView === undefined
-    ? tasks.filter((t) => t.statusSlug === currentStatusSlug)
-    : []
+  const currentView = views.find((v) => v.slug === currentViewSlug)
+  const currentStatusSlug = currentView?.statusSlugs[0] ?? 'today'
+  const isMultiSection = currentView !== undefined && currentView.statusSlugs.length > 1
+
+  const displayedTasks = isMultiSection
+    ? []
+    : tasks.filter((t) => t.statusSlug === currentStatusSlug)
 
   function openInput(insertIndex: number) {
     inputKeyRef.current++
@@ -179,7 +179,6 @@ export default function MainPage({
         task: selectedTask,
         allTasks: tasks,
         statuses,
-        recentStatusSlugs,
         onClose: () => setSelectedTaskId(null),
         onRename: handleRename,
         onChangeStatus: handleChangeStatus,
@@ -199,20 +198,17 @@ export default function MainPage({
     }
   }
 
-  const statusModal = statusModalOpen && (
-    <StatusModal
-      statuses={statuses}
+  const viewModal = viewModalOpen && (
+    <ViewModal
       views={views}
-      recentStatusSlugs={recentStatusSlugs}
-      currentStatusSlug={currentStatusSlug}
-      currentViewId={currentView?.id}
-      onSelect={onOpenStatus}
-      onSelectView={onOpenView}
-      onClose={() => setStatusModalOpen(false)}
+      recentViewSlugs={recentViewSlugs}
+      currentViewSlug={currentViewSlug}
+      onSelect={onOpenView}
+      onClose={() => setViewModalOpen(false)}
     />
   )
 
-  if (currentView !== undefined) {
+  if (isMultiSection) {
     return (
       <main
         onClick={() => setSelectedTaskId(null)}
@@ -251,7 +247,7 @@ export default function MainPage({
         })}
 
         <SettingsButton onClick={onNavigateToSettings} />
-        {statusModal}
+        {viewModal}
       </main>
     )
   }
@@ -316,7 +312,7 @@ export default function MainPage({
         onDragInsertIndex={setFabPlaceholderIndex}
       />
 
-      {statusModal}
+      {viewModal}
     </main>
   )
 }
