@@ -113,7 +113,8 @@ export default function MainPage({
   }
 
   function handleReorder(draggedId: number, toSectionIndex: number, insertIndex: number) {
-    const toStatusSlug = currentView!.statusSlugs[toSectionIndex]
+    if (!currentView) return
+    const toStatusSlug = currentView.statusSlugs[toSectionIndex]
     const draggedTask = tasks.find((t) => t.id === draggedId)!
     const toSectionTasks = tasks.filter((t) => t.statusSlug === toStatusSlug)
     const newRank = computeNewRank(toSectionTasks, insertIndex, draggedId)
@@ -210,8 +211,6 @@ export default function MainPage({
     }
   }
 
-  const isSingleSection = currentView.statusSlugs.length === 1
-
   const insertSlot = newTaskInput !== null
     ? {
         index: newTaskInput.insertIndex,
@@ -245,11 +244,11 @@ export default function MainPage({
   const sections = currentView.statusSlugs.map((slug) => {
     const status = statuses.find((s) => s.slug === slug)
     return {
-      header: !isSingleSection ? (
+      header: (
         <h2 style={{ padding: '16px 16px 8px', margin: 0, fontSize: 18, fontWeight: 700 }}>
           {status?.name ?? slug}
         </h2>
-      ) : undefined,
+      ),
       items: tasks.filter((t) => t.statusSlug === slug),
     }
   })
@@ -293,14 +292,12 @@ export default function MainPage({
 
       <SettingsButton onClick={onNavigateToSettings} />
 
-      {isSingleSection && (
-        <AddTaskFab
-          tasks={displayedTasks}
-          listRef={listRef}
-          onRequestInsert={openInput}
-          onDragInsertIndex={setFabPlaceholderIndex}
-        />
-      )}
+      <AddTaskFab
+        tasks={displayedTasks}
+        listRef={listRef}
+        onRequestInsert={openInput}
+        onDragInsertIndex={setFabPlaceholderIndex}
+      />
 
       {viewModal}
     </main>

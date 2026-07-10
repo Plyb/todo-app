@@ -23,7 +23,7 @@ export type View = {
 }
 
 const DB_NAME = 'todo-app'
-const DB_VERSION = 7
+const DB_VERSION = 6
 const TASKS_STORE = 'tasks'
 const STATUSES_STORE = 'statuses'
 const VIEWS_STORE = 'views'
@@ -125,6 +125,17 @@ async function migrateAddStatuses(_db: IDBDatabase, transaction: IDBTransaction)
   })
 }
 
+async function migrateAddViews(transaction: IDBTransaction): Promise<void> {
+  // Seed one default view per existing status, so users start with views but
+  // can freely delete them afterward without them being regenerated.
+  const statusStore = transaction.objectStore(STATUSES_STORE)
+  const statuses = (await requestToPromise(statusStore.getAll())) as Status[]
+  const viewStore = transaction.objectStore(VIEWS_STORE)
+  for (const status of statuses) {
+    viewStore.put({ slug: status.slug, name: status.name, statusSlugs: [status.slug] })
+  }
+}
+
 async function migrateAddNotes(transaction: IDBTransaction): Promise<void> {
   const store = transaction.objectStore(TASKS_STORE)
   const cursorRequest = store.openCursor()
@@ -211,19 +222,14 @@ async function openTasksDatabase(): Promise<IDBDatabase> {
         })
       }
 
-      // v5 -> v6: add views store (keyPath 'id', superseded by v7)
+      // v5 -> v6: add views store, seeded with one default view per existing status
       if (event.oldVersion < 6) {
         if (!db.objectStoreNames.contains(VIEWS_STORE)) {
-          db.createObjectStore(VIEWS_STORE, { keyPath: 'id' })
+          db.createObjectStore(VIEWS_STORE, { keyPath: 'slug' })
         }
-      }
-
-      // v6 -> v7: change views store keyPath from 'id' to 'slug'
-      if (event.oldVersion < 7) {
-        if (db.objectStoreNames.contains(VIEWS_STORE)) {
-          db.deleteObjectStore(VIEWS_STORE)
-        }
-        db.createObjectStore(VIEWS_STORE, { keyPath: 'slug' })
+        migrateAddViews(transaction).catch(() => {
+          // Migration errors will surface as transaction abort
+        })
       }
     }
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { loadTasks, loadStatuses, loadViews, saveView, type Task, type Status, type View } from './db'
+import { loadTasks, loadStatuses, loadViews, type Task, type Status, type View } from './db'
 import MainPage from './MainPage'
 import SettingsPage from './SettingsPage'
 
@@ -24,35 +24,18 @@ export default function App() {
   useEffect(() => {
     let isMounted = true
 
-    Promise.all([loadTasks(), loadStatuses(), loadViews()]).then(async ([loadedTasks, loadedStatuses, loadedViews]) => {
+    Promise.all([loadTasks(), loadStatuses(), loadViews()]).then(([loadedTasks, loadedStatuses, loadedViews]) => {
       if (!isMounted) return
 
-      const viewsToSave: View[] = []
-      for (const status of loadedStatuses) {
-        if (!loadedViews.some((v) => v.slug === status.slug)) {
-          const defaultView: View = {
-            slug: status.slug,
-            name: status.name,
-            statusSlugs: [status.slug],
-          }
-          viewsToSave.push(defaultView)
-        }
-      }
-
-      for (const view of viewsToSave) {
-        await saveView(view)
-      }
-
-      const allViews = [...loadedViews, ...viewsToSave]
       setTasks(loadedTasks)
       setStatuses(loadedStatuses)
-      setViews(allViews)
+      setViews(loadedViews)
 
-      if (allViews.length > 0) {
+      if (loadedViews.length > 0) {
         const storedSlug = localStorage.getItem('currentViewSlug')
-        const validSlug = storedSlug !== null && allViews.some((v) => v.slug === storedSlug)
+        const validSlug = storedSlug !== null && loadedViews.some((v) => v.slug === storedSlug)
           ? storedSlug
-          : allViews[0].slug
+          : loadedViews[0].slug
         setCurrentViewSlug(validSlug)
         if (validSlug !== storedSlug) {
           localStorage.setItem('currentViewSlug', validSlug)
@@ -61,7 +44,7 @@ export default function App() {
         let storedRecent: string[]
         try { storedRecent = JSON.parse(localStorage.getItem('recentViewSlugs') ?? '[]') }
         catch { storedRecent = [] }
-        const validRecent = storedRecent.filter((s) => allViews.some((v) => v.slug === s))
+        const validRecent = storedRecent.filter((s) => loadedViews.some((v) => v.slug === s))
         setRecentViewSlugs(validRecent.length > 0 ? validRecent : [validSlug])
       }
     })
