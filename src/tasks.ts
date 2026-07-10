@@ -164,29 +164,6 @@ async function migrateAddNotes(transaction: IDBTransaction): Promise<void> {
   })
 }
 
-async function migrateRemoveParentId(transaction: IDBTransaction): Promise<void> {
-  const store = transaction.objectStore(TASKS_STORE)
-  const cursorRequest = store.openCursor()
-
-  await new Promise<void>((resolve, reject) => {
-    cursorRequest.onsuccess = () => {
-      const cursor = cursorRequest.result
-      if (!cursor) {
-        resolve()
-        return
-      }
-
-      const record = cursor.value as Record<string, unknown>
-      if ('parentId' in record) {
-        cursor.update(Object.fromEntries(Object.entries(record).filter(([k]) => k !== 'parentId')))
-      }
-      cursor.continue()
-    }
-
-    cursorRequest.onerror = () => reject(cursorRequest.error)
-  })
-}
-
 async function openTasksDatabase(): Promise<IDBDatabase> {
   if (openDatabasePromise) {
     return openDatabasePromise
@@ -235,13 +212,6 @@ async function openTasksDatabase(): Promise<IDBDatabase> {
         // v4 -> v5: add notes field to existing records
         if (event.oldVersion < 5) {
           migrateAddNotes(transaction).catch(() => {
-            // Migration errors will surface as transaction abort
-          })
-        }
-
-        // v6 -> v7: remove parentId field from existing records
-        if (event.oldVersion < 7) {
-          migrateRemoveParentId(transaction).catch(() => {
             // Migration errors will surface as transaction abort
           })
         }

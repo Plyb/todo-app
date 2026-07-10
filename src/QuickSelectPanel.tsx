@@ -301,6 +301,7 @@ export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, 
                   label={group.label}
                   tasks={group.tasks}
                   onOpenTask={onOpenTask}
+                  onDoneChange={onDoneChange}
                 />
               ))
             )}
