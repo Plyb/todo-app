@@ -1,9 +1,13 @@
-import { useEffect, useState } from 'react'
-import { loadTasks, loadStatuses, loadViews, type Task, type Status, type View } from './db'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { loadTasks, loadStatuses, loadViews, loadAllDueTransitions, updateTaskStatus, deleteScheduledTransition, type Task, type Status, type View } from './db'
 import MainPage from './MainPage'
 import SettingsPage from './SettingsPage'
 
 type Page = 'main' | 'settings'
+
+function getTodayDateString(): string {
+  return new Date().toISOString().slice(0, 10)
+}
 
 export default function App() {
   const [tasks, setTasks] = useState<Task[]>([])
@@ -20,14 +24,51 @@ export default function App() {
     }
   )
   const [page, setPage] = useState<Page>('main')
+  const [autoTransitionedTaskIds, setAutoTransitionedTaskIds] = useState<Set<number>>(new Set())
+
+  const tasksRef = useRef<Task[]>(tasks)
+  tasksRef.current = tasks
+
+  // Tracks the last calendar day we checked for due transitions, so a tab
+  // regaining visibility only re-checks once per day instead of on every focus.
+  const lastCheckedDateRef = useRef(getTodayDateString())
+
+  const applyDueTransitions = useCallback(async (currentTasks: Task[]): Promise<Task[]> => {
+    const dueTransitions = await loadAllDueTransitions()
+    if (dueTransitions.length === 0) return currentTasks
+
+    const transitionedIds = new Set<number>()
+    await Promise.all(
+      dueTransitions.map(async (transition) => {
+        const hasTask = currentTasks.some((t) => t.id === transition.taskId)
+        if (hasTask) {
+          await updateTaskStatus(transition.taskId, transition.statusSlug)
+          await deleteScheduledTransition(transition.id)
+          transitionedIds.add(transition.taskId)
+        }
+      })
+    )
+
+    if (transitionedIds.size === 0) return currentTasks
+
+    setAutoTransitionedTaskIds((prev) => new Set([...prev, ...transitionedIds]))
+    return currentTasks.map((t) => {
+      const transition = dueTransitions.find((tr) => tr.taskId === t.id && transitionedIds.has(tr.taskId))
+      return transition ? { ...t, statusSlug: transition.statusSlug } : t
+    })
+  }, [])
 
   useEffect(() => {
     let isMounted = true
 
-    Promise.all([loadTasks(), loadStatuses(), loadViews()]).then(([loadedTasks, loadedStatuses, loadedViews]) => {
+    async function init() {
+      const [loadedTasks, loadedStatuses, loadedViews] = await Promise.all([loadTasks(), loadStatuses(), loadViews()])
       if (!isMounted) return
 
-      setTasks(loadedTasks)
+      const updatedTasks = await applyDueTransitions(loadedTasks)
+      if (!isMounted) return
+
+      setTasks(updatedTasks)
       setStatuses(loadedStatuses)
       setViews(loadedViews)
 
@@ -47,12 +88,37 @@ export default function App() {
         const validRecent = storedRecent.filter((s) => loadedViews.some((v) => v.slug === s))
         setRecentViewSlugs(validRecent.length > 0 ? validRecent : [validSlug])
       }
-    })
+    }
+
+    init()
 
     return () => {
       isMounted = false
     }
-  }, [])
+  }, [applyDueTransitions])
+
+  useEffect(() => {
+    function handleVisibilityChange() {
+      if (document.visibilityState !== 'visible') return
+
+      const today = getTodayDateString()
+      if (today === lastCheckedDateRef.current) return
+      lastCheckedDateRef.current = today
+
+      applyDueTransitions(tasksRef.current).then(setTasks)
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [applyDueTransitions])
+
+  function handleClearAutoTransitionIndicator(id: number) {
+    setAutoTransitionedTaskIds((prev) => {
+      const next = new Set(prev)
+      next.delete(id)
+      return next
+    })
+  }
 
   function openView(slug: string) {
     setCurrentViewSlug(slug)
@@ -89,6 +155,8 @@ export default function App() {
       recentViewSlugs={recentViewSlugs}
       onOpenView={openView}
       onNavigateToSettings={() => setPage('settings')}
+      autoTransitionedTaskIds={autoTransitionedTaskIds}
+      onClearAutoTransitionIndicator={handleClearAutoTransitionIndicator}
     />
   )
 }

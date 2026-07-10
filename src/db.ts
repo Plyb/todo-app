@@ -25,11 +25,21 @@ export type View = {
   statusSlugs: string[]
 }
 
+export type ScheduledTransition = {
+  id: number
+  taskId: number
+  date: string  // ISO date string 'YYYY-MM-DD'
+  statusSlug: string
+}
+
+type StoredScheduledTransition = Omit<ScheduledTransition, 'id'>
+
 const DB_NAME = 'todo-app'
 const DB_VERSION = 6
 const TASKS_STORE = 'tasks'
 const STATUSES_STORE = 'statuses'
 const VIEWS_STORE = 'views'
+const SCHEDULED_TRANSITIONS_STORE = 'scheduledTransitions'
 const RELATIONSHIPS_STORE = 'relationships'
 
 const DEFAULT_STATUSES: Status[] = [
@@ -226,8 +236,8 @@ async function openTasksDatabase(): Promise<IDBDatabase> {
         })
       }
 
-      // v5 -> v6: add views store (seeded with one default view per existing status)
-      // and relationships store
+      // v5 -> v6: add views store (seeded with one default view per existing status),
+      // scheduledTransitions store, and relationships store
       if (event.oldVersion < 6) {
         if (!db.objectStoreNames.contains(VIEWS_STORE)) {
           db.createObjectStore(VIEWS_STORE, { keyPath: 'slug' })
@@ -235,6 +245,10 @@ async function openTasksDatabase(): Promise<IDBDatabase> {
         migrateAddViews(transaction).catch(() => {
           // Migration errors will surface as transaction abort
         })
+
+        if (!db.objectStoreNames.contains(SCHEDULED_TRANSITIONS_STORE)) {
+          db.createObjectStore(SCHEDULED_TRANSITIONS_STORE, { autoIncrement: true })
+        }
 
         if (!db.objectStoreNames.contains(RELATIONSHIPS_STORE)) {
           const relStore = db.createObjectStore(RELATIONSHIPS_STORE, { autoIncrement: true })
@@ -408,6 +422,52 @@ export async function deleteView(slug: string): Promise<void> {
   const store = transaction.objectStore(VIEWS_STORE)
   store.delete(slug)
   await transactionToPromise(transaction)
+}
+
+export async function loadScheduledTransitions(taskId: number): Promise<ScheduledTransition[]> {
+  const db = await openTasksDatabase()
+  const transaction = db.transaction(SCHEDULED_TRANSITIONS_STORE, 'readonly')
+  const store = transaction.objectStore(SCHEDULED_TRANSITIONS_STORE)
+  const records = (await requestToPromise(store.getAll())) as StoredScheduledTransition[]
+  const keys = await requestToPromise(store.getAllKeys())
+  await transactionToPromise(transaction)
+
+  return records
+    .map((record, index) => ({ id: keyToTaskId(keys[index]), ...record }))
+    .filter((t) => t.taskId === taskId)
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+}
+
+export async function addScheduledTransition(taskId: number, date: string, statusSlug: string): Promise<ScheduledTransition> {
+  const db = await openTasksDatabase()
+  const transaction = db.transaction(SCHEDULED_TRANSITIONS_STORE, 'readwrite')
+  const store = transaction.objectStore(SCHEDULED_TRANSITIONS_STORE)
+  const stored: StoredScheduledTransition = { taskId, date, statusSlug }
+  const key = await requestToPromise(store.add(stored))
+  await transactionToPromise(transaction)
+  return { id: keyToTaskId(key), taskId, date, statusSlug }
+}
+
+export async function deleteScheduledTransition(id: number): Promise<void> {
+  const db = await openTasksDatabase()
+  const transaction = db.transaction(SCHEDULED_TRANSITIONS_STORE, 'readwrite')
+  const store = transaction.objectStore(SCHEDULED_TRANSITIONS_STORE)
+  store.delete(id)
+  await transactionToPromise(transaction)
+}
+
+export async function loadAllDueTransitions(): Promise<ScheduledTransition[]> {
+  const db = await openTasksDatabase()
+  const transaction = db.transaction(SCHEDULED_TRANSITIONS_STORE, 'readonly')
+  const store = transaction.objectStore(SCHEDULED_TRANSITIONS_STORE)
+  const records = (await requestToPromise(store.getAll())) as StoredScheduledTransition[]
+  const keys = await requestToPromise(store.getAllKeys())
+  await transactionToPromise(transaction)
+
+  const today = new Date().toISOString().slice(0, 10)
+  return records
+    .map((record, index) => ({ id: keyToTaskId(keys[index]), ...record }))
+    .filter((t) => t.date <= today)
 }
 
 export async function loadBlocks(taskId: number): Promise<BlockingRelationship[]> {

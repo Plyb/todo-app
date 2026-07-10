@@ -16,6 +16,8 @@ type MainPageProps = {
   recentViewSlugs: string[]
   onOpenView: (slug: string) => void
   onNavigateToSettings: () => void
+  autoTransitionedTaskIds?: Set<number>
+  onClearAutoTransitionIndicator?: (id: number) => void
 }
 
 function computeNewRank(sectionTasks: Task[], insertIndex: number, draggedTaskId: number): string {
@@ -33,7 +35,7 @@ function SettingsButton({ onClick }: { onClick: () => void }) {
   )
 }
 
-function TaskRow({ task, onDoneChange, isBlocked }: { task: Task; onDoneChange: (done: boolean) => void; isBlocked: boolean }) {
+function TaskRow({ task, onDoneChange, showIndicator, isBlocked }: { task: Task; onDoneChange: (done: boolean) => void; showIndicator?: boolean; isBlocked: boolean }) {
   return (
     <>
       <input
@@ -45,6 +47,9 @@ function TaskRow({ task, onDoneChange, isBlocked }: { task: Task; onDoneChange: 
         {isBlocked && <span style={{ marginRight: 4, color: '#d32f2f' }}>⊘</span>}
         {task.name}
       </span>
+      {showIndicator && (
+        <span style={{ marginLeft: 6, width: 8, height: 8, borderRadius: '50%', background: '#fbc02d', display: 'inline-block', verticalAlign: 'middle' }} />
+      )}
     </>
   )
 }
@@ -58,6 +63,8 @@ export default function MainPage({
   recentViewSlugs,
   onOpenView,
   onNavigateToSettings,
+  autoTransitionedTaskIds,
+  onClearAutoTransitionIndicator,
 }: MainPageProps) {
   const [newTaskInput, setNewTaskInput] = useState<NewTaskInput | null>(null)
   const [fabDragSlot, setFabDragSlot] = useState<InsertSlotTarget | null>(null)
@@ -91,6 +98,29 @@ export default function MainPage({
   }, [])
 
   const currentView = views.find((v) => v.slug === currentViewSlug)
+
+  // Tasks shown across all sections of the current view, used below so the
+  // cleanup effect can clear indicators for whatever was actually on screen
+  // right before the view changes.
+  const displayedTasks = currentView ? tasks.filter((t) => currentView.statusSlugs.includes(t.statusSlug)) : []
+
+  const displayedTasksRef = useRef(displayedTasks)
+  displayedTasksRef.current = displayedTasks
+  const autoTransitionedTaskIdsRef = useRef(autoTransitionedTaskIds)
+  autoTransitionedTaskIdsRef.current = autoTransitionedTaskIds
+
+  useEffect(() => {
+    // Cleanup reads the refs (not a closed-over displayedTasks/autoTransitionedTaskIds)
+    // so it clears indicators for whatever was actually shown right before navigating
+    // away, not whatever was shown when this effect last ran.
+    return () => {
+      displayedTasksRef.current.forEach((task) => {
+        if (autoTransitionedTaskIdsRef.current?.has(task.id)) {
+          onClearAutoTransitionIndicator?.(task.id)
+        }
+      })
+    }
+  }, [currentViewSlug])
 
   if (!currentView) {
     return (
@@ -183,6 +213,7 @@ export default function MainPage({
 
   function handleTaskClick(taskId: number) {
     setSelectedTaskId((prev) => (prev === taskId ? null : taskId))
+    onClearAutoTransitionIndicator?.(taskId)
   }
 
   async function handleDelete(id: number) {
@@ -290,6 +321,7 @@ export default function MainPage({
           <TaskRow
             task={task}
             onDoneChange={(done) => handleDoneChange(task.id, done)}
+            showIndicator={autoTransitionedTaskIds?.has(task.id)}
             isBlocked={blockingRelationships.some((r) => r.toTaskId === task.id)}
           />
         )}
