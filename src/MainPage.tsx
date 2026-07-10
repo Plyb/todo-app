@@ -41,9 +41,6 @@ function ViewSelectorButton({ viewName, onClick }: { viewName: string; onClick: 
     <button
       onClick={onClick}
       style={{
-        position: 'sticky',
-        top: 0,
-        zIndex: 10,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
