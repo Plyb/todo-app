@@ -14,7 +14,10 @@ export type Task = {
   notes: string
 }
 
+export type BlockingRelationship = { id: number; fromTaskId: number; toTaskId: number; type: 'blocks' }
+
 type StoredTask = Omit<Task, 'id'>
+type StoredBlockingRelationship = Omit<BlockingRelationship, 'id'>
 
 export type View = {
   slug: string
@@ -27,6 +30,7 @@ const DB_VERSION = 6
 const TASKS_STORE = 'tasks'
 const STATUSES_STORE = 'statuses'
 const VIEWS_STORE = 'views'
+const RELATIONSHIPS_STORE = 'relationships'
 
 const DEFAULT_STATUSES: Status[] = [
   { slug: 'today', name: 'Today' },
@@ -222,7 +226,8 @@ async function openTasksDatabase(): Promise<IDBDatabase> {
         })
       }
 
-      // v5 -> v6: add views store, seeded with one default view per existing status
+      // v5 -> v6: add views store (seeded with one default view per existing status)
+      // and relationships store
       if (event.oldVersion < 6) {
         if (!db.objectStoreNames.contains(VIEWS_STORE)) {
           db.createObjectStore(VIEWS_STORE, { keyPath: 'slug' })
@@ -230,6 +235,12 @@ async function openTasksDatabase(): Promise<IDBDatabase> {
         migrateAddViews(transaction).catch(() => {
           // Migration errors will surface as transaction abort
         })
+
+        if (!db.objectStoreNames.contains(RELATIONSHIPS_STORE)) {
+          const relStore = db.createObjectStore(RELATIONSHIPS_STORE, { autoIncrement: true })
+          relStore.createIndex('fromTaskId', 'fromTaskId', { unique: false })
+          relStore.createIndex('toTaskId', 'toTaskId', { unique: false })
+        }
       }
     }
 
@@ -396,5 +407,54 @@ export async function deleteView(slug: string): Promise<void> {
   const transaction = db.transaction(VIEWS_STORE, 'readwrite')
   const store = transaction.objectStore(VIEWS_STORE)
   store.delete(slug)
+  await transactionToPromise(transaction)
+}
+
+export async function loadBlocks(taskId: number): Promise<BlockingRelationship[]> {
+  const db = await openTasksDatabase()
+  const transaction = db.transaction(RELATIONSHIPS_STORE, 'readonly')
+  const store = transaction.objectStore(RELATIONSHIPS_STORE)
+
+  const fromIndex = store.index('fromTaskId')
+  const toIndex = store.index('toTaskId')
+
+  const fromRecords = (await requestToPromise(fromIndex.getAll(taskId))) as StoredBlockingRelationship[]
+  const fromKeys = await requestToPromise(fromIndex.getAllKeys(taskId))
+  const toRecords = (await requestToPromise(toIndex.getAll(taskId))) as StoredBlockingRelationship[]
+  const toKeys = await requestToPromise(toIndex.getAllKeys(taskId))
+  await transactionToPromise(transaction)
+
+  const from = fromRecords.map((r, i) => ({ ...r, id: keyToTaskId(fromKeys[i]) }))
+  const to = toRecords.map((r, i) => ({ ...r, id: keyToTaskId(toKeys[i]) }))
+  return [...from, ...to]
+}
+
+export async function loadAllBlocks(): Promise<BlockingRelationship[]> {
+  const db = await openTasksDatabase()
+  const transaction = db.transaction(RELATIONSHIPS_STORE, 'readonly')
+  const store = transaction.objectStore(RELATIONSHIPS_STORE)
+
+  const records = (await requestToPromise(store.getAll())) as StoredBlockingRelationship[]
+  const keys = await requestToPromise(store.getAllKeys())
+  await transactionToPromise(transaction)
+
+  return records.map((r, i) => ({ ...r, id: keyToTaskId(keys[i]) }))
+}
+
+export async function addBlock(fromTaskId: number, toTaskId: number, type: 'blocks'): Promise<BlockingRelationship> {
+  const db = await openTasksDatabase()
+  const transaction = db.transaction(RELATIONSHIPS_STORE, 'readwrite')
+  const store = transaction.objectStore(RELATIONSHIPS_STORE)
+  const stored: StoredBlockingRelationship = { fromTaskId, toTaskId, type }
+  const key = await requestToPromise(store.add(stored))
+  await transactionToPromise(transaction)
+  return { id: keyToTaskId(key), fromTaskId, toTaskId, type }
+}
+
+export async function deleteBlock(id: number): Promise<void> {
+  const db = await openTasksDatabase()
+  const transaction = db.transaction(RELATIONSHIPS_STORE, 'readwrite')
+  const store = transaction.objectStore(RELATIONSHIPS_STORE)
+  store.delete(id)
   await transactionToPromise(transaction)
 }
