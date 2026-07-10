@@ -36,6 +36,34 @@ function SettingsButton({ onClick }: { onClick: () => void }) {
   )
 }
 
+function ViewSelectorButton({ viewName, onClick }: { viewName: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        position: 'sticky',
+        top: 0,
+        zIndex: 10,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        width: '100%',
+        padding: '14px 16px',
+        border: 'none',
+        borderBottom: '1px solid #e0e0e0',
+        background: 'white',
+        fontSize: 16,
+        fontWeight: 600,
+        cursor: 'pointer',
+      }}
+    >
+      {viewName}
+      <span style={{ color: '#1a73e8' }}>▾</span>
+    </button>
+  )
+}
+
 function TaskRow({ task, onDoneChange, showIndicator, isBlocked }: { task: Task; onDoneChange: (done: boolean) => void; showIndicator?: boolean; isBlocked: boolean }) {
   return (
     <>
@@ -93,17 +121,38 @@ export default function MainPage({
     }
   }, [])
 
+  const isTouchingRef = useRef(false)
+  const pullDistanceRef = useRef(0)
+
   useEffect(() => {
     function handleScroll() {
       const distance = Math.max(0, -window.scrollY)
+      pullDistanceRef.current = distance
       setPullDistance(distance)
+    }
+    function handleTouchStart() {
+      isTouchingRef.current = true
+    }
+    function handleTouchEnd() {
+      isTouchingRef.current = false
       const noModalOpen = selectedTaskId === null && !viewModalOpen
-      if (distance >= OVERSCROLL_TRIGGER_DISTANCE && noModalOpen) {
+      // Deferred to release (rather than triggering the instant pullDistance crosses the
+      // threshold) so a finger lifted early doesn't open the modal, and so residual scroll
+      // events after release (rubber-band settling, mouse wheel) can't spuriously trigger it.
+      if (pullDistanceRef.current >= OVERSCROLL_TRIGGER_DISTANCE && noModalOpen) {
         setViewModalOpen(true)
       }
     }
     window.addEventListener('scroll', handleScroll, { passive: true })
-    return () => window.removeEventListener('scroll', handleScroll)
+    window.addEventListener('touchstart', handleTouchStart, { passive: true })
+    window.addEventListener('touchend', handleTouchEnd, { passive: true })
+    window.addEventListener('touchcancel', handleTouchEnd, { passive: true })
+    return () => {
+      window.removeEventListener('scroll', handleScroll)
+      window.removeEventListener('touchstart', handleTouchStart)
+      window.removeEventListener('touchend', handleTouchEnd)
+      window.removeEventListener('touchcancel', handleTouchEnd)
+    }
   }, [selectedTaskId, viewModalOpen])
 
   const currentView = views.find((v) => v.slug === currentViewSlug)
@@ -323,7 +372,7 @@ export default function MainPage({
     <div
       style={{
         position: 'fixed',
-        top: 12,
+        top: 60,
         left: '50%',
         transform: 'translateX(-50%)',
         width: 28,
@@ -341,6 +390,8 @@ export default function MainPage({
       onClick={() => setSelectedTaskId(null)}
       style={{ minHeight: '100vh' }}
     >
+      <ViewSelectorButton viewName={currentView.name} onClick={() => setViewModalOpen(true)} />
+
       <DraggableList
         sections={sections}
         onReorder={handleReorder}
