@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { Task } from './tasks'
+import type { Task } from './db'
 
 type LinkExistingTaskModalProps = {
   currentTaskId: number

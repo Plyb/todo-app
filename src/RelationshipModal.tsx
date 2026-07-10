@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import type { Task } from './tasks'
-import { addBlock } from './tasks'
+import type { Task } from './db'
+import { addBlock } from './db'
 
 type RelatedTaskEntryProps = { task: Task; onOpen: (id: number) => void; onDoneChange: (id: number, done: boolean) => void }
 

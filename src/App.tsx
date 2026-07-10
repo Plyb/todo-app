@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { loadTasks, loadStatuses, loadAllDueTransitions, updateTaskStatus, deleteScheduledTransition, type Task, type Status } from './tasks'
+import { loadTasks, loadStatuses, loadViews, loadAllDueTransitions, updateTaskStatus, deleteScheduledTransition, type Task, type Status, type View } from './db'
 import MainPage from './MainPage'
 import SettingsPage from './SettingsPage'
 
@@ -12,17 +12,33 @@ function getTodayDateString(): string {
 export default function App() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [statuses, setStatuses] = useState<Status[]>([])
-  const [currentStatusSlug, setCurrentStatusSlug] = useState(
-    () => localStorage.getItem('currentStatusSlug') ?? 'today'
+  const [views, setViews] = useState<View[]>([])
+  const [currentViewSlug, setCurrentViewSlug] = useState<string>(
+    () => localStorage.getItem('currentViewSlug') ?? ''
   )
-  const [recentStatusSlugs, setRecentStatusSlugs] = useState<string[]>(
+  const [recentViewSlugs, setRecentViewSlugs] = useState<string[]>(
     () => {
       try {
-        return JSON.parse(localStorage.getItem('recentStatusSlugs') ?? '["today"]')
-      } catch { return ['today'] }
+        return JSON.parse(localStorage.getItem('recentViewSlugs') ?? '[]')
+      } catch { return [] }
     }
   )
   const [page, setPage] = useState<Page>('main')
+  const archiveRan = useRef(false)
+
+  useEffect(() => {
+    if (tasks.length === 0 || archiveRan.current) return
+    archiveRan.current = true
+    const slug = localStorage.getItem('auto-archive-status-slug')
+    if (!slug) return
+    const lastRun = localStorage.getItem('auto-archive-last-run')
+    const today = new Date().toDateString()
+    if (lastRun === today) return
+    localStorage.setItem('auto-archive-last-run', today)
+    setTasks(prev => prev.map(t => t.done ? { ...t, statusSlug: slug } : t))
+    tasks.filter(t => t.done).forEach(t => updateTaskStatus(t.id, slug))
+  }, [tasks])
+
   const [autoTransitionedTaskIds, setAutoTransitionedTaskIds] = useState<Set<number>>(new Set())
 
   const tasksRef = useRef<Task[]>(tasks)
@@ -61,7 +77,7 @@ export default function App() {
     let isMounted = true
 
     async function init() {
-      const [loadedTasks, loadedStatuses] = await Promise.all([loadTasks(), loadStatuses()])
+      const [loadedTasks, loadedStatuses, loadedViews] = await Promise.all([loadTasks(), loadStatuses(), loadViews()])
       if (!isMounted) return
 
       const updatedTasks = await applyDueTransitions(loadedTasks)
@@ -69,6 +85,24 @@ export default function App() {
 
       setTasks(updatedTasks)
       setStatuses(loadedStatuses)
+      setViews(loadedViews)
+
+      if (loadedViews.length > 0) {
+        const storedSlug = localStorage.getItem('currentViewSlug')
+        const validSlug = storedSlug !== null && loadedViews.some((v) => v.slug === storedSlug)
+          ? storedSlug
+          : loadedViews[0].slug
+        setCurrentViewSlug(validSlug)
+        if (validSlug !== storedSlug) {
+          localStorage.setItem('currentViewSlug', validSlug)
+        }
+
+        let storedRecent: string[]
+        try { storedRecent = JSON.parse(localStorage.getItem('recentViewSlugs') ?? '[]') }
+        catch { storedRecent = [] }
+        const validRecent = storedRecent.filter((s) => loadedViews.some((v) => v.slug === s))
+        setRecentViewSlugs(validRecent.length > 0 ? validRecent : [validSlug])
+      }
     }
 
     init()
@@ -101,18 +135,29 @@ export default function App() {
     })
   }
 
-  function openStatus(slug: string) {
-    setCurrentStatusSlug(slug)
-    localStorage.setItem('currentStatusSlug', slug)
-    setRecentStatusSlugs((prev) => {
+  function openView(slug: string) {
+    setCurrentViewSlug(slug)
+    localStorage.setItem('currentViewSlug', slug)
+    setRecentViewSlugs((prev) => {
       const next = [slug, ...prev.filter((s) => s !== slug)]
-      localStorage.setItem('recentStatusSlugs', JSON.stringify(next))
+      localStorage.setItem('recentViewSlugs', JSON.stringify(next))
       return next
     })
   }
 
+  async function handleViewsChange(newViews: View[]) {
+    setViews(newViews)
+  }
+
   if (page === 'settings') {
-    return <SettingsPage onBack={() => setPage('main')} />
+    return (
+      <SettingsPage
+        onBack={() => setPage('main')}
+        statuses={statuses}
+        views={views}
+        onViewsChange={handleViewsChange}
+      />
+    )
   }
 
   return (
@@ -120,9 +165,10 @@ export default function App() {
       tasks={tasks}
       setTasks={setTasks}
       statuses={statuses}
-      currentStatusSlug={currentStatusSlug}
-      recentStatusSlugs={recentStatusSlugs}
-      onOpenStatus={openStatus}
+      views={views}
+      currentViewSlug={currentViewSlug}
+      recentViewSlugs={recentViewSlugs}
+      onOpenView={openView}
       onNavigateToSettings={() => setPage('settings')}
       autoTransitionedTaskIds={autoTransitionedTaskIds}
       onClearAutoTransitionIndicator={handleClearAutoTransitionIndicator}

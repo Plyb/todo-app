@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Task, Status, SubtaskLink, ScheduledTransition, BlockingRelationship } from './tasks'
-import { loadSubtaskLinks, createSubtaskLink, updateSubtaskLinkRank, loadAllSubtaskLinks, createTask, loadScheduledTransitions, loadBlocks } from './tasks'
+import type { Task, Status, SubtaskLink, ScheduledTransition, BlockingRelationship } from './db'
+import { loadSubtaskLinks, createSubtaskLink, updateSubtaskLinkRank, loadAllSubtaskLinks, createTask, loadScheduledTransitions, loadBlocks } from './db'
 import { StatusModal } from './StatusModal'
 import { RelationshipModal, RelationshipGroup } from './RelationshipModal'
 import { LinkExistingTaskModal } from './LinkExistingTaskModal'
@@ -11,7 +11,6 @@ import { rankBetween } from './rank-utils'
 type QuickSelectPanelProps = {
   task: Task
   statuses: Status[]
-  recentStatusSlugs: string[]
   allTasks: Task[]
   onClose: () => void
   onRename: (id: number, name: string) => void
@@ -25,7 +24,7 @@ type QuickSelectPanelProps = {
   onSubtaskLinkAdded?: () => void
 }
 
-export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, onClose, onRename, onChangeStatus, onDelete, onUpdateNotes, onOpenTask, onDoneChange, onBlockingRelationshipAdded, onTaskCreated, onSubtaskLinkAdded }: QuickSelectPanelProps) {
+export function QuickSelectPanel({ task, statuses, allTasks, onClose, onRename, onChangeStatus, onDelete, onUpdateNotes, onOpenTask, onDoneChange, onBlockingRelationshipAdded, onTaskCreated, onSubtaskLinkAdded }: QuickSelectPanelProps) {
   const [name, setName] = useState(task.name)
   const [backdropReady, setBackdropReady] = useState(false)
   const [statusModalOpen, setStatusModalOpen] = useState(false)
@@ -280,8 +279,8 @@ export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, 
 
             {subtaskItems.length > 0 && (
               <DraggableList
-                items={subtaskItems}
-                onReorder={handleSubtaskReorder}
+                sections={[{ items: subtaskItems }]}
+                onReorder={(draggedLinkId, _sectionIndex, insertIndex) => handleSubtaskReorder(draggedLinkId, insertIndex)}
                 renderItem={({ childTask }) => (
                   <>
                     <input
@@ -370,7 +369,6 @@ export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, 
       {statusModalOpen && (
         <StatusModal
           statuses={statuses}
-          recentStatusSlugs={recentStatusSlugs}
           currentStatusSlug={task.statusSlug}
           onSelect={(slug) => onChangeStatus(task.id, slug)}
           onClose={() => setStatusModalOpen(false)}

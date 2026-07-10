@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import type { Task, Status, ScheduledTransition } from './tasks'
-import { loadScheduledTransitions, addScheduledTransition, deleteScheduledTransition } from './tasks'
+import type { Task, Status, ScheduledTransition } from './db'
+import { loadScheduledTransitions, addScheduledTransition, deleteScheduledTransition } from './db'
 
 type ScheduleModalProps = {
   task: Task
