@@ -227,6 +227,7 @@ export default function MainPage({
               task={selectedTask}
               statuses={statuses}
               recentStatusSlugs={recentStatusSlugs}
+              allTasks={tasks}
               onClose={() => setSelectedTaskId(null)}
               onRename={handleRename}
               onChangeStatus={handleChangeStatus}

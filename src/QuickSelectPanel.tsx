@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { Task, Status, Subtask } from './tasks'
 import { loadSubtasks, createSubtask, updateSubtaskDone, updateSubtaskRank } from './tasks'
 import { StatusModal } from './StatusModal'
+import { RelationshipModal } from './RelationshipModal'
 import { DraggableList } from './DraggableList'
 import { rankBetween } from './rank-utils'
 
@@ -9,6 +10,7 @@ type QuickSelectPanelProps = {
   task: Task
   statuses: Status[]
   recentStatusSlugs: string[]
+  allTasks: Task[]
   onClose: () => void
   onRename: (id: number, name: string) => void
   onChangeStatus: (id: number, statusSlug: string) => void
@@ -17,11 +19,12 @@ type QuickSelectPanelProps = {
   onDoneChange: (id: number, done: boolean) => void
 }
 
-export function QuickSelectPanel({ task, statuses, recentStatusSlugs, onClose, onRename, onChangeStatus, onDelete, onUpdateNotes, onDoneChange }: QuickSelectPanelProps) {
+export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, onClose, onRename, onChangeStatus, onDelete, onUpdateNotes, onDoneChange }: QuickSelectPanelProps) {
   const [name, setName] = useState(task.name)
   const [backdropReady, setBackdropReady] = useState(false)
   const [statusModalOpen, setStatusModalOpen] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
+  const [showRelationshipModal, setShowRelationshipModal] = useState(false)
   const [notes, setNotes] = useState(task.notes)
   const [expanded, setExpanded] = useState(false)
   const [subtasks, setSubtasks] = useState<Subtask[]>([])
@@ -233,6 +236,23 @@ export function QuickSelectPanel({ task, statuses, recentStatusSlugs, onClose, o
               }}
             />
           </div>
+
+          <div style={{ marginTop: 16 }}>
+            <button
+              onClick={() => setShowRelationshipModal(true)}
+              style={{
+                padding: '8px 16px',
+                backgroundColor: '#1a73e8',
+                color: '#fff',
+                border: 'none',
+                borderRadius: 8,
+                cursor: 'pointer',
+                fontSize: 14,
+              }}
+            >
+              Add Relationship
+            </button>
+          </div>
         </div>
       </div>
 
@@ -243,6 +263,14 @@ export function QuickSelectPanel({ task, statuses, recentStatusSlugs, onClose, o
           currentStatusSlug={task.statusSlug}
           onSelect={(slug) => onChangeStatus(task.id, slug)}
           onClose={() => setStatusModalOpen(false)}
+        />
+      )}
+
+      {showRelationshipModal && (
+        <RelationshipModal
+          currentTaskId={task.id}
+          allTasks={allTasks}
+          onClose={() => setShowRelationshipModal(false)}
         />
       )}
     </>
