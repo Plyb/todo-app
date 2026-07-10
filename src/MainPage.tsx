@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import PullToRefresh from 'pulltorefreshjs'
-import { createTask, deleteTask, updateTaskDone, updateTaskName, updateTaskNotes, updateTaskRank, updateTaskStatus, type Task, type Status } from './tasks'
+import { createTask, deleteTask, loadAllBlocks, updateTaskDone, updateTaskName, updateTaskNotes, updateTaskRank, updateTaskStatus, type BlockingRelationship, type Task, type Status } from './tasks'
 import { DraggableList } from './DraggableList'
 import { AddTaskFab, NewTaskInputField, computeInsertRank, type NewTaskInput } from './AddTaskInput'
 import { rankBetween } from './rank-utils'
@@ -34,7 +34,7 @@ function SettingsButton({ onClick }: { onClick: () => void }) {
   )
 }
 
-function TaskRow({ task, onDoneChange, showIndicator }: { task: Task; onDoneChange: (done: boolean) => void; showIndicator?: boolean }) {
+function TaskRow({ task, onDoneChange, showIndicator, isBlocked }: { task: Task; onDoneChange: (done: boolean) => void; showIndicator?: boolean; isBlocked: boolean }) {
   return (
     <>
       <input
@@ -43,6 +43,7 @@ function TaskRow({ task, onDoneChange, showIndicator }: { task: Task; onDoneChan
         onChange={(e) => onDoneChange(e.target.checked)}
       />
       <span style={task.done ? { color: '#aaa' } : undefined}>
+        {isBlocked && <span style={{ marginRight: 4, color: '#d32f2f' }}>⊘</span>}
         {task.name}
       </span>
       {showIndicator && (
@@ -67,6 +68,11 @@ export default function MainPage({
   const [fabPlaceholderIndex, setFabPlaceholderIndex] = useState<number | null>(null)
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null)
   const [statusModalOpen, setStatusModalOpen] = useState(false)
+  const [blockingRelationships, setBlockingRelationships] = useState<BlockingRelationship[]>([])
+
+  useEffect(() => {
+    loadAllBlocks().then(setBlockingRelationships)
+  }, [])
 
   const listRef = useRef<HTMLUListElement>(null)
   const inputKeyRef = useRef(0)
@@ -231,7 +237,12 @@ export default function MainPage({
         items={displayedTasks}
         onReorder={handleReorder}
         renderItem={(task) => (
-          <TaskRow task={task} onDoneChange={(done) => handleDoneChange(task.id, done)} showIndicator={autoTransitionedTaskIds?.has(task.id)} />
+          <TaskRow
+            task={task}
+            onDoneChange={(done) => handleDoneChange(task.id, done)}
+            showIndicator={autoTransitionedTaskIds?.has(task.id)}
+            isBlocked={blockingRelationships.some((r) => r.toTaskId === task.id)}
+          />
         )}
         listRef={listRef}
         insertSlot={insertSlot}
@@ -261,6 +272,7 @@ export default function MainPage({
               onUpdateNotes={handleUpdateNotes}
               onOpenTask={(id) => setSelectedTaskId(id)}
               onDoneChange={handleDoneChange}
+              onBlockingRelationshipAdded={() => loadAllBlocks().then(setBlockingRelationships)}
             />
           ),
         } : undefined}
