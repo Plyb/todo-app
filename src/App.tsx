@@ -24,6 +24,21 @@ export default function App() {
     }
   )
   const [page, setPage] = useState<Page>('main')
+  const archiveRan = useRef(false)
+
+  useEffect(() => {
+    if (tasks.length === 0 || archiveRan.current) return
+    archiveRan.current = true
+    const slug = localStorage.getItem('auto-archive-status-slug')
+    if (!slug) return
+    const lastRun = localStorage.getItem('auto-archive-last-run')
+    const today = new Date().toDateString()
+    if (lastRun === today) return
+    localStorage.setItem('auto-archive-last-run', today)
+    setTasks(prev => prev.map(t => t.done ? { ...t, statusSlug: slug } : t))
+    tasks.filter(t => t.done).forEach(t => updateTaskStatus(t.id, slug))
+  }, [tasks])
+
   const [autoTransitionedTaskIds, setAutoTransitionedTaskIds] = useState<Set<number>>(new Set())
 
   const tasksRef = useRef<Task[]>(tasks)

@@ -2,6 +2,15 @@ import { useState } from 'react'
 import { saveView, deleteView, type Status, type View } from './db'
 import { ViewEditorModal } from './ViewEditorModal'
 
+const loadAutoArchiveSetting = (): string | null => localStorage.getItem('auto-archive-status-slug')
+const saveAutoArchiveSetting = (slug: string | null): void => {
+  if (slug === null) {
+    localStorage.removeItem('auto-archive-status-slug')
+  } else {
+    localStorage.setItem('auto-archive-status-slug', slug)
+  }
+}
+
 type SettingsPageProps = {
   onBack: () => void
   statuses: Status[]
@@ -11,6 +20,13 @@ type SettingsPageProps = {
 
 export default function SettingsPage({ onBack, statuses, views, onViewsChange }: SettingsPageProps) {
   const [editingView, setEditingView] = useState<View | null>(null)
+  const [autoArchiveSlug, setAutoArchiveSlug] = useState(loadAutoArchiveSetting)
+
+  function handleAutoArchiveChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    const slug = e.target.value === '' ? null : e.target.value
+    setAutoArchiveSlug(slug)
+    saveAutoArchiveSetting(slug)
+  }
 
   async function handleDeleteView(slug: string) {
     if (views.length === 1) return
@@ -108,6 +124,16 @@ export default function SettingsPage({ onBack, statuses, views, onViewsChange }:
           onClose={() => setEditingView(null)}
         />
       )}
+
+      <section style={{ marginTop: 32 }}>
+        <label htmlFor="auto-archive-select">Auto-archive done tasks</label>
+        <select id="auto-archive-select" value={autoArchiveSlug ?? ''} onChange={handleAutoArchiveChange} style={{ marginLeft: 8 }}>
+          <option value="">None</option>
+          {statuses.map(s => (
+            <option key={s.slug} value={s.slug}>{s.name}</option>
+          ))}
+        </select>
+      </section>
     </main>
   )
 }
