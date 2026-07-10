@@ -1,16 +1,22 @@
 import React, { useRef, useState } from 'react'
 import { isPrimaryButton, findInsertIndex } from './pointer-utils'
 import { rankBetween } from './rank-utils'
-import type { Task } from './tasks'
+import type { Task } from './db'
 
 export type NewTaskInput = {
+  sectionIndex: number
   insertIndex: number
+}
+
+export type InsertSlotTarget = {
+  sectionIndex: number
+  index: number
 }
 
 export type FabDragState = {
   pointerX: number
   pointerY: number
-  insertIndex: number | null
+  slot: InsertSlotTarget | null
 }
 
 export const FAB_BOTTOM = 24
@@ -24,13 +30,12 @@ export function computeInsertRank(tasks: Task[], insertIndex: number): string {
 }
 
 type AddTaskFabProps = {
-  tasks: Task[]
-  listRef: React.RefObject<HTMLUListElement | null>
-  onRequestInsert: (insertIndex: number) => void
-  onDragInsertIndex: (index: number | null) => void
+  listRef: React.RefObject<HTMLDivElement | null>
+  onRequestInsert: (sectionIndex: number, insertIndex: number) => void
+  onDragInsertSlot: (slot: InsertSlotTarget | null) => void
 }
 
-export function AddTaskFab({ tasks, listRef, onRequestInsert, onDragInsertIndex }: AddTaskFabProps) {
+export function AddTaskFab({ listRef, onRequestInsert, onDragInsertSlot }: AddTaskFabProps) {
   const [fabDragState, setFabDragState] = useState<FabDragState | null>(null)
   const didMoveRef = useRef(false)
 
@@ -44,12 +49,22 @@ export function AddTaskFab({ tasks, listRef, onRequestInsert, onDragInsertIndex 
     return Math.sqrt(dx * dx + dy * dy) < FAB_SIZE * 1.5
   }
 
-  function getInsertIndexFromPointer(clientY: number): number {
-    if (!listRef.current) return tasks.length
+  function getInsertSlotFromPointer(clientY: number): InsertSlotTarget {
+    const container = listRef.current
+    if (!container) return { sectionIndex: 0, index: 0 }
+    const sectionEls = Array.from(container.querySelectorAll<HTMLElement>('[data-section-index]'))
+    if (sectionEls.length === 0) return { sectionIndex: 0, index: 0 }
+    let sectionIndex = sectionEls.length - 1
+    for (let i = 0; i < sectionEls.length; i++) {
+      if (clientY < sectionEls[i].getBoundingClientRect().bottom) {
+        sectionIndex = i
+        break
+      }
+    }
     const listItems = Array.from(
-      listRef.current.querySelectorAll<HTMLElement>('li:not([data-insert-slot])')
+      sectionEls[sectionIndex].querySelectorAll<HTMLElement>('li:not([data-insert-slot])')
     )
-    return findInsertIndex(listItems, clientY)
+    return { sectionIndex, index: findInsertIndex(listItems, clientY) }
   }
 
   function handleFabPointerDown(e: React.PointerEvent<HTMLButtonElement>) {
@@ -61,7 +76,7 @@ export function AddTaskFab({ tasks, listRef, onRequestInsert, onDragInsertIndex 
     setFabDragState({
       pointerX: e.clientX,
       pointerY: e.clientY,
-      insertIndex: null,
+      slot: null,
     })
   }
 
@@ -69,30 +84,30 @@ export function AddTaskFab({ tasks, listRef, onRequestInsert, onDragInsertIndex 
     if (fabDragState === null) return
     didMoveRef.current = true
     const atFab = isNearFabStart(e.clientX, e.clientY)
-    const insertIndex = atFab ? null : getInsertIndexFromPointer(e.clientY)
+    const slot = atFab ? null : getInsertSlotFromPointer(e.clientY)
     setFabDragState({
       pointerX: e.clientX,
       pointerY: e.clientY,
-      insertIndex,
+      slot,
     })
-    onDragInsertIndex(insertIndex)
+    onDragInsertSlot(slot)
   }
 
   function handleFabPointerUp(_e: React.PointerEvent<HTMLButtonElement>) {
     if (fabDragState === null) return
-    onDragInsertIndex(null)
-    const { insertIndex } = fabDragState
+    onDragInsertSlot(null)
+    const { slot } = fabDragState
     const moved = didMoveRef.current
     setFabDragState(null)
-    if (insertIndex !== null) {
-      onRequestInsert(insertIndex)
+    if (slot !== null) {
+      onRequestInsert(slot.sectionIndex, slot.index)
     } else if (!moved) {
-      onRequestInsert(0)
+      onRequestInsert(0, 0)
     }
   }
 
   function handleFabPointerCancel() {
-    onDragInsertIndex(null)
+    onDragInsertSlot(null)
     setFabDragState(null)
   }
 
@@ -138,12 +153,13 @@ export function AddTaskFab({ tasks, listRef, onRequestInsert, onDragInsertIndex 
 }
 
 type NewTaskInputFieldProps = {
+  sectionIndex: number
   insertIndex: number
-  onBlur: (e: React.FocusEvent<HTMLInputElement>, insertIndex: number) => void
-  onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>, insertIndex: number) => void
+  onBlur: (e: React.FocusEvent<HTMLInputElement>, sectionIndex: number, insertIndex: number) => void
+  onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>, sectionIndex: number, insertIndex: number) => void
 }
 
-export function NewTaskInputField({ insertIndex, onBlur, onKeyDown }: NewTaskInputFieldProps) {
+export function NewTaskInputField({ sectionIndex, insertIndex, onBlur, onKeyDown }: NewTaskInputFieldProps) {
   function autoFocusOnAppearance(el: HTMLInputElement | null) {
     el?.focus()
   }
@@ -153,8 +169,8 @@ export function NewTaskInputField({ insertIndex, onBlur, onKeyDown }: NewTaskInp
       ref={autoFocusOnAppearance}
       type="text"
       placeholder="Task name"
-      onBlur={(e) => onBlur(e, insertIndex)}
-      onKeyDown={(e) => onKeyDown(e, insertIndex)}
+      onBlur={(e) => onBlur(e, sectionIndex, insertIndex)}
+      onKeyDown={(e) => onKeyDown(e, sectionIndex, insertIndex)}
       style={{
         width: '100%',
         boxSizing: 'border-box',

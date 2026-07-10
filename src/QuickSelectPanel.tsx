@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Task, Status, ScheduledTransition, BlockingRelationship } from './tasks'
-import { loadScheduledTransitions, loadBlocks } from './tasks'
+import type { Task, Status, ScheduledTransition, BlockingRelationship } from './db'
+import { loadScheduledTransitions, loadBlocks } from './db'
 import { StatusModal } from './StatusModal'
 import { RelationshipModal, RelationshipGroup } from './RelationshipModal'
 import { ScheduleModal } from './ScheduleModal'
@@ -8,7 +8,6 @@ import { ScheduleModal } from './ScheduleModal'
 type QuickSelectPanelProps = {
   task: Task
   statuses: Status[]
-  recentStatusSlugs: string[]
   allTasks: Task[]
   onClose: () => void
   onRename: (id: number, name: string) => void
@@ -20,7 +19,7 @@ type QuickSelectPanelProps = {
   onBlockingRelationshipAdded?: () => void
 }
 
-export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, onClose, onRename, onChangeStatus, onDelete, onUpdateNotes, onOpenTask, onDoneChange, onBlockingRelationshipAdded }: QuickSelectPanelProps) {
+export function QuickSelectPanel({ task, statuses, allTasks, onClose, onRename, onChangeStatus, onDelete, onUpdateNotes, onOpenTask, onDoneChange, onBlockingRelationshipAdded }: QuickSelectPanelProps) {
   const [name, setName] = useState(task.name)
   const [showModal, setShowModal] = useState(false)
   const [backdropReady, setBackdropReady] = useState(false)
@@ -254,7 +253,6 @@ export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, 
       {statusModalOpen && (
         <StatusModal
           statuses={statuses}
-          recentStatusSlugs={recentStatusSlugs}
           currentStatusSlug={task.statusSlug}
           onSelect={(slug) => onChangeStatus(task.id, slug)}
           onClose={() => setStatusModalOpen(false)}

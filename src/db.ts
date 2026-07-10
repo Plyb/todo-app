@@ -19,6 +19,12 @@ export type BlockingRelationship = { id: number; fromTaskId: number; toTaskId: n
 type StoredTask = Omit<Task, 'id'>
 type StoredBlockingRelationship = Omit<BlockingRelationship, 'id'>
 
+export type View = {
+  slug: string
+  name: string
+  statusSlugs: string[]
+}
+
 export type ScheduledTransition = {
   id: number
   taskId: number
@@ -29,9 +35,10 @@ export type ScheduledTransition = {
 type StoredScheduledTransition = Omit<ScheduledTransition, 'id'>
 
 const DB_NAME = 'todo-app'
-const DB_VERSION = 6
+const DB_VERSION = 7
 const TASKS_STORE = 'tasks'
 const STATUSES_STORE = 'statuses'
+const VIEWS_STORE = 'views'
 const SCHEDULED_TRANSITIONS_STORE = 'scheduledTransitions'
 const RELATIONSHIPS_STORE = 'relationships'
 
@@ -132,6 +139,17 @@ async function migrateAddStatuses(_db: IDBDatabase, transaction: IDBTransaction)
   })
 }
 
+async function migrateAddViews(transaction: IDBTransaction): Promise<void> {
+  // Seed one default view per existing status, so users start with views but
+  // can freely delete them afterward without them being regenerated.
+  const statusStore = transaction.objectStore(STATUSES_STORE)
+  const statuses = (await requestToPromise(statusStore.getAll())) as Status[]
+  const viewStore = transaction.objectStore(VIEWS_STORE)
+  for (const status of statuses) {
+    viewStore.put({ slug: status.slug, name: status.name, statusSlugs: [status.slug] })
+  }
+}
+
 async function migrateAddNotes(transaction: IDBTransaction): Promise<void> {
   const store = transaction.objectStore(TASKS_STORE)
   const cursorRequest = store.openCursor()
@@ -218,15 +236,26 @@ async function openTasksDatabase(): Promise<IDBDatabase> {
         })
       }
 
-      // v5 -> v6: add scheduledTransitions and relationships stores
+      // v5 -> v6: add views store (seeded with one default view per existing status) and relationships store
       if (event.oldVersion < 6) {
-        if (!db.objectStoreNames.contains(SCHEDULED_TRANSITIONS_STORE)) {
-          db.createObjectStore(SCHEDULED_TRANSITIONS_STORE, { autoIncrement: true })
+        if (!db.objectStoreNames.contains(VIEWS_STORE)) {
+          db.createObjectStore(VIEWS_STORE, { keyPath: 'slug' })
         }
+        migrateAddViews(transaction).catch(() => {
+          // Migration errors will surface as transaction abort
+        })
+
         if (!db.objectStoreNames.contains(RELATIONSHIPS_STORE)) {
           const relStore = db.createObjectStore(RELATIONSHIPS_STORE, { autoIncrement: true })
           relStore.createIndex('fromTaskId', 'fromTaskId', { unique: false })
           relStore.createIndex('toTaskId', 'toTaskId', { unique: false })
+        }
+      }
+
+      // v6 -> v7: add scheduledTransitions store
+      if (event.oldVersion < 7) {
+        if (!db.objectStoreNames.contains(SCHEDULED_TRANSITIONS_STORE)) {
+          db.createObjectStore(SCHEDULED_TRANSITIONS_STORE, { autoIncrement: true })
         }
       }
     }
@@ -369,6 +398,31 @@ export async function deleteTask(id: number): Promise<void> {
   const transaction = db.transaction(TASKS_STORE, 'readwrite')
   const store = transaction.objectStore(TASKS_STORE)
   store.delete(id)
+  await transactionToPromise(transaction)
+}
+
+export async function loadViews(): Promise<View[]> {
+  const db = await openTasksDatabase()
+  const transaction = db.transaction(VIEWS_STORE, 'readonly')
+  const store = transaction.objectStore(VIEWS_STORE)
+  const views = (await requestToPromise(store.getAll())) as View[]
+  await transactionToPromise(transaction)
+  return views
+}
+
+export async function saveView(view: View): Promise<void> {
+  const db = await openTasksDatabase()
+  const transaction = db.transaction(VIEWS_STORE, 'readwrite')
+  const store = transaction.objectStore(VIEWS_STORE)
+  store.put(view)
+  await transactionToPromise(transaction)
+}
+
+export async function deleteView(slug: string): Promise<void> {
+  const db = await openTasksDatabase()
+  const transaction = db.transaction(VIEWS_STORE, 'readwrite')
+  const store = transaction.objectStore(VIEWS_STORE)
+  store.delete(slug)
   await transactionToPromise(transaction)
 }
 
