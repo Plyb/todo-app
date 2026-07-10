@@ -61,10 +61,10 @@ export default function MainPage({
   const [fabPlaceholderIndex, setFabPlaceholderIndex] = useState<number | null>(null)
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null)
   const [statusModalOpen, setStatusModalOpen] = useState(false)
-  const [allRelationships, setAllRelationships] = useState<BlockingRelationship[]>([])
+  const [blockingRelationships, setBlockingRelationships] = useState<BlockingRelationship[]>([])
 
   useEffect(() => {
-    loadAllBlocks().then(setAllRelationships)
+    loadAllBlocks().then(setBlockingRelationships)
   }, [])
 
   const listRef = useRef<HTMLUListElement>(null)
@@ -214,7 +214,7 @@ export default function MainPage({
           <TaskRow
             task={task}
             onDoneChange={(done) => handleDoneChange(task.id, done)}
-            isBlocked={allRelationships.some((r) => r.toTaskId === task.id)}
+            isBlocked={blockingRelationships.some((r) => r.toTaskId === task.id)}
           />
         )}
         listRef={listRef}
@@ -245,7 +245,7 @@ export default function MainPage({
               onUpdateNotes={handleUpdateNotes}
               onOpenTask={(id) => setSelectedTaskId(id)}
               onDoneChange={handleDoneChange}
-              onRelationshipAdded={() => loadAllBlocks().then(setAllRelationships)}
+              onBlockingRelationshipAdded={() => loadAllBlocks().then(setBlockingRelationships)}
             />
           ),
         } : undefined}

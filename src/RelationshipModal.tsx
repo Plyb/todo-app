@@ -32,9 +32,9 @@ export function RelationshipGroup({ label, tasks, onOpenTask }: RelationshipGrou
   )
 }
 
-type DirectionButtonProps = { label: string; description: React.ReactNode; onClick: () => void }
+type TypeButtonProps = { label: string; description: React.ReactNode; onClick: () => void }
 
-function DirectionButton({ label, description, onClick }: DirectionButtonProps) {
+function TypeButton({ label, description, onClick }: TypeButtonProps) {
   return (
     <button
       onClick={onClick}
@@ -57,16 +57,16 @@ function DirectionButton({ label, description, onClick }: DirectionButtonProps) 
 
 type RelationshipModalState =
   | { view: 'search' }
-  | { view: 'choose-direction'; selectedTask: Task }
+  | { view: 'choose-type'; selectedTask: Task }
 
 type RelationshipModalProps = {
   currentTaskId: number
   allTasks: Task[]
   onClose: () => void
-  onRelationshipAdded?: () => void
+  onBlockingRelationshipAdded?: () => void
 }
 
-export function RelationshipModal({ currentTaskId, allTasks, onClose, onRelationshipAdded }: RelationshipModalProps) {
+export function RelationshipModal({ currentTaskId, allTasks, onClose, onBlockingRelationshipAdded }: RelationshipModalProps) {
   const [state, setState] = useState<RelationshipModalState>({ view: 'search' })
   const [query, setQuery] = useState('')
 
@@ -128,7 +128,7 @@ export function RelationshipModal({ currentTaskId, allTasks, onClose, onRelation
               filtered.map((task) => (
                 <div
                   key={task.id}
-                  onClick={() => setState({ view: 'choose-direction', selectedTask: task })}
+                  onClick={() => setState({ view: 'choose-type', selectedTask: task })}
                   style={{
                     padding: '10px 0',
                     borderBottom: '1px solid #eee',
@@ -142,7 +142,7 @@ export function RelationshipModal({ currentTaskId, allTasks, onClose, onRelation
           </>
         )}
 
-        {state.view === 'choose-direction' && (
+        {state.view === 'choose-type' && (
           <>
             <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12, gap: 8 }}>
               <button
@@ -151,26 +151,26 @@ export function RelationshipModal({ currentTaskId, allTasks, onClose, onRelation
               >
                 ←
               </button>
-              <span style={{ fontWeight: 700, fontSize: 16 }}>Choose relationship direction</span>
+              <span style={{ fontWeight: 700, fontSize: 16 }}>Choose relationship type</span>
             </div>
             <div style={{ color: '#888', fontSize: 14, marginBottom: 8 }}>
               Relating to: <strong>{state.selectedTask.name}</strong>
             </div>
-            <DirectionButton
+            <TypeButton
               label="Blocks"
               description={<>this task blocks <strong>{state.selectedTask.name}</strong></>}
               onClick={async () => {
                 await addBlock(currentTaskId, state.selectedTask.id, 'blocks')
-                onRelationshipAdded?.()
+                onBlockingRelationshipAdded?.()
                 onClose()
               }}
             />
-            <DirectionButton
+            <TypeButton
               label="Blocked By"
               description={<><strong>{state.selectedTask.name}</strong> blocks this task</>}
               onClick={async () => {
                 await addBlock(state.selectedTask.id, currentTaskId, 'blocks')
-                onRelationshipAdded?.()
+                onBlockingRelationshipAdded?.()
                 onClose()
               }}
             />
