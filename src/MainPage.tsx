@@ -98,6 +98,7 @@ export default function MainPage({
   const [viewModalOpen, setViewModalOpen] = useState(false)
   const [blockingRelationships, setBlockingRelationships] = useState<BlockingRelationship[]>([])
   const [pullDistance, setPullDistance] = useState(0)
+  const [isTouching, setIsTouching] = useState(false)
 
   useEffect(() => {
     loadAllBlocks().then(setBlockingRelationships)
@@ -129,9 +130,11 @@ export default function MainPage({
     }
     function handleTouchStart() {
       isTouchingRef.current = true
+      setIsTouching(true)
     }
     function handleTouchEnd() {
       isTouchingRef.current = false
+      setIsTouching(false)
       const noModalOpen = selectedTaskId === null && !viewModalOpen
       // Deferred to release (rather than triggering the instant pullDistance crosses the
       // threshold) so a finger lifted early doesn't open the modal, and so residual scroll
@@ -365,6 +368,10 @@ export default function MainPage({
   )
 
   const overscrollPct = Math.min(1, pullDistance / OVERSCROLL_TRIGGER_DISTANCE)
+  // "Armed" means releasing right now would open the view selector - full pie alone
+  // isn't enough, since a bounce-back after the finger already lifted can still read
+  // as pullDistance >= threshold without a touch in progress.
+  const overscrollArmed = overscrollPct >= 1 && isTouching
   const overscrollIndicator = overscrollPct > 0 && selectedTaskId === null && !viewModalOpen && (
     <div
       style={{
@@ -376,7 +383,7 @@ export default function MainPage({
         height: 28,
         borderRadius: '50%',
         pointerEvents: 'none',
-        color: overscrollPct >= 1 ? '#1a73e8' : '#9e9e9e',
+        color: overscrollArmed ? '#1a73e8' : '#9e9e9e',
         background: `conic-gradient(currentColor ${overscrollPct * 100}%, transparent ${overscrollPct * 100}%)`,
       }}
     />
