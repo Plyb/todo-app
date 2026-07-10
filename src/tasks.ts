@@ -22,10 +22,13 @@ export type Subtask = {
   rank: string
 }
 
+export type BlockingRelationship = { id: number; fromTaskId: number; toTaskId: number; type: 'blocks' }
+
 type StoredTask = Omit<Task, 'id'>
+type StoredBlockingRelationship = Omit<BlockingRelationship, 'id'>
 
 const DB_NAME = 'todo-app'
-const DB_VERSION = 8
+const DB_VERSION = 7
 const TASKS_STORE = 'tasks'
 const STATUSES_STORE = 'statuses'
 const RELATIONSHIPS_STORE = 'relationships'
@@ -226,18 +229,11 @@ async function openTasksDatabase(): Promise<IDBDatabase> {
           })
         }
 
-        // v7 -> v8: remove parentId field from existing records
-        if (event.oldVersion < 8) {
+        // v6 -> v7: remove parentId field from existing records
+        if (event.oldVersion < 7) {
           migrateRemoveParentId(transaction).catch(() => {
             // Migration errors will surface as transaction abort
           })
-        }
-      }
-
-      // v6 -> v7: remove relationships store (superseded by subtasks store in v8)
-      if (event.oldVersion < 7) {
-        if (db.objectStoreNames.contains(RELATIONSHIPS_STORE)) {
-          db.deleteObjectStore(RELATIONSHIPS_STORE)
         }
       }
 
@@ -251,8 +247,17 @@ async function openTasksDatabase(): Promise<IDBDatabase> {
         })
       }
 
-      // v7 -> v8: add subtasks store
-      if (event.oldVersion < 8) {
+      // v5 -> v6: add relationships store
+      if (event.oldVersion < 6) {
+        if (!db.objectStoreNames.contains(RELATIONSHIPS_STORE)) {
+          const relStore = db.createObjectStore(RELATIONSHIPS_STORE, { autoIncrement: true })
+          relStore.createIndex('fromTaskId', 'fromTaskId', { unique: false })
+          relStore.createIndex('toTaskId', 'toTaskId', { unique: false })
+        }
+      }
+
+      // v6 -> v7: add subtasks store
+      if (event.oldVersion < 7) {
         if (!db.objectStoreNames.contains(SUBTASKS_STORE)) {
           const subtasksStore = db.createObjectStore(SUBTASKS_STORE, { keyPath: 'id', autoIncrement: true })
           subtasksStore.createIndex('by_parent', 'parentId', { unique: false })
@@ -460,6 +465,55 @@ export async function deleteSubtask(id: number): Promise<void> {
   const db = await openTasksDatabase()
   const transaction = db.transaction(SUBTASKS_STORE, 'readwrite')
   const store = transaction.objectStore(SUBTASKS_STORE)
+  store.delete(id)
+  await transactionToPromise(transaction)
+}
+
+export async function loadBlocks(taskId: number): Promise<BlockingRelationship[]> {
+  const db = await openTasksDatabase()
+  const transaction = db.transaction(RELATIONSHIPS_STORE, 'readonly')
+  const store = transaction.objectStore(RELATIONSHIPS_STORE)
+
+  const fromIndex = store.index('fromTaskId')
+  const toIndex = store.index('toTaskId')
+
+  const fromRecords = (await requestToPromise(fromIndex.getAll(taskId))) as StoredBlockingRelationship[]
+  const fromKeys = await requestToPromise(fromIndex.getAllKeys(taskId))
+  const toRecords = (await requestToPromise(toIndex.getAll(taskId))) as StoredBlockingRelationship[]
+  const toKeys = await requestToPromise(toIndex.getAllKeys(taskId))
+  await transactionToPromise(transaction)
+
+  const from = fromRecords.map((r, i) => ({ ...r, id: keyToTaskId(fromKeys[i]) }))
+  const to = toRecords.map((r, i) => ({ ...r, id: keyToTaskId(toKeys[i]) }))
+  return [...from, ...to]
+}
+
+export async function loadAllBlocks(): Promise<BlockingRelationship[]> {
+  const db = await openTasksDatabase()
+  const transaction = db.transaction(RELATIONSHIPS_STORE, 'readonly')
+  const store = transaction.objectStore(RELATIONSHIPS_STORE)
+
+  const records = (await requestToPromise(store.getAll())) as StoredBlockingRelationship[]
+  const keys = await requestToPromise(store.getAllKeys())
+  await transactionToPromise(transaction)
+
+  return records.map((r, i) => ({ ...r, id: keyToTaskId(keys[i]) }))
+}
+
+export async function addBlock(fromTaskId: number, toTaskId: number, type: 'blocks'): Promise<BlockingRelationship> {
+  const db = await openTasksDatabase()
+  const transaction = db.transaction(RELATIONSHIPS_STORE, 'readwrite')
+  const store = transaction.objectStore(RELATIONSHIPS_STORE)
+  const stored: StoredBlockingRelationship = { fromTaskId, toTaskId, type }
+  const key = await requestToPromise(store.add(stored))
+  await transactionToPromise(transaction)
+  return { id: keyToTaskId(key), fromTaskId, toTaskId, type }
+}
+
+export async function deleteBlock(id: number): Promise<void> {
+  const db = await openTasksDatabase()
+  const transaction = db.transaction(RELATIONSHIPS_STORE, 'readwrite')
+  const store = transaction.objectStore(RELATIONSHIPS_STORE)
   store.delete(id)
   await transactionToPromise(transaction)
 }

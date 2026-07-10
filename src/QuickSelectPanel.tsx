@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Task, Status, Subtask } from './tasks'
-import { loadSubtasks, createSubtask, updateSubtaskDone, updateSubtaskRank } from './tasks'
+import type { Task, Status, Subtask, BlockingRelationship } from './tasks'
+import { loadSubtasks, createSubtask, updateSubtaskDone, updateSubtaskRank, loadBlocks } from './tasks'
 import { StatusModal } from './StatusModal'
-import { RelationshipModal } from './RelationshipModal'
+import { RelationshipModal, RelationshipGroup } from './RelationshipModal'
 import { DraggableList } from './DraggableList'
 import { rankBetween } from './rank-utils'
 
@@ -16,16 +16,19 @@ type QuickSelectPanelProps = {
   onChangeStatus: (id: number, statusSlug: string) => void
   onDelete: (id: number) => void
   onUpdateNotes: (id: number, notes: string) => void
+  onOpenTask: (id: number) => void
   onDoneChange: (id: number, done: boolean) => void
+  onBlockingRelationshipAdded?: () => void
 }
 
-export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, onClose, onRename, onChangeStatus, onDelete, onUpdateNotes, onDoneChange }: QuickSelectPanelProps) {
+export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, onClose, onRename, onChangeStatus, onDelete, onUpdateNotes, onOpenTask, onDoneChange, onBlockingRelationshipAdded }: QuickSelectPanelProps) {
   const [name, setName] = useState(task.name)
   const [backdropReady, setBackdropReady] = useState(false)
   const [statusModalOpen, setStatusModalOpen] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
   const [showRelationshipModal, setShowRelationshipModal] = useState(false)
   const [notes, setNotes] = useState(task.notes)
+  const [blockingRelationships, setBlockingRelationships] = useState<BlockingRelationship[]>([])
   const [expanded, setExpanded] = useState(false)
   const [subtasks, setSubtasks] = useState<Subtask[]>([])
   const [newSubtaskName, setNewSubtaskName] = useState('')
@@ -45,6 +48,15 @@ export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, 
     loadSubtasks(task.id).then(setSubtasks)
   }, [task.id])
 
+  useEffect(() => {
+    loadBlocks(task.id).then(setBlockingRelationships)
+  }, [task.id])
+
+  function reloadRelationships() {
+    loadBlocks(task.id).then(setBlockingRelationships)
+    onBlockingRelationshipAdded?.()
+  }
+
   const currentStatus = statuses.find((s) => s.slug === task.statusSlug)
 
   function handleClose() {
@@ -63,6 +75,27 @@ export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, 
   }
 
   function handleBlur() { commitRename() }
+
+  const blocksGroup = {
+    label: 'Blocks',
+    tasks: blockingRelationships
+      .filter((r) => r.fromTaskId === task.id)
+      .map((r) => allTasks.find((t) => t.id === r.toTaskId))
+      .filter((t): t is Task => t !== undefined),
+  }
+
+  const blockedByGroup = {
+    label: 'Blocked by',
+    tasks: blockingRelationships
+      .filter((r) => r.toTaskId === task.id)
+      .map((r) => allTasks.find((t) => t.id === r.fromTaskId))
+      .filter((t): t is Task => t !== undefined),
+  }
+
+  const relatedGroups: Array<{ label: string; tasks: Task[] }> = [
+    ...(blocksGroup.tasks.length > 0 ? [blocksGroup] : []),
+    ...(blockedByGroup.tasks.length > 0 ? [blockedByGroup] : []),
+  ]
 
   function handleNotesBlur() {
     if (notes !== task.notes) {
@@ -238,9 +271,25 @@ export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, 
           </div>
 
           <div style={{ marginTop: 16 }}>
+            <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 8 }}>Related Tasks</div>
+
+            {relatedGroups.length === 0 ? (
+              <div style={{ color: '#aaa', fontSize: 14, marginBottom: 12 }}>No related tasks</div>
+            ) : (
+              relatedGroups.map((group) => (
+                <RelationshipGroup
+                  key={group.label}
+                  label={group.label}
+                  tasks={group.tasks}
+                  onOpenTask={onOpenTask}
+                />
+              ))
+            )}
+
             <button
               onClick={() => setShowRelationshipModal(true)}
               style={{
+                marginTop: 4,
                 padding: '8px 16px',
                 backgroundColor: '#1a73e8',
                 color: '#fff',
@@ -271,6 +320,7 @@ export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, 
           currentTaskId={task.id}
           allTasks={allTasks}
           onClose={() => setShowRelationshipModal(false)}
+          onBlockingRelationshipAdded={reloadRelationships}
         />
       )}
     </>

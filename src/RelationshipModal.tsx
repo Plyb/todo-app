@@ -1,5 +1,59 @@
 import { useState } from 'react'
 import type { Task } from './tasks'
+import { addBlock } from './tasks'
+
+type RelatedTaskEntryProps = { task: Task; onOpen: (id: number) => void }
+
+export function RelatedTaskEntry({ task, onOpen }: RelatedTaskEntryProps) {
+  return (
+    <div
+      onClick={() => onOpen(task.id)}
+      style={{
+        padding: '8px 0',
+        cursor: 'pointer',
+        borderBottom: '1px solid #eee',
+      }}
+    >
+      {task.name}
+    </div>
+  )
+}
+
+type RelationshipGroupProps = { label: string; tasks: Task[]; onOpenTask: (id: number) => void }
+
+export function RelationshipGroup({ label, tasks, onOpenTask }: RelationshipGroupProps) {
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ fontWeight: 600, fontSize: 13, color: '#555', marginBottom: 4 }}>{label}</div>
+      {tasks.map((task) => (
+        <RelatedTaskEntry key={task.id} task={task} onOpen={onOpenTask} />
+      ))}
+    </div>
+  )
+}
+
+type TypeButtonProps = { label: string; description: React.ReactNode; onClick: () => void }
+
+function TypeButton({ label, description, onClick }: TypeButtonProps) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        width: '100%',
+        padding: '12px 16px',
+        textAlign: 'left',
+        background: '#f5f5f5',
+        border: '1px solid #ddd',
+        borderRadius: 8,
+        cursor: 'pointer',
+        fontSize: 15,
+        marginBottom: 8,
+      }}
+    >
+      <strong>{label}</strong> — {description}
+    </button>
+  )
+}
 
 type RelationshipModalState =
   | { view: 'search' }
@@ -9,9 +63,10 @@ type RelationshipModalProps = {
   currentTaskId: number
   allTasks: Task[]
   onClose: () => void
+  onBlockingRelationshipAdded?: () => void
 }
 
-export function RelationshipModal({ currentTaskId, allTasks, onClose }: RelationshipModalProps) {
+export function RelationshipModal({ currentTaskId, allTasks, onClose, onBlockingRelationshipAdded }: RelationshipModalProps) {
   const [state, setState] = useState<RelationshipModalState>({ view: 'search' })
   const [query, setQuery] = useState('')
 
@@ -101,9 +156,24 @@ export function RelationshipModal({ currentTaskId, allTasks, onClose }: Relation
             <div style={{ color: '#888', fontSize: 14, marginBottom: 8 }}>
               Relating to: <strong>{state.selectedTask.name}</strong>
             </div>
-            <div style={{ color: '#aaa', textAlign: 'center', padding: '16px 0' }}>
-              No relationship types available
-            </div>
+            <TypeButton
+              label="Blocks"
+              description={<>this task blocks <strong>{state.selectedTask.name}</strong></>}
+              onClick={async () => {
+                await addBlock(currentTaskId, state.selectedTask.id, 'blocks')
+                onBlockingRelationshipAdded?.()
+                onClose()
+              }}
+            />
+            <TypeButton
+              label="Blocked By"
+              description={<><strong>{state.selectedTask.name}</strong> blocks this task</>}
+              onClick={async () => {
+                await addBlock(state.selectedTask.id, currentTaskId, 'blocks')
+                onBlockingRelationshipAdded?.()
+                onClose()
+              }}
+            />
           </>
         )}
       </div>
