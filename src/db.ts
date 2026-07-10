@@ -35,7 +35,7 @@ export type ScheduledTransition = {
 type StoredScheduledTransition = Omit<ScheduledTransition, 'id'>
 
 const DB_NAME = 'todo-app'
-const DB_VERSION = 6
+const DB_VERSION = 7
 const TASKS_STORE = 'tasks'
 const STATUSES_STORE = 'statuses'
 const VIEWS_STORE = 'views'
@@ -236,8 +236,7 @@ async function openTasksDatabase(): Promise<IDBDatabase> {
         })
       }
 
-      // v5 -> v6: add views store (seeded with one default view per existing status),
-      // scheduledTransitions store, and relationships store
+      // v5 -> v6: add views store (seeded with one default view per existing status) and relationships store
       if (event.oldVersion < 6) {
         if (!db.objectStoreNames.contains(VIEWS_STORE)) {
           db.createObjectStore(VIEWS_STORE, { keyPath: 'slug' })
@@ -246,14 +245,17 @@ async function openTasksDatabase(): Promise<IDBDatabase> {
           // Migration errors will surface as transaction abort
         })
 
-        if (!db.objectStoreNames.contains(SCHEDULED_TRANSITIONS_STORE)) {
-          db.createObjectStore(SCHEDULED_TRANSITIONS_STORE, { autoIncrement: true })
-        }
-
         if (!db.objectStoreNames.contains(RELATIONSHIPS_STORE)) {
           const relStore = db.createObjectStore(RELATIONSHIPS_STORE, { autoIncrement: true })
           relStore.createIndex('fromTaskId', 'fromTaskId', { unique: false })
           relStore.createIndex('toTaskId', 'toTaskId', { unique: false })
+        }
+      }
+
+      // v6 -> v7: add scheduledTransitions store
+      if (event.oldVersion < 7) {
+        if (!db.objectStoreNames.contains(SCHEDULED_TRANSITIONS_STORE)) {
+          db.createObjectStore(SCHEDULED_TRANSITIONS_STORE, { autoIncrement: true })
         }
       }
     }
