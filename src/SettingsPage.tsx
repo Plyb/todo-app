@@ -1,8 +1,14 @@
 import { useState } from 'react'
 import type { Status } from './tasks'
 
-const loadAutoArchiveSetting = (): string => localStorage.getItem('auto-archive-status-slug') ?? 'none'
-const saveAutoArchiveSetting = (slug: string): void => { localStorage.setItem('auto-archive-status-slug', slug) }
+const loadAutoArchiveSetting = (): string | null => localStorage.getItem('auto-archive-status-slug')
+const saveAutoArchiveSetting = (slug: string | null): void => {
+  if (slug === null) {
+    localStorage.removeItem('auto-archive-status-slug')
+  } else {
+    localStorage.setItem('auto-archive-status-slug', slug)
+  }
+}
 
 type SettingsPageProps = {
   onBack: () => void
@@ -13,7 +19,7 @@ export default function SettingsPage({ onBack, statuses }: SettingsPageProps) {
   const [autoArchiveSlug, setAutoArchiveSlug] = useState(loadAutoArchiveSetting)
 
   function handleAutoArchiveChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    const slug = e.target.value
+    const slug = e.target.value === '' ? null : e.target.value
     setAutoArchiveSlug(slug)
     saveAutoArchiveSetting(slug)
   }
@@ -23,8 +29,8 @@ export default function SettingsPage({ onBack, statuses }: SettingsPageProps) {
       <button onClick={onBack} style={{ position: 'fixed', top: 16, left: 16 }}>←</button>
       <section>
         <label htmlFor="auto-archive-select">Auto-archive done tasks</label>
-        <select id="auto-archive-select" value={autoArchiveSlug} onChange={handleAutoArchiveChange} style={{ marginLeft: 8 }}>
-          <option value="none">None</option>
+        <select id="auto-archive-select" value={autoArchiveSlug ?? ''} onChange={handleAutoArchiveChange} style={{ marginLeft: 8 }}>
+          <option value="">None</option>
           {statuses.map(s => (
             <option key={s.slug} value={s.slug}>{s.name}</option>
           ))}

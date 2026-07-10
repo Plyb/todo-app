@@ -24,8 +24,8 @@ export default function App() {
   useEffect(() => {
     if (tasks.length === 0 || archiveRan.current) return
     archiveRan.current = true
-    const slug = localStorage.getItem('auto-archive-status-slug') ?? 'none'
-    if (slug === 'none') return
+    const slug = localStorage.getItem('auto-archive-status-slug')
+    if (!slug) return
     const lastRun = localStorage.getItem('auto-archive-last-run')
     const today = new Date().toDateString()
     if (lastRun === today) return
