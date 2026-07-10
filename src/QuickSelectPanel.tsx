@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { Task, Status, BlockingRelationship } from './tasks'
 import { loadBlocks } from './tasks'
 import { StatusModal } from './StatusModal'
-import { BlockingModal, BlockingGroup } from './BlockingModal'
+import { RelationshipModal, RelationshipGroup } from './RelationshipModal'
 
 type QuickSelectPanelProps = {
   task: Task
@@ -16,17 +16,17 @@ type QuickSelectPanelProps = {
   onUpdateNotes: (id: number, notes: string) => void
   onOpenTask: (id: number) => void
   onDoneChange: (id: number, done: boolean) => void
-  onBlockAdded?: () => void
+  onRelationshipAdded?: () => void
 }
 
-export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, onClose, onRename, onChangeStatus, onDelete, onUpdateNotes, onOpenTask, onDoneChange, onBlockAdded }: QuickSelectPanelProps) {
+export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, onClose, onRename, onChangeStatus, onDelete, onUpdateNotes, onOpenTask, onDoneChange, onRelationshipAdded }: QuickSelectPanelProps) {
   const [name, setName] = useState(task.name)
   const [showModal, setShowModal] = useState(false)
   const [backdropReady, setBackdropReady] = useState(false)
   const [statusModalOpen, setStatusModalOpen] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
   const [notes, setNotes] = useState(task.notes)
-  const [blocks, setBlocks] = useState<BlockingRelationship[]>([])
+  const [relationships, setRelationships] = useState<BlockingRelationship[]>([])
   const [expanded, setExpanded] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -41,12 +41,12 @@ export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, 
   }, [])
 
   useEffect(() => {
-    loadBlocks(task.id).then(setBlocks)
+    loadBlocks(task.id).then(setRelationships)
   }, [task.id])
 
-  function reloadBlocks() {
-    loadBlocks(task.id).then(setBlocks)
-    onBlockAdded?.()
+  function reloadRelationships() {
+    loadBlocks(task.id).then(setRelationships)
+    onRelationshipAdded?.()
   }
 
   const currentStatus = statuses.find((s) => s.slug === task.statusSlug)
@@ -70,7 +70,7 @@ export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, 
 
   const blocksGroup = {
     label: 'Blocks',
-    tasks: blocks
+    tasks: relationships
       .filter((r) => r.fromTaskId === task.id)
       .map((r) => allTasks.find((t) => t.id === r.toTaskId))
       .filter((t): t is Task => t !== undefined),
@@ -78,7 +78,7 @@ export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, 
 
   const blockedByGroup = {
     label: 'Blocked by',
-    tasks: blocks
+    tasks: relationships
       .filter((r) => r.toTaskId === task.id)
       .map((r) => allTasks.find((t) => t.id === r.fromTaskId))
       .filter((t): t is Task => t !== undefined),
@@ -200,7 +200,7 @@ export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, 
               <div style={{ color: '#aaa', fontSize: 14, marginBottom: 12 }}>No related tasks</div>
             ) : (
               relatedGroups.map((group) => (
-                <BlockingGroup
+                <RelationshipGroup
                   key={group.label}
                   label={group.label}
                   tasks={group.tasks}
@@ -222,7 +222,7 @@ export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, 
                 fontSize: 14,
               }}
             >
-              Add Blocking Relationship
+              Add Relationship
             </button>
           </div>
         </div>
@@ -239,11 +239,11 @@ export function QuickSelectPanel({ task, statuses, recentStatusSlugs, allTasks, 
       )}
 
       {showModal && (
-        <BlockingModal
+        <RelationshipModal
           currentTaskId={task.id}
           allTasks={allTasks}
           onClose={() => setShowModal(false)}
-          onBlockAdded={reloadBlocks}
+          onRelationshipAdded={reloadRelationships}
         />
       )}
     </>

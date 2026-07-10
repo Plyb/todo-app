@@ -19,9 +19,9 @@ export function RelatedTaskEntry({ task, onOpen }: RelatedTaskEntryProps) {
   )
 }
 
-type BlockingGroupProps = { label: string; tasks: Task[]; onOpenTask: (id: number) => void }
+type RelationshipGroupProps = { label: string; tasks: Task[]; onOpenTask: (id: number) => void }
 
-export function BlockingGroup({ label, tasks, onOpenTask }: BlockingGroupProps) {
+export function RelationshipGroup({ label, tasks, onOpenTask }: RelationshipGroupProps) {
   return (
     <div style={{ marginBottom: 12 }}>
       <div style={{ fontWeight: 600, fontSize: 13, color: '#555', marginBottom: 4 }}>{label}</div>
@@ -55,19 +55,19 @@ function DirectionButton({ label, description, onClick }: DirectionButtonProps) 
   )
 }
 
-type BlockingModalState =
+type RelationshipModalState =
   | { view: 'search' }
   | { view: 'choose-direction'; selectedTask: Task }
 
-type BlockingModalProps = {
+type RelationshipModalProps = {
   currentTaskId: number
   allTasks: Task[]
   onClose: () => void
-  onBlockAdded?: () => void
+  onRelationshipAdded?: () => void
 }
 
-export function BlockingModal({ currentTaskId, allTasks, onClose, onBlockAdded }: BlockingModalProps) {
-  const [state, setState] = useState<BlockingModalState>({ view: 'search' })
+export function RelationshipModal({ currentTaskId, allTasks, onClose, onRelationshipAdded }: RelationshipModalProps) {
+  const [state, setState] = useState<RelationshipModalState>({ view: 'search' })
   const [query, setQuery] = useState('')
 
   const otherTasks = allTasks.filter((t) => t.id !== currentTaskId)
@@ -101,7 +101,7 @@ export function BlockingModal({ currentTaskId, allTasks, onClose, onBlockAdded }
         {state.view === 'search' && (
           <>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <span style={{ fontWeight: 700, fontSize: 16 }}>Add Blocking Relationship</span>
+              <span style={{ fontWeight: 700, fontSize: 16 }}>Add Relationship</span>
               <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer' }}>
                 ✕
               </button>
@@ -151,7 +151,7 @@ export function BlockingModal({ currentTaskId, allTasks, onClose, onBlockAdded }
               >
                 ←
               </button>
-              <span style={{ fontWeight: 700, fontSize: 16 }}>Choose blocking direction</span>
+              <span style={{ fontWeight: 700, fontSize: 16 }}>Choose relationship direction</span>
             </div>
             <div style={{ color: '#888', fontSize: 14, marginBottom: 8 }}>
               Relating to: <strong>{state.selectedTask.name}</strong>
@@ -161,7 +161,7 @@ export function BlockingModal({ currentTaskId, allTasks, onClose, onBlockAdded }
               description={<>this task blocks <strong>{state.selectedTask.name}</strong></>}
               onClick={async () => {
                 await addBlock(currentTaskId, state.selectedTask.id, 'blocks')
-                onBlockAdded?.()
+                onRelationshipAdded?.()
                 onClose()
               }}
             />
@@ -170,7 +170,7 @@ export function BlockingModal({ currentTaskId, allTasks, onClose, onBlockAdded }
               description={<><strong>{state.selectedTask.name}</strong> blocks this task</>}
               onClick={async () => {
                 await addBlock(state.selectedTask.id, currentTaskId, 'blocks')
-                onBlockAdded?.()
+                onRelationshipAdded?.()
                 onClose()
               }}
             />
