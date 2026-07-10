@@ -5,9 +5,10 @@ type StatusModalProps = {
   currentStatusSlug: string
   onSelect: (slug: string) => void
   onClose: () => void
+  title?: string
 }
 
-export function StatusModal({ statuses, currentStatusSlug, onSelect, onClose }: StatusModalProps) {
+export function StatusModal({ statuses, currentStatusSlug, onSelect, onClose, title = 'Set Status' }: StatusModalProps) {
   return (
     <div
       onClick={onClose}
@@ -37,7 +38,7 @@ export function StatusModal({ statuses, currentStatusSlug, onSelect, onClose }: 
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 16px 4px' }}>
-          <span style={{ fontWeight: 600, fontSize: 16 }}>Set Status</span>
+          <span style={{ fontWeight: 600, fontSize: 16 }}>{title}</span>
           <button
             onClick={onClose}
             style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: 4 }}

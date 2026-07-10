@@ -316,6 +316,103 @@ export async function loadStatuses(): Promise<Status[]> {
   return statuses
 }
 
+export async function createStatus(name: string, slug: string): Promise<Status> {
+  const db = await openTasksDatabase()
+  const transaction = db.transaction(STATUSES_STORE, 'readwrite')
+  const store = transaction.objectStore(STATUSES_STORE)
+  const status: Status = { slug, name }
+  store.add(status)
+  await transactionToPromise(transaction)
+  return status
+}
+
+async function reassignTasksAndViews(transaction: IDBTransaction, oldSlug: string, newSlug: string): Promise<void> {
+  const taskStore = transaction.objectStore(TASKS_STORE)
+  const cursorRequest = taskStore.openCursor()
+
+  await new Promise<void>((resolve, reject) => {
+    cursorRequest.onsuccess = () => {
+      const cursor = cursorRequest.result
+      if (!cursor) {
+        resolve()
+        return
+      }
+
+      const record = cursor.value as StoredTask
+      if (record.statusSlug === oldSlug) {
+        cursor.update({ ...record, statusSlug: newSlug })
+      }
+      cursor.continue()
+    }
+
+    cursorRequest.onerror = () => reject(cursorRequest.error)
+  })
+
+  const viewStore = transaction.objectStore(VIEWS_STORE)
+  const views = (await requestToPromise(viewStore.getAll())) as View[]
+  for (const view of views) {
+    if (view.statusSlugs.includes(oldSlug)) {
+      viewStore.put({ ...view, statusSlugs: view.statusSlugs.map((s) => (s === oldSlug ? newSlug : s)) })
+    }
+  }
+}
+
+export async function updateStatus(oldSlug: string, newSlug: string, newName: string): Promise<void> {
+  const db = await openTasksDatabase()
+  const transaction = db.transaction([STATUSES_STORE, TASKS_STORE, VIEWS_STORE], 'readwrite')
+  const statusStore = transaction.objectStore(STATUSES_STORE)
+
+  if (oldSlug !== newSlug) {
+    statusStore.delete(oldSlug)
+    await reassignTasksAndViews(transaction, oldSlug, newSlug)
+  }
+  statusStore.put({ slug: newSlug, name: newName })
+
+  await transactionToPromise(transaction)
+}
+
+export async function deleteStatus(slug: string): Promise<void> {
+  const db = await openTasksDatabase()
+  const transaction = db.transaction(STATUSES_STORE, 'readwrite')
+  const store = transaction.objectStore(STATUSES_STORE)
+  store.delete(slug)
+  await transactionToPromise(transaction)
+}
+
+export type StatusUsage = { taskIds: number[]; viewSlugs: string[] }
+
+export async function getStatusUsage(slug: string): Promise<StatusUsage> {
+  const db = await openTasksDatabase()
+  const transaction = db.transaction([TASKS_STORE, VIEWS_STORE], 'readonly')
+  const taskStore = transaction.objectStore(TASKS_STORE)
+  const viewStore = transaction.objectStore(VIEWS_STORE)
+
+  const storedTasks = (await requestToPromise(taskStore.getAll())) as StoredTask[]
+  const taskKeys = await requestToPromise(taskStore.getAllKeys())
+  const views = (await requestToPromise(viewStore.getAll())) as View[]
+  await transactionToPromise(transaction)
+
+  const taskIds = storedTasks
+    .map((task, index) => ({ id: keyToTaskId(taskKeys[index]), statusSlug: task.statusSlug }))
+    .filter((t) => t.statusSlug === slug)
+    .map((t) => t.id)
+  const viewSlugs = views.filter((v) => v.statusSlugs.includes(slug)).map((v) => v.slug)
+
+  return { taskIds, viewSlugs }
+}
+
+export async function isStatusInUse(slug: string): Promise<boolean> {
+  const usage = await getStatusUsage(slug)
+  return usage.taskIds.length > 0 || usage.viewSlugs.length > 0
+}
+
+export async function reassignStatus(fromSlug: string, toSlug: string): Promise<void> {
+  const db = await openTasksDatabase()
+  const transaction = db.transaction([TASKS_STORE, VIEWS_STORE], 'readwrite')
+  await reassignTasksAndViews(transaction, fromSlug, toSlug)
+  await transactionToPromise(transaction)
+}
+
 export async function createTask(name: string, rank: string, statusSlug: string = 'backlog'): Promise<Task> {
   const db = await openTasksDatabase()
   const transaction = db.transaction(TASKS_STORE, 'readwrite')
