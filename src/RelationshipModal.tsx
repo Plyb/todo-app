@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { Task } from './tasks'
+import { addBlock } from './tasks'
 
 type RelatedTaskEntryProps = { task: Task; onOpen: (id: number) => void }
 
@@ -31,6 +32,29 @@ export function RelationshipGroup({ label, tasks, onOpenTask }: RelationshipGrou
   )
 }
 
+type TypeButtonProps = { label: string; description: React.ReactNode; onClick: () => void }
+
+function TypeButton({ label, description, onClick }: TypeButtonProps) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        width: '100%',
+        padding: '12px 16px',
+        textAlign: 'left',
+        background: '#f5f5f5',
+        border: '1px solid #ddd',
+        borderRadius: 8,
+        cursor: 'pointer',
+        fontSize: 15,
+        marginBottom: 8,
+      }}
+    >
+      <strong>{label}</strong> — {description}
+    </button>
+  )
+}
+
 type RelationshipModalState =
   | { view: 'search' }
   | { view: 'choose-type'; selectedTask: Task }
@@ -39,9 +63,10 @@ type RelationshipModalProps = {
   currentTaskId: number
   allTasks: Task[]
   onClose: () => void
+  onBlockingRelationshipAdded?: () => void
 }
 
-export function RelationshipModal({ currentTaskId, allTasks, onClose }: RelationshipModalProps) {
+export function RelationshipModal({ currentTaskId, allTasks, onClose, onBlockingRelationshipAdded }: RelationshipModalProps) {
   const [state, setState] = useState<RelationshipModalState>({ view: 'search' })
   const [query, setQuery] = useState('')
 
@@ -131,9 +156,24 @@ export function RelationshipModal({ currentTaskId, allTasks, onClose }: Relation
             <div style={{ color: '#888', fontSize: 14, marginBottom: 8 }}>
               Relating to: <strong>{state.selectedTask.name}</strong>
             </div>
-            <div style={{ color: '#aaa', textAlign: 'center', padding: '16px 0' }}>
-              No relationship types available yet
-            </div>
+            <TypeButton
+              label="Blocks"
+              description={<>this task blocks <strong>{state.selectedTask.name}</strong></>}
+              onClick={async () => {
+                await addBlock(currentTaskId, state.selectedTask.id, 'blocks')
+                onBlockingRelationshipAdded?.()
+                onClose()
+              }}
+            />
+            <TypeButton
+              label="Blocked By"
+              description={<><strong>{state.selectedTask.name}</strong> blocks this task</>}
+              onClick={async () => {
+                await addBlock(state.selectedTask.id, currentTaskId, 'blocks')
+                onBlockingRelationshipAdded?.()
+                onClose()
+              }}
+            />
           </>
         )}
       </div>
