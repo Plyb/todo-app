@@ -46,9 +46,7 @@ function TaskRow({ task, onDoneChange, showIndicator }: { task: Task; onDoneChan
         {task.name}
       </span>
       {showIndicator && (
-        <span style={{ marginLeft: 6, fontSize: 12, background: '#7b1fa2', color: '#fff', borderRadius: 4, padding: '1px 5px', verticalAlign: 'middle' }}>
-          auto
-        </span>
+        <span style={{ marginLeft: 6, width: 8, height: 8, borderRadius: '50%', background: '#fbc02d', display: 'inline-block', verticalAlign: 'middle' }} />
       )}
     </>
   )
@@ -92,6 +90,24 @@ export default function MainPage({
   }, [])
 
   const displayedTasks = tasks.filter((t) => t.statusSlug === currentStatusSlug)
+
+  const displayedTasksRef = useRef(displayedTasks)
+  displayedTasksRef.current = displayedTasks
+  const autoTransitionedTaskIdsRef = useRef(autoTransitionedTaskIds)
+  autoTransitionedTaskIdsRef.current = autoTransitionedTaskIds
+
+  useEffect(() => {
+    // Cleanup reads the refs (not a closed-over displayedTasks/autoTransitionedTaskIds)
+    // so it clears indicators for whatever was actually shown right before navigating
+    // away, not whatever was shown when this effect last ran.
+    return () => {
+      displayedTasksRef.current.forEach((task) => {
+        if (autoTransitionedTaskIdsRef.current?.has(task.id)) {
+          onClearAutoTransitionIndicator?.(task.id)
+        }
+      })
+    }
+  }, [currentStatusSlug])
 
   function openInput(insertIndex: number) {
     inputKeyRef.current++
