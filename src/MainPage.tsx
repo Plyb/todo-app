@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import PullToRefresh from 'pulltorefreshjs'
 import { createTask, deleteTask, loadAllBlocks, updateTaskDone, updateTaskName, updateTaskNotes, updateTaskRank, updateTaskStatus, type BlockingRelationship, type Task, type Status, type View } from './db'
 import { DraggableList } from './DraggableList'
 import { AddTaskFab, NewTaskInputField, computeInsertRank, type NewTaskInput, type InsertSlotTarget } from './AddTaskInput'
 import { rankBetween } from './rank-utils'
 import { QuickSelectPanel } from './QuickSelectPanel'
 import { ViewModal } from './ViewModal'
+
+const OVERSCROLL_TRIGGER_DISTANCE = 100
 
 type MainPageProps = {
   tasks: Task[]
@@ -71,6 +72,7 @@ export default function MainPage({
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null)
   const [viewModalOpen, setViewModalOpen] = useState(false)
   const [blockingRelationships, setBlockingRelationships] = useState<BlockingRelationship[]>([])
+  const [pullDistance, setPullDistance] = useState(0)
 
   useEffect(() => {
     loadAllBlocks().then(setBlockingRelationships)
@@ -78,24 +80,31 @@ export default function MainPage({
 
   const listRef = useRef<HTMLDivElement>(null)
   const inputKeyRef = useRef(0)
-  const isDraggingRef = useRef(false)
+
+  // Lets the document rubber-band on overscroll instead of the browser chaining
+  // it into a native pull-to-refresh reload; scoped to MainPage's lifetime since
+  // this behavior shouldn't apply on the settings page.
+  useEffect(() => {
+    const root = document.documentElement
+    const previousOverscrollBehaviorY = root.style.overscrollBehaviorY
+    root.style.overscrollBehaviorY = 'contain'
+    return () => {
+      root.style.overscrollBehaviorY = previousOverscrollBehaviorY
+    }
+  }, [])
 
   useEffect(() => {
-    const ptr = PullToRefresh.init({
-      mainElement: 'main',
-      instructionsPullToRefresh: ' ',
-      instructionsReleaseToRefresh: ' ',
-      instructionsRefreshing: ' ',
-      refreshTimeout: 100,
-      onRefresh() {
+    function handleScroll() {
+      const distance = Math.max(0, -window.scrollY)
+      setPullDistance(distance)
+      const noModalOpen = selectedTaskId === null && !viewModalOpen
+      if (distance >= OVERSCROLL_TRIGGER_DISTANCE && noModalOpen) {
         setViewModalOpen(true)
-      },
-      shouldPullToRefresh() {
-        return !isDraggingRef.current && window.scrollY === 0
-      },
-    })
-    return () => ptr.destroy()
-  }, [])
+      }
+    }
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [selectedTaskId, viewModalOpen])
 
   const currentView = views.find((v) => v.slug === currentViewSlug)
 
@@ -309,6 +318,24 @@ export default function MainPage({
     />
   )
 
+  const overscrollPct = Math.min(1, pullDistance / OVERSCROLL_TRIGGER_DISTANCE)
+  const overscrollIndicator = overscrollPct > 0 && selectedTaskId === null && !viewModalOpen && (
+    <div
+      style={{
+        position: 'fixed',
+        top: 12,
+        left: '50%',
+        transform: 'translateX(-50%)',
+        width: 28,
+        height: 28,
+        borderRadius: '50%',
+        pointerEvents: 'none',
+        color: overscrollPct >= 1 ? '#1a73e8' : '#9e9e9e',
+        background: `conic-gradient(currentColor ${overscrollPct * 100}%, transparent ${overscrollPct * 100}%)`,
+      }}
+    />
+  )
+
   return (
     <main
       onClick={() => setSelectedTaskId(null)}
@@ -330,8 +357,6 @@ export default function MainPage({
         onItemClick={selectedTaskId === null ? handleTaskClick : undefined}
         itemStyle={itemStyleFn}
         expandedSlot={expandedSlot}
-        onDragStart={() => { isDraggingRef.current = true }}
-        onDragEnd={() => { isDraggingRef.current = false }}
       />
 
       <SettingsButton onClick={onNavigateToSettings} />
@@ -342,6 +367,7 @@ export default function MainPage({
         onDragInsertSlot={setFabDragSlot}
       />
 
+      {overscrollIndicator}
       {viewModal}
     </main>
   )
