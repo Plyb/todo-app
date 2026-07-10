@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import PullToRefresh from 'pulltorefreshjs'
 import { createTask, deleteTask, updateTaskDone, updateTaskName, updateTaskNotes, updateTaskRank, updateTaskStatus, type Task, type Status, type View } from './db'
 import { DraggableList } from './DraggableList'
-import { AddTaskFab, NewTaskInputField, computeInsertRank, type NewTaskInput } from './AddTaskInput'
+import { AddTaskFab, NewTaskInputField, computeInsertRank, type NewTaskInput, type InsertSlotTarget } from './AddTaskInput'
 import { rankBetween } from './rank-utils'
 import { QuickSelectPanel } from './QuickSelectPanel'
 import { ViewModal } from './ViewModal'
@@ -59,11 +59,11 @@ export default function MainPage({
   onNavigateToSettings,
 }: MainPageProps) {
   const [newTaskInput, setNewTaskInput] = useState<NewTaskInput | null>(null)
-  const [fabPlaceholderIndex, setFabPlaceholderIndex] = useState<number | null>(null)
+  const [fabDragSlot, setFabDragSlot] = useState<InsertSlotTarget | null>(null)
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null)
   const [viewModalOpen, setViewModalOpen] = useState(false)
 
-  const listRef = useRef<HTMLUListElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
   const inputKeyRef = useRef(0)
   const isDraggingRef = useRef(false)
 
@@ -94,12 +94,9 @@ export default function MainPage({
     )
   }
 
-  const currentStatusSlug = currentView.statusSlugs[0]
-  const displayedTasks = tasks.filter((t) => t.statusSlug === currentStatusSlug)
-
-  function openInput(insertIndex: number) {
+  function openInput(sectionIndex: number, insertIndex: number) {
     inputKeyRef.current++
-    setNewTaskInput({ insertIndex })
+    setNewTaskInput({ sectionIndex, insertIndex })
   }
 
   function handleDoneChange(id: number, done: boolean) {
@@ -142,34 +139,37 @@ export default function MainPage({
     setSelectedTaskId(null)
   }
 
-  async function commitInput(value: string, insertIndex: number, andOpenAnother: boolean) {
+  async function commitInput(value: string, sectionIndex: number, insertIndex: number, andOpenAnother: boolean) {
     const trimmed = value.trim()
     if (!trimmed) {
       setNewTaskInput(null)
       return
     }
-    const rank = computeInsertRank(displayedTasks, insertIndex)
-    const task = await createTask(trimmed, rank, currentStatusSlug)
+    if (!currentView) return
+    const statusSlug = currentView.statusSlugs[sectionIndex]
+    const sectionTasks = tasks.filter((t) => t.statusSlug === statusSlug)
+    const rank = computeInsertRank(sectionTasks, insertIndex)
+    const task = await createTask(trimmed, rank, statusSlug)
     setTasks((prev) => {
       const next = [...prev, task]
       next.sort((a, b) => (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0))
       return next
     })
     if (andOpenAnother) {
-      openInput(insertIndex + 1)
+      openInput(sectionIndex, insertIndex + 1)
     } else {
       setNewTaskInput(null)
     }
   }
 
-  function handleInputBlur(e: React.FocusEvent<HTMLInputElement>, insertIndex: number) {
-    commitInput(e.currentTarget.value, insertIndex, false)
+  function handleInputBlur(e: React.FocusEvent<HTMLInputElement>, sectionIndex: number, insertIndex: number) {
+    commitInput(e.currentTarget.value, sectionIndex, insertIndex, false)
   }
 
-  function handleInputKeyDown(e: React.KeyboardEvent<HTMLInputElement>, insertIndex: number) {
+  function handleInputKeyDown(e: React.KeyboardEvent<HTMLInputElement>, sectionIndex: number, insertIndex: number) {
     if (e.key === 'Enter') {
       e.preventDefault()
-      commitInput(e.currentTarget.value, insertIndex, true)
+      commitInput(e.currentTarget.value, sectionIndex, insertIndex, true)
     } else if (e.key === 'Escape') {
       setNewTaskInput(null)
     }
@@ -214,20 +214,21 @@ export default function MainPage({
   const insertSlot = newTaskInput !== null
     ? {
         index: newTaskInput.insertIndex,
-        sectionIndex: 0,
+        sectionIndex: newTaskInput.sectionIndex,
         content: (
           <NewTaskInputField
             key={inputKeyRef.current}
+            sectionIndex={newTaskInput.sectionIndex}
             insertIndex={newTaskInput.insertIndex}
             onBlur={handleInputBlur}
             onKeyDown={handleInputKeyDown}
           />
         ),
       }
-    : fabPlaceholderIndex !== null
+    : fabDragSlot !== null
     ? {
-        index: fabPlaceholderIndex,
-        sectionIndex: 0,
+        index: fabDragSlot.index,
+        sectionIndex: fabDragSlot.sectionIndex,
         content: (
           <div style={{
             height: 44,
@@ -293,10 +294,9 @@ export default function MainPage({
       <SettingsButton onClick={onNavigateToSettings} />
 
       <AddTaskFab
-        tasks={displayedTasks}
         listRef={listRef}
         onRequestInsert={openInput}
-        onDragInsertIndex={setFabPlaceholderIndex}
+        onDragInsertSlot={setFabDragSlot}
       />
 
       {viewModal}

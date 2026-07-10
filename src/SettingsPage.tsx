@@ -13,6 +13,7 @@ export default function SettingsPage({ onBack, statuses, views, onViewsChange }:
   const [editingView, setEditingView] = useState<View | null>(null)
 
   async function handleDeleteView(slug: string) {
+    if (views.length === 1) return
     await deleteView(slug)
     onViewsChange(views.filter((v) => v.slug !== slug))
   }
@@ -81,13 +82,15 @@ export default function SettingsPage({ onBack, statuses, views, onViewsChange }:
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); handleDeleteView(view.slug) }}
+              disabled={views.length === 1}
               style={{
                 background: 'none',
                 border: 'none',
-                cursor: 'pointer',
+                cursor: views.length === 1 ? 'default' : 'pointer',
                 fontSize: 16,
                 color: '#999',
                 padding: '4px 8px',
+                opacity: views.length === 1 ? 0.4 : 1,
               }}
               aria-label={`Delete ${view.name}`}
             >
