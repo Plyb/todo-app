@@ -98,6 +98,7 @@ export default function MainPage({
   const [newTaskInput, setNewTaskInput] = useState<NewTaskInput | null>(null)
   const [fabDragSlot, setFabDragSlot] = useState<InsertSlotTarget | null>(null)
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null)
+  const [modalTaskId, setModalTaskId] = useState<number | null>(null)
   const [viewModalOpen, setViewModalOpen] = useState(false)
   const [blockingRelationships, setBlockingRelationships] = useState<BlockingRelationship[]>([])
   const [subtaskLinks, setSubtaskLinks] = useState<SubtaskLink[]>([])
@@ -113,7 +114,7 @@ export default function MainPage({
   const inputKeyRef = useRef(0)
 
   const pullDistanceRef = useRef(0)
-  const noModalOpen = selectedTaskId === null && !viewModalOpen
+  const noModalOpen = selectedTaskId === null && !viewModalOpen && modalTaskId === null
 
   useEffect(() => {
     function handleScroll() {
@@ -220,10 +221,19 @@ export default function MainPage({
     setTasks(tasks.map((t) => (t.id === id ? { ...t, name } : t)))
   }
 
-  async function handleChangeStatus(id: number, statusSlug: string) {
+  async function applyStatusChange(id: number, statusSlug: string) {
     await updateTaskStatus(id, statusSlug)
     setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, statusSlug } : t)))
+  }
+
+  async function handleChangeStatus(id: number, statusSlug: string) {
+    await applyStatusChange(id, statusSlug)
     setSelectedTaskId(null)
+  }
+
+  async function handleModalChangeStatus(id: number, statusSlug: string) {
+    await applyStatusChange(id, statusSlug)
+    setModalTaskId(null)
   }
 
   async function commitInput(value: string, sectionIndex: number, insertIndex: number, andOpenAnother: boolean) {
@@ -267,10 +277,19 @@ export default function MainPage({
     onClearAutoTransitionIndicator?.(taskId)
   }
 
-  async function handleDelete(id: number) {
+  async function applyDelete(id: number) {
     await deleteTask(id)
     setTasks((prev) => prev.filter((t) => t.id !== id))
+  }
+
+  async function handleDelete(id: number) {
+    await applyDelete(id)
     setSelectedTaskId(null)
+  }
+
+  async function handleModalDelete(id: number) {
+    await applyDelete(id)
+    setModalTaskId(null)
   }
 
   function handleTaskCreated(task: Task) {
@@ -302,7 +321,27 @@ export default function MainPage({
         onChangeStatus: handleChangeStatus,
         onDelete: handleDelete,
         onUpdateNotes: handleUpdateNotes,
-        onOpenTask: (id: number) => setSelectedTaskId(id),
+        onOpenTask: (id: number) => setModalTaskId(id),
+        onDoneChange: handleDoneChange,
+        onBlockingRelationshipAdded: () => loadAllBlocks().then(setBlockingRelationships),
+        onTaskCreated: handleTaskCreated,
+        onSubtaskLinkAdded: () => loadAllSubtaskLinks().then(setSubtaskLinks),
+      }
+    : null
+
+  const modalTask = modalTaskId !== null ? tasks.find((t) => t.id === modalTaskId) ?? null : null
+
+  const relatedTaskModalProps = modalTask
+    ? {
+        task: modalTask,
+        allTasks: tasks,
+        statuses,
+        onClose: () => setModalTaskId(null),
+        onRename: handleRename,
+        onChangeStatus: handleModalChangeStatus,
+        onDelete: handleModalDelete,
+        onUpdateNotes: handleUpdateNotes,
+        onOpenTask: (id: number) => setModalTaskId(id),
         onDoneChange: handleDoneChange,
         onBlockingRelationshipAdded: () => loadAllBlocks().then(setBlockingRelationships),
         onTaskCreated: handleTaskCreated,
@@ -368,6 +407,24 @@ export default function MainPage({
         content: <QuickSelectPanel {...quickSelectPanelProps} />,
       }
     : undefined
+
+  const relatedTaskModal = relatedTaskModalProps && (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 20,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 16,
+      }}
+    >
+      <div style={{ width: '100%', maxWidth: 480, maxHeight: '90vh', overflowY: 'auto' }}>
+        <QuickSelectPanel {...relatedTaskModalProps} />
+      </div>
+    </div>
+  )
 
   const viewModal = viewModalOpen && (
     <ViewModal
@@ -437,6 +494,7 @@ export default function MainPage({
 
       {overscrollIndicator}
       {viewModal}
+      {relatedTaskModal}
     </main>
   )
 }
