@@ -107,38 +107,26 @@ export default function MainPage({
   const listRef = useRef<HTMLDivElement>(null)
   const inputKeyRef = useRef(0)
 
-  // Lets the document rubber-band on overscroll instead of the browser chaining
-  // it into a native pull-to-refresh reload; scoped to MainPage's lifetime since
-  // this behavior shouldn't apply on the settings page.
-  useEffect(() => {
-    const root = document.documentElement
-    const previousOverscrollBehaviorY = root.style.overscrollBehaviorY
-    root.style.overscrollBehaviorY = 'contain'
-    return () => {
-      root.style.overscrollBehaviorY = previousOverscrollBehaviorY
-    }
-  }, [])
-
-  const isTouchingRef = useRef(false)
   const pullDistanceRef = useRef(0)
+  const noModalOpen = selectedTaskId === null && !viewModalOpen
 
   useEffect(() => {
     function handleScroll() {
+      // Negative scrollY only occurs during a rubber-band overscroll, which is only
+      // reachable in an installed iOS PWA - other platforms don't overscroll at all,
+      // so they rely on the view-selector button instead of this gesture.
       const distance = Math.max(0, -window.scrollY)
+      // Read synchronously in handleTouchEnd below without needing pullDistance in this
+      // effect's dependency array (which would tear down/reattach these listeners on
+      // every scroll tick); the state copy exists only to re-render the pie's fill.
       pullDistanceRef.current = distance
       setPullDistance(distance)
     }
     function handleTouchStart() {
-      isTouchingRef.current = true
       setIsTouching(true)
     }
     function handleTouchEnd() {
-      isTouchingRef.current = false
       setIsTouching(false)
-      const noModalOpen = selectedTaskId === null && !viewModalOpen
-      // Deferred to release (rather than triggering the instant pullDistance crosses the
-      // threshold) so a finger lifted early doesn't open the modal, and so residual scroll
-      // events after release (rubber-band settling, mouse wheel) can't spuriously trigger it.
       if (pullDistanceRef.current >= OVERSCROLL_TRIGGER_DISTANCE && noModalOpen) {
         setViewModalOpen(true)
       }
@@ -153,7 +141,7 @@ export default function MainPage({
       window.removeEventListener('touchend', handleTouchEnd)
       window.removeEventListener('touchcancel', handleTouchEnd)
     }
-  }, [selectedTaskId, viewModalOpen])
+  }, [noModalOpen])
 
   const currentView = views.find((v) => v.slug === currentViewSlug)
 
@@ -372,7 +360,7 @@ export default function MainPage({
   // isn't enough, since a bounce-back after the finger already lifted can still read
   // as pullDistance >= threshold without a touch in progress.
   const overscrollArmed = overscrollPct >= 1 && isTouching
-  const overscrollIndicator = overscrollPct > 0 && selectedTaskId === null && !viewModalOpen && (
+  const overscrollIndicator = overscrollPct > 0 && noModalOpen && (
     <div
       style={{
         position: 'fixed',
