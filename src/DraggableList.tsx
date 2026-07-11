@@ -68,9 +68,6 @@ function SortableItem<T extends { id: number }>({
         if (!isDragging) onItemClick?.(item.id)
       }}
       style={{
-        userSelect: 'none',
-        WebkitUserSelect: 'none',
-        WebkitTouchCallout: 'none',
         cursor: isDragging ? 'grabbing' : 'grab',
         padding: '12px 16px',
         borderBottom: '1px solid #eee',

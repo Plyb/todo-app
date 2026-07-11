@@ -141,7 +141,6 @@ export function AddTaskFab({ listRef, onRequestInsert, onDragInsertSlot }: AddTa
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        userSelect: 'none',
         touchAction: 'none',
         transition: fabDragState !== null ? 'none' : 'box-shadow 0.15s ease, transform 0.15s ease',
         transform: fabDragState !== null ? 'scale(1.1)' : 'scale(1)',
