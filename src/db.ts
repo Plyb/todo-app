@@ -14,10 +14,13 @@ export type Task = {
   notes: string
 }
 
+export type SubtaskLink = { id: number; parentTaskId: number; childTaskId: number; rank: string }
+
 export type BlockingRelationship = { id: number; fromTaskId: number; toTaskId: number; type: 'blocks' }
 
 type StoredTask = Omit<Task, 'id'>
 type StoredBlockingRelationship = Omit<BlockingRelationship, 'id'>
+type StoredSubtaskLink = Omit<SubtaskLink, 'id'>
 
 export type View = {
   slug: string
@@ -35,12 +38,13 @@ export type ScheduledTransition = {
 type StoredScheduledTransition = Omit<ScheduledTransition, 'id'>
 
 const DB_NAME = 'todo-app'
-const DB_VERSION = 7
+const DB_VERSION = 8
 const TASKS_STORE = 'tasks'
 const STATUSES_STORE = 'statuses'
 const VIEWS_STORE = 'views'
 const SCHEDULED_TRANSITIONS_STORE = 'scheduledTransitions'
 const RELATIONSHIPS_STORE = 'relationships'
+const SUBTASKS_STORE = 'subtasks'
 
 const DEFAULT_STATUSES: Status[] = [
   { slug: 'today', name: 'Today' },
@@ -258,6 +262,16 @@ async function openTasksDatabase(): Promise<IDBDatabase> {
           db.createObjectStore(SCHEDULED_TRANSITIONS_STORE, { autoIncrement: true })
         }
       }
+
+      // v7 -> v8: add subtasks store as a parent/child link table (no user data to preserve)
+      if (event.oldVersion < 8) {
+        if (db.objectStoreNames.contains(SUBTASKS_STORE)) {
+          db.deleteObjectStore(SUBTASKS_STORE)
+        }
+        const subtaskLinksStore = db.createObjectStore(SUBTASKS_STORE, { keyPath: 'id', autoIncrement: true })
+        subtaskLinksStore.createIndex('by_parent', 'parentTaskId', { unique: false })
+        subtaskLinksStore.createIndex('by_child', 'childTaskId', { unique: true })
+      }
     }
 
     request.onsuccess = () => resolve(request.result)
@@ -398,6 +412,82 @@ export async function deleteTask(id: number): Promise<void> {
   const transaction = db.transaction(TASKS_STORE, 'readwrite')
   const store = transaction.objectStore(TASKS_STORE)
   store.delete(id)
+  await transactionToPromise(transaction)
+  // The deleted task may have been a parent (its links to children are removed,
+  // children survive as independent tasks) and/or a child (its own link is removed).
+  await deleteSubtaskLinksByParent(id)
+  await deleteSubtaskLinksByChild(id)
+}
+
+export async function loadSubtaskLinks(parentTaskId: number): Promise<SubtaskLink[]> {
+  const db = await openTasksDatabase()
+  const transaction = db.transaction(SUBTASKS_STORE, 'readonly')
+  const store = transaction.objectStore(SUBTASKS_STORE)
+  const index = store.index('by_parent')
+  const links = (await requestToPromise(index.getAll(parentTaskId))) as SubtaskLink[]
+  await transactionToPromise(transaction)
+
+  links.sort((a, b) => (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0))
+  return links
+}
+
+export async function loadParentLink(childTaskId: number): Promise<SubtaskLink | undefined> {
+  const db = await openTasksDatabase()
+  const transaction = db.transaction(SUBTASKS_STORE, 'readonly')
+  const store = transaction.objectStore(SUBTASKS_STORE)
+  const index = store.index('by_child')
+  const link = (await requestToPromise(index.get(childTaskId))) as SubtaskLink | undefined
+  await transactionToPromise(transaction)
+  return link
+}
+
+export async function loadAllSubtaskLinks(): Promise<SubtaskLink[]> {
+  const db = await openTasksDatabase()
+  const transaction = db.transaction(SUBTASKS_STORE, 'readonly')
+  const store = transaction.objectStore(SUBTASKS_STORE)
+  const links = (await requestToPromise(store.getAll())) as SubtaskLink[]
+  await transactionToPromise(transaction)
+  return links
+}
+
+export async function createSubtaskLink(parentTaskId: number, childTaskId: number, rank: string): Promise<SubtaskLink> {
+  const db = await openTasksDatabase()
+  const transaction = db.transaction(SUBTASKS_STORE, 'readwrite')
+  const store = transaction.objectStore(SUBTASKS_STORE)
+  const stored: StoredSubtaskLink = { parentTaskId, childTaskId, rank }
+  const key = await requestToPromise(store.add(stored))
+  await transactionToPromise(transaction)
+  return { id: keyToTaskId(key), parentTaskId, childTaskId, rank }
+}
+
+export async function updateSubtaskLinkRank(id: number, rank: string): Promise<void> {
+  const db = await openTasksDatabase()
+  const transaction = db.transaction(SUBTASKS_STORE, 'readwrite')
+  const store = transaction.objectStore(SUBTASKS_STORE)
+  const existing = (await requestToPromise(store.get(id))) as SubtaskLink | undefined
+  if (existing) {
+    store.put({ ...existing, rank })
+  }
+  await transactionToPromise(transaction)
+}
+
+export async function deleteSubtaskLinksByParent(parentTaskId: number): Promise<void> {
+  const db = await openTasksDatabase()
+  const transaction = db.transaction(SUBTASKS_STORE, 'readwrite')
+  const store = transaction.objectStore(SUBTASKS_STORE)
+  const index = store.index('by_parent')
+  const keys = await requestToPromise(index.getAllKeys(parentTaskId))
+  for (const key of keys) store.delete(key)
+  await transactionToPromise(transaction)
+}
+
+export async function deleteSubtaskLinksByChild(childTaskId: number): Promise<void> {
+  const db = await openTasksDatabase()
+  const transaction = db.transaction(SUBTASKS_STORE, 'readwrite')
+  const store = transaction.objectStore(SUBTASKS_STORE)
+  const index = store.index('by_child')
+  const keys = await requestToPromise(index.getAllKeys(childTaskId))
+  for (const key of keys) store.delete(key)
   await transactionToPromise(transaction)
 }
 

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { createTask, deleteTask, loadAllBlocks, updateTaskDone, updateTaskName, updateTaskNotes, updateTaskRank, updateTaskStatus, type BlockingRelationship, type Task, type Status, type View } from './db'
+import { createTask, deleteTask, loadAllBlocks, loadAllSubtaskLinks, updateTaskDone, updateTaskName, updateTaskNotes, updateTaskRank, updateTaskStatus, type BlockingRelationship, type SubtaskLink, type Task, type Status, type View } from './db'
 import { DraggableList } from './DraggableList'
 import { AddTaskFab, NewTaskInputField, computeInsertRank, type NewTaskInput, type InsertSlotTarget } from './AddTaskInput'
 import { rankBetween } from './rank-utils'
@@ -61,7 +61,7 @@ function ViewSelectorButton({ viewName, onClick }: { viewName: string; onClick: 
   )
 }
 
-function TaskRow({ task, onDoneChange, showIndicator, isBlocked }: { task: Task; onDoneChange: (done: boolean) => void; showIndicator?: boolean; isBlocked: boolean }) {
+function TaskRow({ task, onDoneChange, showIndicator, isBlocked, parentTaskName }: { task: Task; onDoneChange: (done: boolean) => void; showIndicator?: boolean; isBlocked: boolean; parentTaskName?: string }) {
   return (
     <>
       <input
@@ -73,6 +73,9 @@ function TaskRow({ task, onDoneChange, showIndicator, isBlocked }: { task: Task;
         {isBlocked && <span style={{ marginRight: 4, color: '#d32f2f' }}>⊘</span>}
         {task.name}
       </span>
+      {parentTaskName && (
+        <span style={{ marginLeft: 6, fontSize: 12, color: '#888' }}>↳ {parentTaskName}</span>
+      )}
       {showIndicator && (
         <span style={{ marginLeft: 6, width: 8, height: 8, borderRadius: '50%', background: '#fbc02d', display: 'inline-block', verticalAlign: 'middle' }} />
       )}
@@ -97,11 +100,13 @@ export default function MainPage({
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null)
   const [viewModalOpen, setViewModalOpen] = useState(false)
   const [blockingRelationships, setBlockingRelationships] = useState<BlockingRelationship[]>([])
+  const [subtaskLinks, setSubtaskLinks] = useState<SubtaskLink[]>([])
   const [pullDistance, setPullDistance] = useState(0)
   const [isTouching, setIsTouching] = useState(false)
 
   useEffect(() => {
     loadAllBlocks().then(setBlockingRelationships)
+    loadAllSubtaskLinks().then(setSubtaskLinks)
   }, [])
 
   const listRef = useRef<HTMLDivElement>(null)
@@ -268,6 +273,23 @@ export default function MainPage({
     setSelectedTaskId(null)
   }
 
+  function handleTaskCreated(task: Task) {
+    setTasks((prev) => {
+      const next = [...prev, task]
+      next.sort((a, b) => (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0))
+      return next
+    })
+  }
+
+  const parentTaskNameByChildId = new Map(
+    subtaskLinks
+      .map((link) => {
+        const parentTask = tasks.find((t) => t.id === link.parentTaskId)
+        return parentTask ? [link.childTaskId, parentTask.name] as const : undefined
+      })
+      .filter((entry): entry is [number, string] => entry !== undefined)
+  )
+
   const selectedTask = selectedTaskId !== null ? tasks.find((t) => t.id === selectedTaskId) ?? null : null
 
   const quickSelectPanelProps = selectedTask
@@ -283,6 +305,8 @@ export default function MainPage({
         onOpenTask: (id: number) => setSelectedTaskId(id),
         onDoneChange: handleDoneChange,
         onBlockingRelationshipAdded: () => loadAllBlocks().then(setBlockingRelationships),
+        onTaskCreated: handleTaskCreated,
+        onSubtaskLinkAdded: () => loadAllSubtaskLinks().then(setSubtaskLinks),
       }
     : null
 
@@ -393,6 +417,7 @@ export default function MainPage({
             onDoneChange={(done) => handleDoneChange(task.id, done)}
             showIndicator={autoTransitionedTaskIds?.has(task.id)}
             isBlocked={blockingRelationships.some((r) => r.toTaskId === task.id)}
+            parentTaskName={parentTaskNameByChildId.get(task.id)}
           />
         )}
         listRef={listRef}
