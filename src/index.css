@@ -1,3 +1,10 @@
 body {
   margin: 0;
 }
+
+html {
+  /* Lets the document rubber-band on overscroll instead of the browser chaining it
+     into a native pull-to-refresh reload. Harmless on pages other than MainPage (e.g.
+     settings bounces too) since only MainPage listens for the gesture or shows the pie. */
+  overscroll-behavior-y: contain;
+}
