@@ -116,8 +116,6 @@ export function QuickSelectPanel({ task, statuses, allTasks, onClose, onRename, 
     if (!trimmed) return
     const lastLink = subtaskLinks[subtaskLinks.length - 1] ?? null
     const linkRank = rankBetween(lastLink, null)
-    // New subtasks join the parent's status; their own rank governs position within
-    // that status column and is independent of linkRank (position among sibling subtasks).
     const newTask = await createTask(trimmed, rankBetween(null, null), task.statusSlug)
     onTaskCreated(newTask)
     const link = await createSubtaskLink(task.id, newTask.id, linkRank)
