@@ -299,7 +299,7 @@ export function QuickSelectPanel({ task, statuses, allTasks, onClose, onRename, 
             {parentTask ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <button
-                  onClick={() => setShowSetParentModal(true)}
+                  onClick={() => onOpenTask(parentTask.id)}
                   style={{
                     background: '#e8f0fe',
                     border: 'none',
