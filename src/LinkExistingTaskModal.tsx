@@ -12,7 +12,8 @@ type LinkExistingTaskModalProps = {
 export function LinkExistingTaskModal({ currentTaskId, allTasks, excludedTaskIds, onClose, onSelect }: LinkExistingTaskModalProps) {
   const [query, setQuery] = useState('')
 
-  const candidates = allTasks.filter((t) => t.id !== currentTaskId && !excludedTaskIds.has(t.id))
+  const autoArchiveSlug = localStorage.getItem('auto-archive-status-slug')
+  const candidates = allTasks.filter((t) => t.id !== currentTaskId && !excludedTaskIds.has(t.id) && t.statusSlug !== autoArchiveSlug)
   const filtered = candidates.filter((t) => t.name.toLowerCase().includes(query.toLowerCase()))
 
   return (

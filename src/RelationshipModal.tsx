@@ -78,7 +78,8 @@ export function RelationshipModal({ currentTaskId, allTasks, onClose, onBlocking
   const [state, setState] = useState<RelationshipModalState>({ view: 'search' })
   const [query, setQuery] = useState('')
 
-  const otherTasks = allTasks.filter((t) => t.id !== currentTaskId)
+  const autoArchiveSlug = localStorage.getItem('auto-archive-status-slug')
+  const otherTasks = allTasks.filter((t) => t.id !== currentTaskId && t.statusSlug !== autoArchiveSlug)
   const filtered = otherTasks.filter((t) =>
     t.name.toLowerCase().includes(query.toLowerCase())
   )
