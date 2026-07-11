@@ -432,7 +432,7 @@ export default function MainPage({
       }}
     >
       <div style={{ width: '100%', maxWidth: 480, maxHeight: '90vh', overflowY: 'auto' }}>
-        <QuickSelectPanel {...relatedTaskModalProps} />
+        <QuickSelectPanel key={relatedTaskModalProps.task.id} {...relatedTaskModalProps} />
       </div>
     </div>
   )
