@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Task, Status, SubtaskLink, ScheduledTransition, BlockingRelationship } from './db'
-import { loadSubtaskLinks, createSubtaskLink, updateSubtaskLinkRank, loadAllSubtaskLinks, createTask, loadScheduledTransitions, loadBlocks } from './db'
+import { loadSubtaskLinks, createSubtaskLink, updateSubtaskLinkRank, loadAllSubtaskLinks, loadParentLink, deleteSubtaskLinksByChild, createTask, loadScheduledTransitions, loadBlocks } from './db'
 import { StatusModal } from './StatusModal'
 import { RelationshipModal, RelationshipGroup } from './RelationshipModal'
 import { LinkExistingTaskModal } from './LinkExistingTaskModal'
@@ -38,6 +38,8 @@ export function QuickSelectPanel({ task, statuses, allTasks, onClose, onRename, 
   const [newSubtaskName, setNewSubtaskName] = useState('')
   const [showLinkExistingModal, setShowLinkExistingModal] = useState(false)
   const [linkedTaskIds, setLinkedTaskIds] = useState<Set<number>>(new Set())
+  const [parentLink, setParentLink] = useState<SubtaskLink | undefined>(undefined)
+  const [showSetParentModal, setShowSetParentModal] = useState(false)
   const [scheduledTransitions, setScheduledTransitions] = useState<ScheduledTransition[]>([])
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -54,6 +56,7 @@ export function QuickSelectPanel({ task, statuses, allTasks, onClose, onRename, 
   useEffect(() => {
     loadSubtaskLinks(task.id).then(setSubtaskLinks)
     loadScheduledTransitions(task.id).then(setScheduledTransitions)
+    loadParentLink(task.id).then(setParentLink)
   }, [task.id])
 
   useEffect(() => {
@@ -66,6 +69,7 @@ export function QuickSelectPanel({ task, statuses, allTasks, onClose, onRename, 
   }
 
   const currentStatus = statuses.find((s) => s.slug === task.statusSlug)
+  const parentTask = parentLink ? allTasks.find((t) => t.id === parentLink.parentTaskId) : undefined
 
   function handleClose() {
     setExpanded(false)
@@ -150,6 +154,23 @@ export function QuickSelectPanel({ task, statuses, allTasks, onClose, onRename, 
     setSubtaskLinks((prev) => [...prev, link])
     onSubtaskLinkAdded?.()
     setShowLinkExistingModal(false)
+  }
+
+  async function handleSetParent(selected: Task) {
+    if (parentLink) await deleteSubtaskLinksByChild(task.id)
+    const newParentLinks = await loadSubtaskLinks(selected.id)
+    const lastLink = newParentLinks[newParentLinks.length - 1] ?? null
+    const rank = rankBetween(lastLink, null)
+    const link = await createSubtaskLink(selected.id, task.id, rank)
+    setParentLink(link)
+    onSubtaskLinkAdded?.()
+    setShowSetParentModal(false)
+  }
+
+  async function handleClearParent() {
+    await deleteSubtaskLinksByChild(task.id)
+    setParentLink(undefined)
+    onSubtaskLinkAdded?.()
   }
 
   const subtaskItems = subtaskLinks
@@ -273,6 +294,50 @@ export function QuickSelectPanel({ task, statuses, allTasks, onClose, onRename, 
           )}
 
           <div style={{ marginTop: 16 }}>
+            <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 8 }}>Parent</div>
+
+            {parentTask ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <button
+                  onClick={() => setShowSetParentModal(true)}
+                  style={{
+                    background: '#e8f0fe',
+                    border: 'none',
+                    borderRadius: 6,
+                    padding: '4px 10px',
+                    cursor: 'pointer',
+                    fontSize: 14,
+                    color: '#1a73e8',
+                    fontWeight: 500,
+                  }}
+                >
+                  {parentTask.name}
+                </button>
+                <button
+                  onClick={handleClearParent}
+                  style={{ background: 'none', border: 'none', color: '#d32f2f', cursor: 'pointer', fontSize: 14 }}
+                >
+                  Remove
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowSetParentModal(true)}
+                style={{
+                  padding: '8px 16px',
+                  background: '#f5f5f5',
+                  border: '1px solid #ddd',
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  fontSize: 14,
+                }}
+              >
+                Set Parent
+              </button>
+            )}
+          </div>
+
+          <div style={{ marginTop: 16 }}>
             <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 8 }}>Subtasks</div>
 
             {subtaskItems.length > 0 && (
@@ -389,6 +454,17 @@ export function QuickSelectPanel({ task, statuses, allTasks, onClose, onRename, 
           excludedTaskIds={linkedTaskIds}
           onClose={() => setShowLinkExistingModal(false)}
           onSelect={handleLinkExistingTask}
+        />
+      )}
+
+      {showSetParentModal && (
+        <LinkExistingTaskModal
+          currentTaskId={task.id}
+          allTasks={allTasks}
+          excludedTaskIds={new Set(subtaskLinks.map((l) => l.childTaskId))}
+          title="Set Parent"
+          onClose={() => setShowSetParentModal(false)}
+          onSelect={handleSetParent}
         />
       )}
 
