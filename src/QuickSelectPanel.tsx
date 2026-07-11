@@ -286,7 +286,7 @@ export function QuickSelectPanel({ task, statuses, allTasks, onClose, onRename, 
                       checked={childTask.done}
                       onChange={(e) => onDoneChange(childTask.id, e.target.checked)}
                     />
-                    <span style={{ marginLeft: 8, color: childTask.done ? '#aaa' : undefined }}>
+                    <span onClick={() => onOpenTask(childTask.id)} style={{ marginLeft: 8, cursor: 'pointer', color: childTask.done ? '#aaa' : undefined }}>
                       {childTask.name}
                     </span>
                   </>
