@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Task, Status, ScheduledTransition, BlockingRelationship } from './db'
-import { loadScheduledTransitions, loadBlocks } from './db'
+import type { Task, Status, SubtaskLink, ScheduledTransition, BlockingRelationship } from './db'
+import { loadSubtaskLinks, createSubtaskLink, updateSubtaskLinkRank, loadAllSubtaskLinks, createTask, loadScheduledTransitions, loadBlocks } from './db'
 import { StatusModal } from './StatusModal'
 import { RelationshipModal, RelationshipGroup } from './RelationshipModal'
+import { LinkExistingTaskModal } from './LinkExistingTaskModal'
 import { ScheduleModal } from './ScheduleModal'
+import { DraggableList } from './DraggableList'
+import { rankBetween } from './rank-utils'
 
 type QuickSelectPanelProps = {
   task: Task
@@ -17,18 +20,24 @@ type QuickSelectPanelProps = {
   onOpenTask: (id: number) => void
   onDoneChange: (id: number, done: boolean) => void
   onBlockingRelationshipAdded?: () => void
+  onTaskCreated: (task: Task) => void
+  onSubtaskLinkAdded?: () => void
 }
 
-export function QuickSelectPanel({ task, statuses, allTasks, onClose, onRename, onChangeStatus, onDelete, onUpdateNotes, onOpenTask, onDoneChange, onBlockingRelationshipAdded }: QuickSelectPanelProps) {
+export function QuickSelectPanel({ task, statuses, allTasks, onClose, onRename, onChangeStatus, onDelete, onUpdateNotes, onOpenTask, onDoneChange, onBlockingRelationshipAdded, onTaskCreated, onSubtaskLinkAdded }: QuickSelectPanelProps) {
   const [name, setName] = useState(task.name)
-  const [showModal, setShowModal] = useState(false)
   const [backdropReady, setBackdropReady] = useState(false)
   const [statusModalOpen, setStatusModalOpen] = useState(false)
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
+  const [showRelationshipModal, setShowRelationshipModal] = useState(false)
   const [notes, setNotes] = useState(task.notes)
   const [blockingRelationships, setBlockingRelationships] = useState<BlockingRelationship[]>([])
   const [expanded, setExpanded] = useState(false)
+  const [subtaskLinks, setSubtaskLinks] = useState<SubtaskLink[]>([])
+  const [newSubtaskName, setNewSubtaskName] = useState('')
+  const [showLinkExistingModal, setShowLinkExistingModal] = useState(false)
+  const [linkedTaskIds, setLinkedTaskIds] = useState<Set<number>>(new Set())
   const [scheduledTransitions, setScheduledTransitions] = useState<ScheduledTransition[]>([])
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -43,6 +52,7 @@ export function QuickSelectPanel({ task, statuses, allTasks, onClose, onRename, 
   }, [])
 
   useEffect(() => {
+    loadSubtaskLinks(task.id).then(setSubtaskLinks)
     loadScheduledTransitions(task.id).then(setScheduledTransitions)
   }, [task.id])
 
@@ -100,6 +110,54 @@ export function QuickSelectPanel({ task, statuses, allTasks, onClose, onRename, 
       onUpdateNotes(task.id, notes)
     }
   }
+
+  async function handleAddSubtask() {
+    const trimmed = newSubtaskName.trim()
+    if (!trimmed) return
+    const lastLink = subtaskLinks[subtaskLinks.length - 1] ?? null
+    const linkRank = rankBetween(lastLink, null)
+    const newTask = await createTask(trimmed, rankBetween(null, null), task.statusSlug)
+    onTaskCreated(newTask)
+    const link = await createSubtaskLink(task.id, newTask.id, linkRank)
+    setSubtaskLinks((prev) => [...prev, link])
+    onSubtaskLinkAdded?.()
+    setNewSubtaskName('')
+  }
+
+  function handleSubtaskReorder(draggedLinkId: number, insertIndex: number) {
+    const others = subtaskLinks.filter((l) => l.id !== draggedLinkId)
+    const prev = insertIndex > 0 ? others[insertIndex - 1] : null
+    const next = insertIndex < others.length ? others[insertIndex] : null
+    const rank = rankBetween(prev, next)
+    updateSubtaskLinkRank(draggedLinkId, rank)
+    const dragged = subtaskLinks.find((l) => l.id === draggedLinkId)!
+    const updated = { ...dragged, rank }
+    const reordered = [...others]
+    reordered.splice(insertIndex, 0, updated)
+    setSubtaskLinks(reordered)
+  }
+
+  async function openLinkExistingModal() {
+    const allLinks = await loadAllSubtaskLinks()
+    setLinkedTaskIds(new Set(allLinks.map((l) => l.childTaskId)))
+    setShowLinkExistingModal(true)
+  }
+
+  async function handleLinkExistingTask(selected: Task) {
+    const lastLink = subtaskLinks[subtaskLinks.length - 1] ?? null
+    const rank = rankBetween(lastLink, null)
+    const link = await createSubtaskLink(task.id, selected.id, rank)
+    setSubtaskLinks((prev) => [...prev, link])
+    onSubtaskLinkAdded?.()
+    setShowLinkExistingModal(false)
+  }
+
+  const subtaskItems = subtaskLinks
+    .map((link) => {
+      const childTask = allTasks.find((t) => t.id === link.childTaskId)
+      return childTask ? { id: link.id, link, childTask } : undefined
+    })
+    .filter((item): item is { id: number; link: SubtaskLink; childTask: Task } => item !== undefined)
 
   return (
     <>
@@ -215,6 +273,62 @@ export function QuickSelectPanel({ task, statuses, allTasks, onClose, onRename, 
           )}
 
           <div style={{ marginTop: 16 }}>
+            <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 8 }}>Subtasks</div>
+
+            {subtaskItems.length > 0 && (
+              <DraggableList
+                sections={[{ items: subtaskItems }]}
+                onReorder={(draggedLinkId, _sectionIndex, insertIndex) => handleSubtaskReorder(draggedLinkId, insertIndex)}
+                renderItem={({ childTask }) => (
+                  <>
+                    <input
+                      type="checkbox"
+                      checked={childTask.done}
+                      onChange={(e) => onDoneChange(childTask.id, e.target.checked)}
+                    />
+                    <span style={{ marginLeft: 8, color: childTask.done ? '#aaa' : undefined }}>
+                      {childTask.name}
+                    </span>
+                  </>
+                )}
+              />
+            )}
+
+            <input
+              type="text"
+              placeholder="Add subtask..."
+              value={newSubtaskName}
+              onChange={(e) => setNewSubtaskName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { handleAddSubtask() } }}
+              onBlur={handleAddSubtask}
+              style={{
+                width: '100%',
+                padding: '8px 10px',
+                fontSize: 14,
+                border: '1px solid #ddd',
+                borderRadius: 6,
+                marginTop: subtaskItems.length > 0 ? 8 : 0,
+                boxSizing: 'border-box',
+              }}
+            />
+
+            <button
+              onClick={openLinkExistingModal}
+              style={{
+                marginTop: 8,
+                padding: '8px 16px',
+                background: '#f5f5f5',
+                border: '1px solid #ddd',
+                borderRadius: 8,
+                cursor: 'pointer',
+                fontSize: 14,
+              }}
+            >
+              Link Existing Task
+            </button>
+          </div>
+
+          <div style={{ marginTop: 16 }}>
             <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 8 }}>Related Tasks</div>
 
             {relatedGroups.length === 0 ? (
@@ -232,7 +346,7 @@ export function QuickSelectPanel({ task, statuses, allTasks, onClose, onRename, 
             )}
 
             <button
-              onClick={() => setShowModal(true)}
+              onClick={() => setShowRelationshipModal(true)}
               style={{
                 marginTop: 4,
                 padding: '8px 16px',
@@ -259,12 +373,22 @@ export function QuickSelectPanel({ task, statuses, allTasks, onClose, onRename, 
         />
       )}
 
-      {showModal && (
+      {showRelationshipModal && (
         <RelationshipModal
           currentTaskId={task.id}
           allTasks={allTasks}
-          onClose={() => setShowModal(false)}
+          onClose={() => setShowRelationshipModal(false)}
           onBlockingRelationshipAdded={reloadRelationships}
+        />
+      )}
+
+      {showLinkExistingModal && (
+        <LinkExistingTaskModal
+          currentTaskId={task.id}
+          allTasks={allTasks}
+          excludedTaskIds={linkedTaskIds}
+          onClose={() => setShowLinkExistingModal(false)}
+          onSelect={handleLinkExistingTask}
         />
       )}
 
