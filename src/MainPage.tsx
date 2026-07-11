@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import PullToRefresh from 'pulltorefreshjs'
 import { createTask, deleteTask, loadAllBlocks, updateTaskDone, updateTaskName, updateTaskNotes, updateTaskRank, updateTaskStatus, type BlockingRelationship, type Task, type Status, type View } from './db'
 import { DraggableList } from './DraggableList'
 import { AddTaskFab, NewTaskInputField, computeInsertRank, type NewTaskInput, type InsertSlotTarget } from './AddTaskInput'
 import { rankBetween } from './rank-utils'
 import { QuickSelectPanel } from './QuickSelectPanel'
 import { ViewModal } from './ViewModal'
+
+const OVERSCROLL_TRIGGER_DISTANCE = 100
 
 type MainPageProps = {
   tasks: Task[]
@@ -31,6 +32,31 @@ function SettingsButton({ onClick }: { onClick: () => void }) {
   return (
     <button onClick={onClick} style={{ position: 'fixed', bottom: 16, left: 16 }}>
       ⚙
+    </button>
+  )
+}
+
+function ViewSelectorButton({ viewName, onClick }: { viewName: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        width: '100%',
+        padding: '14px 16px',
+        border: 'none',
+        borderBottom: '1px solid #e0e0e0',
+        background: 'white',
+        fontSize: 16,
+        fontWeight: 600,
+        cursor: 'pointer',
+      }}
+    >
+      {viewName}
+      <span style={{ color: '#1a73e8' }}>▾</span>
     </button>
   )
 }
@@ -71,6 +97,8 @@ export default function MainPage({
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null)
   const [viewModalOpen, setViewModalOpen] = useState(false)
   const [blockingRelationships, setBlockingRelationships] = useState<BlockingRelationship[]>([])
+  const [pullDistance, setPullDistance] = useState(0)
+  const [isTouching, setIsTouching] = useState(false)
 
   useEffect(() => {
     loadAllBlocks().then(setBlockingRelationships)
@@ -78,24 +106,42 @@ export default function MainPage({
 
   const listRef = useRef<HTMLDivElement>(null)
   const inputKeyRef = useRef(0)
-  const isDraggingRef = useRef(false)
+
+  const pullDistanceRef = useRef(0)
+  const noModalOpen = selectedTaskId === null && !viewModalOpen
 
   useEffect(() => {
-    const ptr = PullToRefresh.init({
-      mainElement: 'main',
-      instructionsPullToRefresh: ' ',
-      instructionsReleaseToRefresh: ' ',
-      instructionsRefreshing: ' ',
-      refreshTimeout: 100,
-      onRefresh() {
+    function handleScroll() {
+      // Negative scrollY only occurs during a rubber-band overscroll, which is only
+      // reachable in an installed iOS PWA - other platforms don't overscroll at all,
+      // so they rely on the view-selector button instead of this gesture.
+      const distance = Math.max(0, -window.scrollY)
+      // Read synchronously in handleTouchEnd below without needing pullDistance in this
+      // effect's dependency array (which would tear down/reattach these listeners on
+      // every scroll tick); the state copy exists only to re-render the pie's fill.
+      pullDistanceRef.current = distance
+      setPullDistance(distance)
+    }
+    function handleTouchStart() {
+      setIsTouching(true)
+    }
+    function handleTouchEnd() {
+      setIsTouching(false)
+      if (pullDistanceRef.current >= OVERSCROLL_TRIGGER_DISTANCE && noModalOpen) {
         setViewModalOpen(true)
-      },
-      shouldPullToRefresh() {
-        return !isDraggingRef.current && window.scrollY === 0
-      },
-    })
-    return () => ptr.destroy()
-  }, [])
+      }
+    }
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    window.addEventListener('touchstart', handleTouchStart, { passive: true })
+    window.addEventListener('touchend', handleTouchEnd, { passive: true })
+    window.addEventListener('touchcancel', handleTouchEnd, { passive: true })
+    return () => {
+      window.removeEventListener('scroll', handleScroll)
+      window.removeEventListener('touchstart', handleTouchStart)
+      window.removeEventListener('touchend', handleTouchEnd)
+      window.removeEventListener('touchcancel', handleTouchEnd)
+    }
+  }, [noModalOpen])
 
   const currentView = views.find((v) => v.slug === currentViewSlug)
 
@@ -309,11 +355,35 @@ export default function MainPage({
     />
   )
 
+  const overscrollPct = Math.min(1, pullDistance / OVERSCROLL_TRIGGER_DISTANCE)
+  // "Armed" means releasing right now would open the view selector - full pie alone
+  // isn't enough, since a bounce-back after the finger already lifted can still read
+  // as pullDistance >= threshold without a touch in progress.
+  const overscrollArmed = overscrollPct >= 1 && isTouching
+  const overscrollIndicator = overscrollPct > 0 && noModalOpen && (
+    <div
+      style={{
+        position: 'fixed',
+        top: 60,
+        left: '50%',
+        transform: 'translateX(-50%)',
+        width: 28,
+        height: 28,
+        borderRadius: '50%',
+        pointerEvents: 'none',
+        color: overscrollArmed ? '#1a73e8' : '#9e9e9e',
+        background: `conic-gradient(currentColor ${overscrollPct * 100}%, transparent ${overscrollPct * 100}%)`,
+      }}
+    />
+  )
+
   return (
     <main
       onClick={() => setSelectedTaskId(null)}
       style={{ minHeight: '100vh' }}
     >
+      <ViewSelectorButton viewName={currentView.name} onClick={() => setViewModalOpen(true)} />
+
       <DraggableList
         sections={sections}
         onReorder={handleReorder}
@@ -330,8 +400,6 @@ export default function MainPage({
         onItemClick={selectedTaskId === null ? handleTaskClick : undefined}
         itemStyle={itemStyleFn}
         expandedSlot={expandedSlot}
-        onDragStart={() => { isDraggingRef.current = true }}
-        onDragEnd={() => { isDraggingRef.current = false }}
       />
 
       <SettingsButton onClick={onNavigateToSettings} />
@@ -342,6 +410,7 @@ export default function MainPage({
         onDragInsertSlot={setFabDragSlot}
       />
 
+      {overscrollIndicator}
       {viewModal}
     </main>
   )
