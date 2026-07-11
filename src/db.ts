@@ -514,6 +514,7 @@ export async function deleteTask(id: number): Promise<void> {
   // children survive as independent tasks) and/or a child (its own link is removed).
   await deleteSubtaskLinksByParent(id)
   await deleteSubtaskLinksByChild(id)
+  await deleteBlocksByTask(id)
 }
 
 export async function loadSubtaskLinks(parentTaskId: number): Promise<SubtaskLink[]> {
@@ -705,5 +706,15 @@ export async function deleteBlock(id: number): Promise<void> {
   const transaction = db.transaction(RELATIONSHIPS_STORE, 'readwrite')
   const store = transaction.objectStore(RELATIONSHIPS_STORE)
   store.delete(id)
+  await transactionToPromise(transaction)
+}
+
+export async function deleteBlocksByTask(taskId: number): Promise<void> {
+  const db = await openTasksDatabase()
+  const transaction = db.transaction(RELATIONSHIPS_STORE, 'readwrite')
+  const store = transaction.objectStore(RELATIONSHIPS_STORE)
+  const fromKeys = await requestToPromise(store.index('fromTaskId').getAllKeys(taskId))
+  const toKeys = await requestToPromise(store.index('toTaskId').getAllKeys(taskId))
+  for (const key of [...fromKeys, ...toKeys]) store.delete(key)
   await transactionToPromise(transaction)
 }
