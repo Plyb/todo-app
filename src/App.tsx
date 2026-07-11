@@ -154,8 +154,10 @@ export default function App() {
       <SettingsPage
         onBack={() => setPage('main')}
         statuses={statuses}
+        onStatusesChange={setStatuses}
         views={views}
         onViewsChange={handleViewsChange}
+        onTasksChange={setTasks}
       />
     )
   }
