@@ -27,6 +27,15 @@ const saveAutoArchiveSetting = (slug: string | null): void => {
   }
 }
 
+const loadViewSelectorButtonVisibility = (): string | null => localStorage.getItem('view-selector-button-visibility')
+const saveViewSelectorButtonVisibility = (value: string | null): void => {
+  if (value === null) {
+    localStorage.removeItem('view-selector-button-visibility')
+  } else {
+    localStorage.setItem('view-selector-button-visibility', value)
+  }
+}
+
 type SettingsPageProps = {
   onBack: () => void
   statuses: Status[]
@@ -41,6 +50,7 @@ export default function SettingsPage({ onBack, statuses, onStatusesChange, views
   const [editingStatus, setEditingStatus] = useState<Status | null>(null)
   const [reassignFromSlug, setReassignFromSlug] = useState<string | null>(null)
   const [autoArchiveSlug, setAutoArchiveSlug] = useState(loadAutoArchiveSetting)
+  const [viewSelectorButtonVisibility, setViewSelectorButtonVisibility] = useState(loadViewSelectorButtonVisibility)
 
   async function refreshAfterStatusChange() {
     const [newStatuses, newTasks, newViews] = await Promise.all([loadStatuses(), loadTasks(), loadViews()])
@@ -53,6 +63,12 @@ export default function SettingsPage({ onBack, statuses, onStatusesChange, views
     const slug = e.target.value === '' ? null : e.target.value
     setAutoArchiveSlug(slug)
     saveAutoArchiveSetting(slug)
+  }
+
+  function handleViewSelectorButtonVisibilityChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    const value = e.target.value === '' ? null : e.target.value
+    setViewSelectorButtonVisibility(value)
+    saveViewSelectorButtonVisibility(value)
   }
 
   async function handleDeleteView(slug: string) {
@@ -273,6 +289,20 @@ export default function SettingsPage({ onBack, statuses, onStatusesChange, views
           {statuses.map(s => (
             <option key={s.slug} value={s.slug}>{s.name}</option>
           ))}
+        </select>
+      </section>
+
+      <section style={{ marginTop: 32 }}>
+        <label htmlFor="view-selector-button-visibility-select">View selector button</label>
+        <select
+          id="view-selector-button-visibility-select"
+          value={viewSelectorButtonVisibility ?? ''}
+          onChange={handleViewSelectorButtonVisibilityChange}
+          style={{ marginLeft: 8 }}
+        >
+          <option value="">Default (hide on iOS PWA)</option>
+          <option value="always-show">Always show</option>
+          <option value="always-hide">Always hide</option>
         </select>
       </section>
     </main>

@@ -8,6 +8,17 @@ import { ViewModal } from './ViewModal'
 
 const OVERSCROLL_TRIGGER_DISTANCE = 100
 
+function isIosPwa(): boolean {
+  return (window.navigator as Navigator & { standalone?: boolean }).standalone === true
+}
+
+function shouldShowViewSelectorButton(): boolean {
+  const visibility = localStorage.getItem('view-selector-button-visibility')
+  if (visibility === 'always-show') return true
+  if (visibility === 'always-hide') return false
+  return !isIosPwa()
+}
+
 type MainPageProps = {
   tasks: Task[]
   setTasks: React.Dispatch<React.SetStateAction<Task[]>>
@@ -463,7 +474,9 @@ export default function MainPage({
       onClick={() => setSelectedTaskId(null)}
       style={{ minHeight: '100vh' }}
     >
-      <ViewSelectorButton viewName={currentView.name} onClick={() => setViewModalOpen(true)} />
+      {shouldShowViewSelectorButton() && (
+        <ViewSelectorButton viewName={currentView.name} onClick={() => setViewModalOpen(true)} />
+      )}
 
       <DraggableList
         sections={sections}
