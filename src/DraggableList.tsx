@@ -49,7 +49,14 @@ function SortableItem<T extends { id: number }>({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: item.id })
+  } = useSortable({
+    id: item.id,
+    // dnd-kit's default layout-change animation causes items to snap back to
+    // their pre-drop position and then transition again once the reordered
+    // data arrives, doubling the movement. The drag-preview transform (shown
+    // while dragging) is unaffected by this and keeps animating normally.
+    animateLayoutChanges: () => false,
+  })
 
   return (
     <li
