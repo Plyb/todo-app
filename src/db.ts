@@ -168,10 +168,6 @@ async function migrateAddNotes(transaction: IDBTransaction): Promise<void> {
   })
 }
 
-// Each step's `migrate` runs when `event.oldVersion < version`. Steps run in
-// ascending version order; store creation (schema) is done synchronously first,
-// then any data backfill. Every step is idempotent (guarded by `contains(...)`
-// or per-record field checks) so replaying a partial upgrade is safe.
 type MigrationStep = {
   version: number
   migrate: (db: IDBDatabase, transaction: IDBTransaction) => void | Promise<void>
@@ -179,7 +175,6 @@ type MigrationStep = {
 
 const MIGRATION_STEPS: MigrationStep[] = [
   {
-    // v1: base schema — the tasks store.
     version: 1,
     migrate: (db) => {
       if (!db.objectStoreNames.contains(TASKS_STORE)) {
@@ -188,17 +183,14 @@ const MIGRATION_STEPS: MigrationStep[] = [
     },
   },
   {
-    // v2: backfill `done` on existing task records.
     version: 2,
     migrate: (_db, transaction) => migrateAddDone(transaction),
   },
   {
-    // v3: backfill `rank` on existing task records.
     version: 3,
     migrate: (_db, transaction) => migrateAddRanks(transaction),
   },
   {
-    // v4: statuses store + seed defaults + backfill `statusSlug` on tasks.
     version: 4,
     migrate: (db, transaction) => {
       if (!db.objectStoreNames.contains(STATUSES_STORE)) {
@@ -208,12 +200,10 @@ const MIGRATION_STEPS: MigrationStep[] = [
     },
   },
   {
-    // v5: backfill `notes` on existing task records.
     version: 5,
     migrate: (_db, transaction) => migrateAddNotes(transaction),
   },
   {
-    // v6: views + relationships stores; seed one default view per status.
     version: 6,
     migrate: (db, transaction) => {
       if (!db.objectStoreNames.contains(VIEWS_STORE)) {
@@ -228,7 +218,6 @@ const MIGRATION_STEPS: MigrationStep[] = [
     },
   },
   {
-    // v7: scheduledTransitions store.
     version: 7,
     migrate: (db) => {
       if (!db.objectStoreNames.contains(SCHEDULED_TRANSITIONS_STORE)) {
@@ -237,8 +226,6 @@ const MIGRATION_STEPS: MigrationStep[] = [
     },
   },
   {
-    // v7 -> v8: subtasks parent/child link table. Destructive drop/recreate —
-    // there is no user data to preserve at this version.
     version: 8,
     migrate: (db) => {
       if (db.objectStoreNames.contains(SUBTASKS_STORE)) {
