@@ -80,6 +80,15 @@ function transactionToPromise(transaction: IDBTransaction): Promise<void> {
   })
 }
 
+function abortTransaction(transaction: IDBTransaction): void {
+  try {
+    transaction.abort()
+  } catch {
+    // The transaction may already be aborting/finished (e.g. an IDB request
+    // error is aborting it, or it already committed); the original error stands.
+  }
+}
+
 function iterateCursor(store: IDBObjectStore, visit: (cursor: IDBCursorWithValue) => void): Promise<void> {
   return new Promise((resolve, reject) => {
     const cursorRequest = store.openCursor()
@@ -329,9 +338,16 @@ async function withStore<T>(
   const db = await openTasksDatabase()
   const transaction = db.transaction(name, mode)
   const store = transaction.objectStore(name)
-  const result = await fn(store, transaction)
-  await transactionToPromise(transaction)
-  return result
+  try {
+    const result = await fn(store, transaction)
+    await transactionToPromise(transaction)
+    return result
+  } catch (error) {
+    // A thrown callback must roll back rather than silently commit the writes
+    // queued so far: abort the transaction before rethrowing.
+    abortTransaction(transaction)
+    throw error
+  }
 }
 
 async function withTransaction<T>(
@@ -341,9 +357,16 @@ async function withTransaction<T>(
 ): Promise<T> {
   const db = await openTasksDatabase()
   const transaction = db.transaction(names, mode)
-  const result = await fn(transaction)
-  await transactionToPromise(transaction)
-  return result
+  try {
+    const result = await fn(transaction)
+    await transactionToPromise(transaction)
+    return result
+  } catch (error) {
+    // A thrown callback must roll back rather than silently commit the writes
+    // queued so far: abort the transaction before rethrowing.
+    abortTransaction(transaction)
+    throw error
+  }
 }
 
 async function patchRecordById<T>(store: IDBObjectStore, id: number, patch: Partial<T>): Promise<void> {
@@ -412,25 +435,21 @@ async function reassignTasksAndViews(transaction: IDBTransaction, oldSlug: strin
 }
 
 export async function updateStatus(oldSlug: string, newSlug: string, newName: string): Promise<void> {
-  const db = await openTasksDatabase()
-  const transaction = db.transaction([STATUSES_STORE, TASKS_STORE, VIEWS_STORE], 'readwrite')
-  const statusStore = transaction.objectStore(STATUSES_STORE)
+  await withTransaction([STATUSES_STORE, TASKS_STORE, VIEWS_STORE], 'readwrite', async (transaction) => {
+    const statusStore = transaction.objectStore(STATUSES_STORE)
 
-  if (oldSlug !== newSlug) {
-    statusStore.delete(oldSlug)
-    await reassignTasksAndViews(transaction, oldSlug, newSlug)
-  }
-  statusStore.put({ slug: newSlug, name: newName })
-
-  await transactionToPromise(transaction)
+    if (oldSlug !== newSlug) {
+      statusStore.delete(oldSlug)
+      await reassignTasksAndViews(transaction, oldSlug, newSlug)
+    }
+    statusStore.put({ slug: newSlug, name: newName })
+  })
 }
 
 export async function deleteStatus(slug: string): Promise<void> {
-  const db = await openTasksDatabase()
-  const transaction = db.transaction(STATUSES_STORE, 'readwrite')
-  const store = transaction.objectStore(STATUSES_STORE)
-  store.delete(slug)
-  await transactionToPromise(transaction)
+  await withStore(STATUSES_STORE, 'readwrite', (store) => {
+    store.delete(slug)
+  })
 }
 
 export type StatusUsage = { taskIds: number[]; viewSlugs: string[] }
@@ -458,10 +477,9 @@ export async function isStatusInUse(slug: string): Promise<boolean> {
 }
 
 export async function reassignStatus(fromSlug: string, toSlug: string): Promise<void> {
-  const db = await openTasksDatabase()
-  const transaction = db.transaction([TASKS_STORE, VIEWS_STORE], 'readwrite')
-  await reassignTasksAndViews(transaction, fromSlug, toSlug)
-  await transactionToPromise(transaction)
+  await withTransaction([TASKS_STORE, VIEWS_STORE], 'readwrite', (transaction) =>
+    reassignTasksAndViews(transaction, fromSlug, toSlug),
+  )
 }
 
 export async function createTask(name: string, rank: string, statusSlug: string = 'backlog'): Promise<Task> {
