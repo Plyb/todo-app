@@ -1,4 +1,5 @@
 import { LexoRank } from 'lexorank'
+import { byRank, byStringKey } from './rank-utils'
 
 export type Status = {
   slug: string
@@ -311,7 +312,7 @@ export async function loadTasks(): Promise<Task[]> {
       statusSlug: task.statusSlug ?? 'backlog',
       notes: task.notes ?? '',
     }))
-    tasks.sort((a, b) => (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0))
+    tasks.sort(byRank)
     return tasks
   }
 
@@ -525,7 +526,7 @@ export async function loadSubtaskLinks(parentTaskId: number): Promise<SubtaskLin
   const links = (await requestToPromise(index.getAll(parentTaskId))) as SubtaskLink[]
   await transactionToPromise(transaction)
 
-  links.sort((a, b) => (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0))
+  links.sort(byRank)
   return links
 }
 
@@ -625,7 +626,7 @@ export async function loadScheduledTransitions(taskId: number): Promise<Schedule
   return records
     .map((record, index) => ({ id: keyToTaskId(keys[index]), ...record }))
     .filter((t) => t.taskId === taskId)
-    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+    .sort(byStringKey('date'))
 }
 
 export async function addScheduledTransition(taskId: number, date: string, statusSlug: string): Promise<ScheduledTransition> {

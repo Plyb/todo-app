@@ -6,3 +6,10 @@ export function rankBetween(prev: { rank: string } | null, next: { rank: string 
   if (next) return LexoRank.parse(next.rank).genPrev().toString()
   return LexoRank.middle().toString()
 }
+
+export function byStringKey<K extends string>(key: K) {
+  return <T extends Record<K, string>>(a: T, b: T): number =>
+    a[key] < b[key] ? -1 : a[key] > b[key] ? 1 : 0
+}
+
+export const byRank = byStringKey('rank')
