@@ -337,12 +337,10 @@ export async function loadStatuses(): Promise<Status[]> {
 }
 
 export async function createStatus(name: string, slug: string): Promise<Status> {
-  const db = await openTasksDatabase()
-  const transaction = db.transaction(STATUSES_STORE, 'readwrite')
-  const store = transaction.objectStore(STATUSES_STORE)
   const status: Status = { slug, name }
-  store.add(status)
-  await transactionToPromise(transaction)
+  await withStore(STATUSES_STORE, 'readwrite', (store) => {
+    store.add(status)
+  })
   return status
 }
 
@@ -421,88 +419,65 @@ export async function reassignStatus(fromSlug: string, toSlug: string): Promise<
 }
 
 export async function createTask(name: string, rank: string, statusSlug: string = 'backlog'): Promise<Task> {
-  const db = await openTasksDatabase()
-  const transaction = db.transaction(TASKS_STORE, 'readwrite')
-  const store = transaction.objectStore(TASKS_STORE)
-  const request = store.add({ name, done: false, rank, statusSlug, notes: '' })
-  const key = await requestToPromise(request)
-  await transactionToPromise(transaction)
+  const key = await withStore(TASKS_STORE, 'readwrite', (store) =>
+    requestToPromise(store.add({ name, done: false, rank, statusSlug, notes: '' })),
+  )
   return { id: keyToTaskId(key), name, done: false, rank, statusSlug, notes: '' }
 }
 
 export async function saveTask(task: Task): Promise<void> {
-  const db = await openTasksDatabase()
-
-  const transaction = db.transaction(TASKS_STORE, 'readwrite')
-  const store = transaction.objectStore(TASKS_STORE)
-  store.put({ name: task.name, done: task.done, rank: task.rank, statusSlug: task.statusSlug, notes: task.notes }, task.id)
-  await transactionToPromise(transaction)
+  await withStore(TASKS_STORE, 'readwrite', (store) => {
+    store.put({ name: task.name, done: task.done, rank: task.rank, statusSlug: task.statusSlug, notes: task.notes }, task.id)
+  })
 }
 
 export async function updateTaskDone(id: number, done: boolean): Promise<void> {
-  const db = await openTasksDatabase()
-
-  const transaction = db.transaction(TASKS_STORE, 'readwrite')
-  const store = transaction.objectStore(TASKS_STORE)
-  const record = await requestToPromise(store.get(id)) as StoredTask
-  store.put({ ...record, done }, id)
-  await transactionToPromise(transaction)
+  await withStore(TASKS_STORE, 'readwrite', async (store) => {
+    const record = await requestToPromise(store.get(id)) as StoredTask
+    store.put({ ...record, done }, id)
+  })
 }
 
 export async function updateTaskRank(id: number, rank: string): Promise<void> {
-  const db = await openTasksDatabase()
-
-  const transaction = db.transaction(TASKS_STORE, 'readwrite')
-  const store = transaction.objectStore(TASKS_STORE)
-  const existing = (await requestToPromise(store.get(id))) as StoredTask | undefined
-  if (existing) {
-    store.put({ ...existing, rank }, id)
-  }
-  await transactionToPromise(transaction)
+  await withStore(TASKS_STORE, 'readwrite', async (store) => {
+    const existing = (await requestToPromise(store.get(id))) as StoredTask | undefined
+    if (existing) {
+      store.put({ ...existing, rank }, id)
+    }
+  })
 }
 
 export async function updateTaskName(id: number, name: string): Promise<void> {
-  const db = await openTasksDatabase()
-
-  const transaction = db.transaction(TASKS_STORE, 'readwrite')
-  const store = transaction.objectStore(TASKS_STORE)
-  const existing = (await requestToPromise(store.get(id))) as StoredTask | undefined
-  if (existing) {
-    store.put({ ...existing, name }, id)
-  }
-  await transactionToPromise(transaction)
+  await withStore(TASKS_STORE, 'readwrite', async (store) => {
+    const existing = (await requestToPromise(store.get(id))) as StoredTask | undefined
+    if (existing) {
+      store.put({ ...existing, name }, id)
+    }
+  })
 }
 
 export async function updateTaskNotes(id: number, notes: string): Promise<void> {
-  const db = await openTasksDatabase()
-
-  const transaction = db.transaction(TASKS_STORE, 'readwrite')
-  const store = transaction.objectStore(TASKS_STORE)
-  const existing = (await requestToPromise(store.get(id))) as StoredTask | undefined
-  if (existing) {
-    store.put({ ...existing, notes }, id)
-  }
-  await transactionToPromise(transaction)
+  await withStore(TASKS_STORE, 'readwrite', async (store) => {
+    const existing = (await requestToPromise(store.get(id))) as StoredTask | undefined
+    if (existing) {
+      store.put({ ...existing, notes }, id)
+    }
+  })
 }
 
 export async function updateTaskStatus(id: number, statusSlug: string): Promise<void> {
-  const db = await openTasksDatabase()
-
-  const transaction = db.transaction(TASKS_STORE, 'readwrite')
-  const store = transaction.objectStore(TASKS_STORE)
-  const existing = (await requestToPromise(store.get(id))) as StoredTask | undefined
-  if (existing) {
-    store.put({ ...existing, statusSlug }, id)
-  }
-  await transactionToPromise(transaction)
+  await withStore(TASKS_STORE, 'readwrite', async (store) => {
+    const existing = (await requestToPromise(store.get(id))) as StoredTask | undefined
+    if (existing) {
+      store.put({ ...existing, statusSlug }, id)
+    }
+  })
 }
 
 export async function deleteTask(id: number): Promise<void> {
-  const db = await openTasksDatabase()
-  const transaction = db.transaction(TASKS_STORE, 'readwrite')
-  const store = transaction.objectStore(TASKS_STORE)
-  store.delete(id)
-  await transactionToPromise(transaction)
+  await withStore(TASKS_STORE, 'readwrite', (store) => {
+    store.delete(id)
+  })
   // The deleted task may have been a parent (its links to children are removed,
   // children survive as independent tasks) and/or a child (its own link is removed).
   await deleteSubtaskLinksByParent(id)
@@ -536,44 +511,36 @@ export async function loadAllSubtaskLinks(): Promise<SubtaskLink[]> {
 }
 
 export async function createSubtaskLink(parentTaskId: number, childTaskId: number, rank: string): Promise<SubtaskLink> {
-  const db = await openTasksDatabase()
-  const transaction = db.transaction(SUBTASKS_STORE, 'readwrite')
-  const store = transaction.objectStore(SUBTASKS_STORE)
   const stored: StoredSubtaskLink = { parentTaskId, childTaskId, rank }
-  const key = await requestToPromise(store.add(stored))
-  await transactionToPromise(transaction)
+  const key = await withStore(SUBTASKS_STORE, 'readwrite', (store) =>
+    requestToPromise(store.add(stored)),
+  )
   return { id: keyToTaskId(key), parentTaskId, childTaskId, rank }
 }
 
 export async function updateSubtaskLinkRank(id: number, rank: string): Promise<void> {
-  const db = await openTasksDatabase()
-  const transaction = db.transaction(SUBTASKS_STORE, 'readwrite')
-  const store = transaction.objectStore(SUBTASKS_STORE)
-  const existing = (await requestToPromise(store.get(id))) as SubtaskLink | undefined
-  if (existing) {
-    store.put({ ...existing, rank })
-  }
-  await transactionToPromise(transaction)
+  await withStore(SUBTASKS_STORE, 'readwrite', async (store) => {
+    const existing = (await requestToPromise(store.get(id))) as SubtaskLink | undefined
+    if (existing) {
+      store.put({ ...existing, rank })
+    }
+  })
 }
 
 export async function deleteSubtaskLinksByParent(parentTaskId: number): Promise<void> {
-  const db = await openTasksDatabase()
-  const transaction = db.transaction(SUBTASKS_STORE, 'readwrite')
-  const store = transaction.objectStore(SUBTASKS_STORE)
-  const index = store.index('by_parent')
-  const keys = await requestToPromise(index.getAllKeys(parentTaskId))
-  for (const key of keys) store.delete(key)
-  await transactionToPromise(transaction)
+  await withStore(SUBTASKS_STORE, 'readwrite', async (store) => {
+    const index = store.index('by_parent')
+    const keys = await requestToPromise(index.getAllKeys(parentTaskId))
+    for (const key of keys) store.delete(key)
+  })
 }
 
 export async function deleteSubtaskLinksByChild(childTaskId: number): Promise<void> {
-  const db = await openTasksDatabase()
-  const transaction = db.transaction(SUBTASKS_STORE, 'readwrite')
-  const store = transaction.objectStore(SUBTASKS_STORE)
-  const index = store.index('by_child')
-  const keys = await requestToPromise(index.getAllKeys(childTaskId))
-  for (const key of keys) store.delete(key)
-  await transactionToPromise(transaction)
+  await withStore(SUBTASKS_STORE, 'readwrite', async (store) => {
+    const index = store.index('by_child')
+    const keys = await requestToPromise(index.getAllKeys(childTaskId))
+    for (const key of keys) store.delete(key)
+  })
 }
 
 export async function loadViews(): Promise<View[]> {
@@ -583,19 +550,15 @@ export async function loadViews(): Promise<View[]> {
 }
 
 export async function saveView(view: View): Promise<void> {
-  const db = await openTasksDatabase()
-  const transaction = db.transaction(VIEWS_STORE, 'readwrite')
-  const store = transaction.objectStore(VIEWS_STORE)
-  store.put(view)
-  await transactionToPromise(transaction)
+  await withStore(VIEWS_STORE, 'readwrite', (store) => {
+    store.put(view)
+  })
 }
 
 export async function deleteView(slug: string): Promise<void> {
-  const db = await openTasksDatabase()
-  const transaction = db.transaction(VIEWS_STORE, 'readwrite')
-  const store = transaction.objectStore(VIEWS_STORE)
-  store.delete(slug)
-  await transactionToPromise(transaction)
+  await withStore(VIEWS_STORE, 'readwrite', (store) => {
+    store.delete(slug)
+  })
 }
 
 export async function loadScheduledTransitions(taskId: number): Promise<ScheduledTransition[]> {
@@ -613,21 +576,17 @@ export async function loadScheduledTransitions(taskId: number): Promise<Schedule
 }
 
 export async function addScheduledTransition(taskId: number, date: string, statusSlug: string): Promise<ScheduledTransition> {
-  const db = await openTasksDatabase()
-  const transaction = db.transaction(SCHEDULED_TRANSITIONS_STORE, 'readwrite')
-  const store = transaction.objectStore(SCHEDULED_TRANSITIONS_STORE)
   const stored: StoredScheduledTransition = { taskId, date, statusSlug }
-  const key = await requestToPromise(store.add(stored))
-  await transactionToPromise(transaction)
+  const key = await withStore(SCHEDULED_TRANSITIONS_STORE, 'readwrite', (store) =>
+    requestToPromise(store.add(stored)),
+  )
   return { id: keyToTaskId(key), taskId, date, statusSlug }
 }
 
 export async function deleteScheduledTransition(id: number): Promise<void> {
-  const db = await openTasksDatabase()
-  const transaction = db.transaction(SCHEDULED_TRANSITIONS_STORE, 'readwrite')
-  const store = transaction.objectStore(SCHEDULED_TRANSITIONS_STORE)
-  store.delete(id)
-  await transactionToPromise(transaction)
+  await withStore(SCHEDULED_TRANSITIONS_STORE, 'readwrite', (store) => {
+    store.delete(id)
+  })
 }
 
 export async function loadAllDueTransitions(): Promise<ScheduledTransition[]> {
@@ -676,29 +635,23 @@ export async function loadAllBlocks(): Promise<BlockingRelationship[]> {
 }
 
 export async function addBlock(fromTaskId: number, toTaskId: number, type: 'blocks'): Promise<BlockingRelationship> {
-  const db = await openTasksDatabase()
-  const transaction = db.transaction(RELATIONSHIPS_STORE, 'readwrite')
-  const store = transaction.objectStore(RELATIONSHIPS_STORE)
   const stored: StoredBlockingRelationship = { fromTaskId, toTaskId, type }
-  const key = await requestToPromise(store.add(stored))
-  await transactionToPromise(transaction)
+  const key = await withStore(RELATIONSHIPS_STORE, 'readwrite', (store) =>
+    requestToPromise(store.add(stored)),
+  )
   return { id: keyToTaskId(key), fromTaskId, toTaskId, type }
 }
 
 export async function deleteBlock(id: number): Promise<void> {
-  const db = await openTasksDatabase()
-  const transaction = db.transaction(RELATIONSHIPS_STORE, 'readwrite')
-  const store = transaction.objectStore(RELATIONSHIPS_STORE)
-  store.delete(id)
-  await transactionToPromise(transaction)
+  await withStore(RELATIONSHIPS_STORE, 'readwrite', (store) => {
+    store.delete(id)
+  })
 }
 
 export async function deleteBlocksByTask(taskId: number): Promise<void> {
-  const db = await openTasksDatabase()
-  const transaction = db.transaction(RELATIONSHIPS_STORE, 'readwrite')
-  const store = transaction.objectStore(RELATIONSHIPS_STORE)
-  const fromKeys = await requestToPromise(store.index('fromTaskId').getAllKeys(taskId))
-  const toKeys = await requestToPromise(store.index('toTaskId').getAllKeys(taskId))
-  for (const key of [...fromKeys, ...toKeys]) store.delete(key)
-  await transactionToPromise(transaction)
+  await withStore(RELATIONSHIPS_STORE, 'readwrite', async (store) => {
+    const fromKeys = await requestToPromise(store.index('fromTaskId').getAllKeys(taskId))
+    const toKeys = await requestToPromise(store.index('toTaskId').getAllKeys(taskId))
+    for (const key of [...fromKeys, ...toKeys]) store.delete(key)
+  })
 }
