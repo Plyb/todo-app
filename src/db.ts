@@ -502,14 +502,15 @@ export async function updateTaskStatus(id: number, statusSlug: string): Promise<
 }
 
 export async function deleteTask(id: number): Promise<void> {
-  await withStore(TASKS_STORE, 'readwrite', (store) => {
-    store.delete(id)
+  await withTransaction([TASKS_STORE, SUBTASKS_STORE, RELATIONSHIPS_STORE], 'readwrite', async (tx) => {
+    tx.objectStore(TASKS_STORE).delete(id)
+    // The deleted task may have been a parent (its links to children are removed,
+    // children survive as independent tasks) and/or a child (its own link is removed).
+    const subtasksStore = tx.objectStore(SUBTASKS_STORE)
+    await deleteSubtaskLinksByParentInStore(subtasksStore, id)
+    await deleteSubtaskLinksByChildInStore(subtasksStore, id)
+    await deleteBlocksByTaskInStore(tx.objectStore(RELATIONSHIPS_STORE), id)
   })
-  // The deleted task may have been a parent (its links to children are removed,
-  // children survive as independent tasks) and/or a child (its own link is removed).
-  await deleteSubtaskLinksByParent(id)
-  await deleteSubtaskLinksByChild(id)
-  await deleteBlocksByTask(id)
 }
 
 export async function loadSubtaskLinks(parentTaskId: number): Promise<SubtaskLink[]> {
@@ -552,20 +553,24 @@ export async function updateSubtaskLinkRank(id: number, rank: string): Promise<v
   })
 }
 
+async function deleteSubtaskLinksByParentInStore(store: IDBObjectStore, parentTaskId: number): Promise<void> {
+  const index = store.index('by_parent')
+  const keys = await requestToPromise(index.getAllKeys(parentTaskId))
+  for (const key of keys) store.delete(key)
+}
+
+async function deleteSubtaskLinksByChildInStore(store: IDBObjectStore, childTaskId: number): Promise<void> {
+  const index = store.index('by_child')
+  const keys = await requestToPromise(index.getAllKeys(childTaskId))
+  for (const key of keys) store.delete(key)
+}
+
 export async function deleteSubtaskLinksByParent(parentTaskId: number): Promise<void> {
-  await withStore(SUBTASKS_STORE, 'readwrite', async (store) => {
-    const index = store.index('by_parent')
-    const keys = await requestToPromise(index.getAllKeys(parentTaskId))
-    for (const key of keys) store.delete(key)
-  })
+  await withStore(SUBTASKS_STORE, 'readwrite', (store) => deleteSubtaskLinksByParentInStore(store, parentTaskId))
 }
 
 export async function deleteSubtaskLinksByChild(childTaskId: number): Promise<void> {
-  await withStore(SUBTASKS_STORE, 'readwrite', async (store) => {
-    const index = store.index('by_child')
-    const keys = await requestToPromise(index.getAllKeys(childTaskId))
-    for (const key of keys) store.delete(key)
-  })
+  await withStore(SUBTASKS_STORE, 'readwrite', (store) => deleteSubtaskLinksByChildInStore(store, childTaskId))
 }
 
 export async function loadViews(): Promise<View[]> {
@@ -663,10 +668,12 @@ export async function deleteBlock(id: number): Promise<void> {
   })
 }
 
+async function deleteBlocksByTaskInStore(store: IDBObjectStore, taskId: number): Promise<void> {
+  const fromKeys = await requestToPromise(store.index('fromTaskId').getAllKeys(taskId))
+  const toKeys = await requestToPromise(store.index('toTaskId').getAllKeys(taskId))
+  for (const key of [...fromKeys, ...toKeys]) store.delete(key)
+}
+
 export async function deleteBlocksByTask(taskId: number): Promise<void> {
-  await withStore(RELATIONSHIPS_STORE, 'readwrite', async (store) => {
-    const fromKeys = await requestToPromise(store.index('fromTaskId').getAllKeys(taskId))
-    const toKeys = await requestToPromise(store.index('toTaskId').getAllKeys(taskId))
-    for (const key of [...fromKeys, ...toKeys]) store.delete(key)
-  })
+  await withStore(RELATIONSHIPS_STORE, 'readwrite', (store) => deleteBlocksByTaskInStore(store, taskId))
 }
