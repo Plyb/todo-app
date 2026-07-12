@@ -107,7 +107,17 @@ function keyToTaskId(key: IDBValidKey): number {
   throw new Error('IndexedDB task key is not a numeric id')
 }
 
-async function migrateAddRanks(_db: IDBDatabase, transaction: IDBTransaction): Promise<void> {
+async function migrateAddDone(transaction: IDBTransaction): Promise<void> {
+  const store = transaction.objectStore(TASKS_STORE)
+  await iterateCursor(store, (cursor) => {
+    const record = cursor.value as StoredTask
+    if (record.done === undefined) {
+      cursor.update({ ...record, done: false })
+    }
+  })
+}
+
+async function migrateAddRanks(transaction: IDBTransaction): Promise<void> {
   const store = transaction.objectStore(TASKS_STORE)
   let rankGen = LexoRank.middle()
 
@@ -120,7 +130,7 @@ async function migrateAddRanks(_db: IDBDatabase, transaction: IDBTransaction): P
   })
 }
 
-async function migrateAddStatuses(_db: IDBDatabase, transaction: IDBTransaction): Promise<void> {
+async function migrateAddStatuses(transaction: IDBTransaction): Promise<void> {
   // Seed default statuses into the newly created store
   const statusStore = transaction.objectStore(STATUSES_STORE)
   for (const status of DEFAULT_STATUSES) {
@@ -158,6 +168,89 @@ async function migrateAddNotes(transaction: IDBTransaction): Promise<void> {
   })
 }
 
+// Each step's `migrate` runs when `event.oldVersion < version`. Steps run in
+// ascending version order; store creation (schema) is done synchronously first,
+// then any data backfill. Every step is idempotent (guarded by `contains(...)`
+// or per-record field checks) so replaying a partial upgrade is safe.
+type MigrationStep = {
+  version: number
+  migrate: (db: IDBDatabase, transaction: IDBTransaction) => void | Promise<void>
+}
+
+const MIGRATION_STEPS: MigrationStep[] = [
+  {
+    // v1: base schema — the tasks store.
+    version: 1,
+    migrate: (db) => {
+      if (!db.objectStoreNames.contains(TASKS_STORE)) {
+        db.createObjectStore(TASKS_STORE, { autoIncrement: true })
+      }
+    },
+  },
+  {
+    // v2: backfill `done` on existing task records.
+    version: 2,
+    migrate: (_db, transaction) => migrateAddDone(transaction),
+  },
+  {
+    // v3: backfill `rank` on existing task records.
+    version: 3,
+    migrate: (_db, transaction) => migrateAddRanks(transaction),
+  },
+  {
+    // v4: statuses store + seed defaults + backfill `statusSlug` on tasks.
+    version: 4,
+    migrate: (db, transaction) => {
+      if (!db.objectStoreNames.contains(STATUSES_STORE)) {
+        db.createObjectStore(STATUSES_STORE, { keyPath: 'slug' })
+      }
+      return migrateAddStatuses(transaction)
+    },
+  },
+  {
+    // v5: backfill `notes` on existing task records.
+    version: 5,
+    migrate: (_db, transaction) => migrateAddNotes(transaction),
+  },
+  {
+    // v6: views + relationships stores; seed one default view per status.
+    version: 6,
+    migrate: (db, transaction) => {
+      if (!db.objectStoreNames.contains(VIEWS_STORE)) {
+        db.createObjectStore(VIEWS_STORE, { keyPath: 'slug' })
+      }
+      if (!db.objectStoreNames.contains(RELATIONSHIPS_STORE)) {
+        const relStore = db.createObjectStore(RELATIONSHIPS_STORE, { autoIncrement: true })
+        relStore.createIndex('fromTaskId', 'fromTaskId', { unique: false })
+        relStore.createIndex('toTaskId', 'toTaskId', { unique: false })
+      }
+      return migrateAddViews(transaction)
+    },
+  },
+  {
+    // v7: scheduledTransitions store.
+    version: 7,
+    migrate: (db) => {
+      if (!db.objectStoreNames.contains(SCHEDULED_TRANSITIONS_STORE)) {
+        db.createObjectStore(SCHEDULED_TRANSITIONS_STORE, { autoIncrement: true })
+      }
+    },
+  },
+  {
+    // v7 -> v8: subtasks parent/child link table. Destructive drop/recreate —
+    // there is no user data to preserve at this version.
+    version: 8,
+    migrate: (db) => {
+      if (db.objectStoreNames.contains(SUBTASKS_STORE)) {
+        db.deleteObjectStore(SUBTASKS_STORE)
+      }
+      const subtaskLinksStore = db.createObjectStore(SUBTASKS_STORE, { keyPath: 'id', autoIncrement: true })
+      subtaskLinksStore.createIndex('by_parent', 'parentTaskId', { unique: false })
+      subtaskLinksStore.createIndex('by_child', 'childTaskId', { unique: true })
+    },
+  },
+]
+
 async function openTasksDatabase(): Promise<IDBDatabase> {
   if (openDatabasePromise) {
     return openDatabasePromise
@@ -170,86 +263,34 @@ async function openTasksDatabase(): Promise<IDBDatabase> {
       const db = request.result
       const transaction = request.transaction!
 
-      if (!db.objectStoreNames.contains(TASKS_STORE)) {
-        db.createObjectStore(TASKS_STORE, { autoIncrement: true })
-      } else {
-        // v1 -> v2: add done field to existing records
-        if (event.oldVersion < 2) {
-          const store = transaction.objectStore(TASKS_STORE)
-          iterateCursor(store, (cursor) => {
-            const record = cursor.value as StoredTask
-            if (record.done === undefined) {
-              cursor.update({ ...record, done: false })
-            }
-          }).catch(() => {
-            // Migration errors will surface as transaction abort
-          })
-        }
-
-        // v2 -> v3: add rank field to existing records
-        if (event.oldVersion < 3) {
-          migrateAddRanks(db, transaction).catch(() => {
-            // Migration errors will surface as transaction abort
-          })
-        }
-
-        // v3 -> v4: add statuses store and statusSlug to tasks
-        if (event.oldVersion < 4) {
-          migrateAddStatuses(db, transaction).catch(() => {
-            // Migration errors will surface as transaction abort
-          })
-        }
-
-        // v4 -> v5: add notes field to existing records
-        if (event.oldVersion < 5) {
-          migrateAddNotes(transaction).catch(() => {
-            // Migration errors will surface as transaction abort
-          })
+      // A failed data-backfill must fail loudly: abort the versionchange
+      // transaction so the open request errors rather than silently landing a
+      // partially-migrated database. Guarded because the underlying IDB request
+      // error may already be aborting the transaction.
+      const abortOnMigrationError = () => {
+        try {
+          transaction.abort()
+        } catch {
+          // Transaction already aborting/finished; the original error stands.
         }
       }
 
-      // v3 -> v4: add statuses store
-      if (event.oldVersion < 4) {
-        if (!db.objectStoreNames.contains(STATUSES_STORE)) {
-          db.createObjectStore(STATUSES_STORE, { keyPath: 'slug' })
-        }
-        migrateAddStatuses(db, transaction).catch(() => {
-          // Migration errors will surface as transaction abort
-        })
-      }
-
-      // v5 -> v6: add views store (seeded with one default view per existing status) and relationships store
-      if (event.oldVersion < 6) {
-        if (!db.objectStoreNames.contains(VIEWS_STORE)) {
-          db.createObjectStore(VIEWS_STORE, { keyPath: 'slug' })
-        }
-        migrateAddViews(transaction).catch(() => {
-          // Migration errors will surface as transaction abort
-        })
-
-        if (!db.objectStoreNames.contains(RELATIONSHIPS_STORE)) {
-          const relStore = db.createObjectStore(RELATIONSHIPS_STORE, { autoIncrement: true })
-          relStore.createIndex('fromTaskId', 'fromTaskId', { unique: false })
-          relStore.createIndex('toTaskId', 'toTaskId', { unique: false })
+      // Fire the applicable steps synchronously in version order (schema first,
+      // then backfill within each step). We deliberately do NOT `await` between
+      // steps: a non-IDB await could let the versionchange transaction
+      // auto-commit. The pending IDB requests keep the transaction alive, and
+      // synchronous firing preserves cross-step ordering (e.g. status seeds are
+      // queued before migrateAddViews reads them).
+      const pending: Promise<void>[] = []
+      for (const step of MIGRATION_STEPS) {
+        if (event.oldVersion < step.version) {
+          const result = step.migrate(db, transaction)
+          if (result) {
+            pending.push(result)
+          }
         }
       }
-
-      // v6 -> v7: add scheduledTransitions store
-      if (event.oldVersion < 7) {
-        if (!db.objectStoreNames.contains(SCHEDULED_TRANSITIONS_STORE)) {
-          db.createObjectStore(SCHEDULED_TRANSITIONS_STORE, { autoIncrement: true })
-        }
-      }
-
-      // v7 -> v8: add subtasks store as a parent/child link table (no user data to preserve)
-      if (event.oldVersion < 8) {
-        if (db.objectStoreNames.contains(SUBTASKS_STORE)) {
-          db.deleteObjectStore(SUBTASKS_STORE)
-        }
-        const subtaskLinksStore = db.createObjectStore(SUBTASKS_STORE, { keyPath: 'id', autoIncrement: true })
-        subtaskLinksStore.createIndex('by_parent', 'parentTaskId', { unique: false })
-        subtaskLinksStore.createIndex('by_child', 'childTaskId', { unique: true })
-      }
+      Promise.all(pending).catch(abortOnMigrationError)
     }
 
     request.onsuccess = () => resolve(request.result)
