@@ -80,6 +80,25 @@ function transactionToPromise(transaction: IDBTransaction): Promise<void> {
   })
 }
 
+function iterateCursor(store: IDBObjectStore, visit: (cursor: IDBCursorWithValue) => void): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const cursorRequest = store.openCursor()
+
+    cursorRequest.onsuccess = () => {
+      const cursor = cursorRequest.result
+      if (!cursor) {
+        resolve()
+        return
+      }
+
+      visit(cursor)
+      cursor.continue()
+    }
+
+    cursorRequest.onerror = () => reject(cursorRequest.error)
+  })
+}
+
 function keyToTaskId(key: IDBValidKey): number {
   if (typeof key === 'number' && Number.isFinite(key)) {
     return key
@@ -90,27 +109,14 @@ function keyToTaskId(key: IDBValidKey): number {
 
 async function migrateAddRanks(_db: IDBDatabase, transaction: IDBTransaction): Promise<void> {
   const store = transaction.objectStore(TASKS_STORE)
-  const cursorRequest = store.openCursor()
+  let rankGen = LexoRank.middle()
 
-  await new Promise<void>((resolve, reject) => {
-    let rankGen = LexoRank.middle()
-
-    cursorRequest.onsuccess = () => {
-      const cursor = cursorRequest.result
-      if (!cursor) {
-        resolve()
-        return
-      }
-
-      const record = cursor.value as { name: string; rank?: string }
-      if (!record.rank) {
-        cursor.update({ ...record, rank: rankGen.toString() })
-        rankGen = rankGen.genNext()
-      }
-      cursor.continue()
+  await iterateCursor(store, (cursor) => {
+    const record = cursor.value as { name: string; rank?: string }
+    if (!record.rank) {
+      cursor.update({ ...record, rank: rankGen.toString() })
+      rankGen = rankGen.genNext()
     }
-
-    cursorRequest.onerror = () => reject(cursorRequest.error)
   })
 }
 
@@ -123,24 +129,11 @@ async function migrateAddStatuses(_db: IDBDatabase, transaction: IDBTransaction)
 
   // Migrate existing tasks to have statusSlug: 'backlog'
   const taskStore = transaction.objectStore(TASKS_STORE)
-  const cursorRequest = taskStore.openCursor()
-
-  await new Promise<void>((resolve, reject) => {
-    cursorRequest.onsuccess = () => {
-      const cursor = cursorRequest.result
-      if (!cursor) {
-        resolve()
-        return
-      }
-
-      const record = cursor.value as StoredTask & { statusSlug?: string }
-      if (!record.statusSlug) {
-        cursor.update({ ...record, statusSlug: 'backlog' })
-      }
-      cursor.continue()
+  await iterateCursor(taskStore, (cursor) => {
+    const record = cursor.value as StoredTask & { statusSlug?: string }
+    if (!record.statusSlug) {
+      cursor.update({ ...record, statusSlug: 'backlog' })
     }
-
-    cursorRequest.onerror = () => reject(cursorRequest.error)
   })
 }
 
@@ -157,24 +150,11 @@ async function migrateAddViews(transaction: IDBTransaction): Promise<void> {
 
 async function migrateAddNotes(transaction: IDBTransaction): Promise<void> {
   const store = transaction.objectStore(TASKS_STORE)
-  const cursorRequest = store.openCursor()
-
-  await new Promise<void>((resolve, reject) => {
-    cursorRequest.onsuccess = () => {
-      const cursor = cursorRequest.result
-      if (!cursor) {
-        resolve()
-        return
-      }
-
-      const record = cursor.value as { notes?: string }
-      if (record.notes === undefined) {
-        cursor.update({ ...record, notes: '' })
-      }
-      cursor.continue()
+  await iterateCursor(store, (cursor) => {
+    const record = cursor.value as { notes?: string }
+    if (record.notes === undefined) {
+      cursor.update({ ...record, notes: '' })
     }
-
-    cursorRequest.onerror = () => reject(cursorRequest.error)
   })
 }
 
@@ -196,17 +176,14 @@ async function openTasksDatabase(): Promise<IDBDatabase> {
         // v1 -> v2: add done field to existing records
         if (event.oldVersion < 2) {
           const store = transaction.objectStore(TASKS_STORE)
-          const cursorRequest = store.openCursor()
-          cursorRequest.onsuccess = () => {
-            const cursor = cursorRequest.result
-            if (cursor) {
-              const record = cursor.value as StoredTask
-              if (record.done === undefined) {
-                cursor.update({ ...record, done: false })
-              }
-              cursor.continue()
+          iterateCursor(store, (cursor) => {
+            const record = cursor.value as StoredTask
+            if (record.done === undefined) {
+              cursor.update({ ...record, done: false })
             }
-          }
+          }).catch(() => {
+            // Migration errors will surface as transaction abort
+          })
         }
 
         // v2 -> v3: add rank field to existing records
@@ -343,24 +320,11 @@ export async function createStatus(name: string, slug: string): Promise<Status> 
 
 async function reassignTasksAndViews(transaction: IDBTransaction, oldSlug: string, newSlug: string): Promise<void> {
   const taskStore = transaction.objectStore(TASKS_STORE)
-  const cursorRequest = taskStore.openCursor()
-
-  await new Promise<void>((resolve, reject) => {
-    cursorRequest.onsuccess = () => {
-      const cursor = cursorRequest.result
-      if (!cursor) {
-        resolve()
-        return
-      }
-
-      const record = cursor.value as StoredTask
-      if (record.statusSlug === oldSlug) {
-        cursor.update({ ...record, statusSlug: newSlug })
-      }
-      cursor.continue()
+  await iterateCursor(taskStore, (cursor) => {
+    const record = cursor.value as StoredTask
+    if (record.statusSlug === oldSlug) {
+      cursor.update({ ...record, statusSlug: newSlug })
     }
-
-    cursorRequest.onerror = () => reject(cursorRequest.error)
   })
 
   const viewStore = transaction.objectStore(VIEWS_STORE)
