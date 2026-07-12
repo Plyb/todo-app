@@ -301,13 +301,6 @@ type StoreName =
   | typeof RELATIONSHIPS_STORE
   | typeof SUBTASKS_STORE
 
-/**
- * Opens the database, runs `fn` inside a transaction over a single store, then
- * awaits the transaction and returns `fn`'s result. `fn` may only await
- * IndexedDB requests belonging to this transaction: the helper hides the tx,
- * and awaiting a non-IDB promise yields the microtask queue long enough for the
- * transaction to auto-commit.
- */
 async function withStore<T>(
   name: StoreName,
   mode: IDBTransactionMode,
@@ -321,7 +314,6 @@ async function withStore<T>(
   return result
 }
 
-/** Multi-store variant of {@link withStore}; the caller resolves stores off `tx`. */
 export async function withTransaction<T>(
   names: StoreName[],
   mode: IDBTransactionMode,
