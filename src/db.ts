@@ -107,6 +107,20 @@ function keyToTaskId(key: IDBValidKey): number {
   throw new Error('IndexedDB task key is not a numeric id')
 }
 
+type GetAllSource<T> = {
+  getAll(query?: IDBValidKey | IDBKeyRange | null): IDBRequest<T[]>
+  getAllKeys(query?: IDBValidKey | IDBKeyRange | null): IDBRequest<IDBValidKey[]>
+}
+
+async function getAllWithIds<T>(
+  source: GetAllSource<T>,
+  query?: IDBValidKey | IDBKeyRange | null,
+): Promise<(T & { id: number })[]> {
+  const records = await requestToPromise(source.getAll(query))
+  const keys = await requestToPromise(source.getAllKeys(query))
+  return records.map((record, index) => ({ ...record, id: keyToTaskId(keys[index]) }))
+}
+
 async function migrateAddDone(transaction: IDBTransaction): Promise<void> {
   const store = transaction.objectStore(TASKS_STORE)
   await iterateCursor(store, (cursor) => {
@@ -419,12 +433,10 @@ export async function getStatusUsage(slug: string): Promise<StatusUsage> {
     const taskStore = tx.objectStore(TASKS_STORE)
     const viewStore = tx.objectStore(VIEWS_STORE)
 
-    const storedTasks = (await requestToPromise(taskStore.getAll())) as StoredTask[]
-    const taskKeys = await requestToPromise(taskStore.getAllKeys())
+    const tasksWithIds = await getAllWithIds<StoredTask>(taskStore)
     const views = (await requestToPromise(viewStore.getAll())) as View[]
 
-    const taskIds = storedTasks
-      .map((task, index) => ({ id: keyToTaskId(taskKeys[index]), statusSlug: task.statusSlug }))
+    const taskIds = tasksWithIds
       .filter((t) => t.statusSlug === slug)
       .map((t) => t.id)
     const viewSlugs = views.filter((v) => v.statusSlugs.includes(slug)).map((v) => v.slug)
@@ -588,11 +600,9 @@ export async function deleteView(slug: string): Promise<void> {
 
 export async function loadScheduledTransitions(taskId: number): Promise<ScheduledTransition[]> {
   return withStore(SCHEDULED_TRANSITIONS_STORE, 'readonly', async (store) => {
-    const records = (await requestToPromise(store.getAll())) as StoredScheduledTransition[]
-    const keys = await requestToPromise(store.getAllKeys())
+    const transitions = await getAllWithIds<StoredScheduledTransition>(store)
 
-    return records
-      .map((record, index) => ({ id: keyToTaskId(keys[index]), ...record }))
+    return transitions
       .filter((t) => t.taskId === taskId)
       .sort(byStringKey('date'))
   })
@@ -614,13 +624,10 @@ export async function deleteScheduledTransition(id: number): Promise<void> {
 
 export async function loadAllDueTransitions(): Promise<ScheduledTransition[]> {
   return withStore(SCHEDULED_TRANSITIONS_STORE, 'readonly', async (store) => {
-    const records = (await requestToPromise(store.getAll())) as StoredScheduledTransition[]
-    const keys = await requestToPromise(store.getAllKeys())
+    const transitions = await getAllWithIds<StoredScheduledTransition>(store)
 
     const today = new Date().toISOString().slice(0, 10)
-    return records
-      .map((record, index) => ({ id: keyToTaskId(keys[index]), ...record }))
-      .filter((t) => t.date <= today)
+    return transitions.filter((t) => t.date <= today)
   })
 }
 
@@ -629,24 +636,16 @@ export async function loadBlocks(taskId: number): Promise<BlockingRelationship[]
     const fromIndex = store.index('fromTaskId')
     const toIndex = store.index('toTaskId')
 
-    const fromRecords = (await requestToPromise(fromIndex.getAll(taskId))) as StoredBlockingRelationship[]
-    const fromKeys = await requestToPromise(fromIndex.getAllKeys(taskId))
-    const toRecords = (await requestToPromise(toIndex.getAll(taskId))) as StoredBlockingRelationship[]
-    const toKeys = await requestToPromise(toIndex.getAllKeys(taskId))
-
-    const from = fromRecords.map((r, i) => ({ ...r, id: keyToTaskId(fromKeys[i]) }))
-    const to = toRecords.map((r, i) => ({ ...r, id: keyToTaskId(toKeys[i]) }))
+    const from = await getAllWithIds<StoredBlockingRelationship>(fromIndex, taskId)
+    const to = await getAllWithIds<StoredBlockingRelationship>(toIndex, taskId)
     return [...from, ...to]
   })
 }
 
 export async function loadAllBlocks(): Promise<BlockingRelationship[]> {
-  return withStore(RELATIONSHIPS_STORE, 'readonly', async (store) => {
-    const records = (await requestToPromise(store.getAll())) as StoredBlockingRelationship[]
-    const keys = await requestToPromise(store.getAllKeys())
-
-    return records.map((r, i) => ({ ...r, id: keyToTaskId(keys[i]) }))
-  })
+  return withStore(RELATIONSHIPS_STORE, 'readonly', async (store) =>
+    getAllWithIds<StoredBlockingRelationship>(store),
+  )
 }
 
 export async function addBlock(fromTaskId: number, toTaskId: number, type: 'blocks'): Promise<BlockingRelationship> {
