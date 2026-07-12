@@ -271,6 +271,39 @@ async function seedDemoTasks(db: IDBDatabase): Promise<void> {
   await transactionToPromise(transaction)
 }
 
+type StoreName =
+  | typeof TASKS_STORE
+  | typeof STATUSES_STORE
+  | typeof VIEWS_STORE
+  | typeof SCHEDULED_TRANSITIONS_STORE
+  | typeof RELATIONSHIPS_STORE
+  | typeof SUBTASKS_STORE
+
+async function withStore<T>(
+  name: StoreName,
+  mode: IDBTransactionMode,
+  fn: (store: IDBObjectStore, tx: IDBTransaction) => T | Promise<T>,
+): Promise<T> {
+  const db = await openTasksDatabase()
+  const transaction = db.transaction(name, mode)
+  const store = transaction.objectStore(name)
+  const result = await fn(store, transaction)
+  await transactionToPromise(transaction)
+  return result
+}
+
+export async function withTransaction<T>(
+  names: StoreName[],
+  mode: IDBTransactionMode,
+  fn: (tx: IDBTransaction) => T | Promise<T>,
+): Promise<T> {
+  const db = await openTasksDatabase()
+  const transaction = db.transaction(names, mode)
+  const result = await fn(transaction)
+  await transactionToPromise(transaction)
+  return result
+}
+
 export async function loadTasks(): Promise<Task[]> {
   const db = await openTasksDatabase()
 
@@ -298,14 +331,9 @@ export async function loadTasks(): Promise<Task[]> {
 }
 
 export async function loadStatuses(): Promise<Status[]> {
-  const db = await openTasksDatabase()
-
-  const transaction = db.transaction(STATUSES_STORE, 'readonly')
-  const store = transaction.objectStore(STATUSES_STORE)
-  const statuses = (await requestToPromise(store.getAll())) as Status[]
-  await transactionToPromise(transaction)
-
-  return statuses
+  return withStore(STATUSES_STORE, 'readonly', async (store) =>
+    (await requestToPromise(store.getAll())) as Status[],
+  )
 }
 
 export async function createStatus(name: string, slug: string): Promise<Status> {
@@ -495,22 +523,16 @@ export async function loadSubtaskLinks(parentTaskId: number): Promise<SubtaskLin
 }
 
 export async function loadParentLink(childTaskId: number): Promise<SubtaskLink | undefined> {
-  const db = await openTasksDatabase()
-  const transaction = db.transaction(SUBTASKS_STORE, 'readonly')
-  const store = transaction.objectStore(SUBTASKS_STORE)
-  const index = store.index('by_child')
-  const link = (await requestToPromise(index.get(childTaskId))) as SubtaskLink | undefined
-  await transactionToPromise(transaction)
-  return link
+  return withStore(SUBTASKS_STORE, 'readonly', async (store) => {
+    const index = store.index('by_child')
+    return (await requestToPromise(index.get(childTaskId))) as SubtaskLink | undefined
+  })
 }
 
 export async function loadAllSubtaskLinks(): Promise<SubtaskLink[]> {
-  const db = await openTasksDatabase()
-  const transaction = db.transaction(SUBTASKS_STORE, 'readonly')
-  const store = transaction.objectStore(SUBTASKS_STORE)
-  const links = (await requestToPromise(store.getAll())) as SubtaskLink[]
-  await transactionToPromise(transaction)
-  return links
+  return withStore(SUBTASKS_STORE, 'readonly', async (store) =>
+    (await requestToPromise(store.getAll())) as SubtaskLink[],
+  )
 }
 
 export async function createSubtaskLink(parentTaskId: number, childTaskId: number, rank: string): Promise<SubtaskLink> {
@@ -555,12 +577,9 @@ export async function deleteSubtaskLinksByChild(childTaskId: number): Promise<vo
 }
 
 export async function loadViews(): Promise<View[]> {
-  const db = await openTasksDatabase()
-  const transaction = db.transaction(VIEWS_STORE, 'readonly')
-  const store = transaction.objectStore(VIEWS_STORE)
-  const views = (await requestToPromise(store.getAll())) as View[]
-  await transactionToPromise(transaction)
-  return views
+  return withStore(VIEWS_STORE, 'readonly', async (store) =>
+    (await requestToPromise(store.getAll())) as View[],
+  )
 }
 
 export async function saveView(view: View): Promise<void> {
