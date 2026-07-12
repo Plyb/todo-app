@@ -320,7 +320,7 @@ async function withStore<T>(
   return result
 }
 
-export async function withTransaction<T>(
+async function withTransaction<T>(
   names: StoreName[],
   mode: IDBTransactionMode,
   fn: (tx: IDBTransaction) => T | Promise<T>,
@@ -415,23 +415,22 @@ export async function deleteStatus(slug: string): Promise<void> {
 export type StatusUsage = { taskIds: number[]; viewSlugs: string[] }
 
 export async function getStatusUsage(slug: string): Promise<StatusUsage> {
-  const db = await openTasksDatabase()
-  const transaction = db.transaction([TASKS_STORE, VIEWS_STORE], 'readonly')
-  const taskStore = transaction.objectStore(TASKS_STORE)
-  const viewStore = transaction.objectStore(VIEWS_STORE)
+  return withTransaction([TASKS_STORE, VIEWS_STORE], 'readonly', async (tx) => {
+    const taskStore = tx.objectStore(TASKS_STORE)
+    const viewStore = tx.objectStore(VIEWS_STORE)
 
-  const storedTasks = (await requestToPromise(taskStore.getAll())) as StoredTask[]
-  const taskKeys = await requestToPromise(taskStore.getAllKeys())
-  const views = (await requestToPromise(viewStore.getAll())) as View[]
-  await transactionToPromise(transaction)
+    const storedTasks = (await requestToPromise(taskStore.getAll())) as StoredTask[]
+    const taskKeys = await requestToPromise(taskStore.getAllKeys())
+    const views = (await requestToPromise(viewStore.getAll())) as View[]
 
-  const taskIds = storedTasks
-    .map((task, index) => ({ id: keyToTaskId(taskKeys[index]), statusSlug: task.statusSlug }))
-    .filter((t) => t.statusSlug === slug)
-    .map((t) => t.id)
-  const viewSlugs = views.filter((v) => v.statusSlugs.includes(slug)).map((v) => v.slug)
+    const taskIds = storedTasks
+      .map((task, index) => ({ id: keyToTaskId(taskKeys[index]), statusSlug: task.statusSlug }))
+      .filter((t) => t.statusSlug === slug)
+      .map((t) => t.id)
+    const viewSlugs = views.filter((v) => v.statusSlugs.includes(slug)).map((v) => v.slug)
 
-  return { taskIds, viewSlugs }
+    return { taskIds, viewSlugs }
+  })
 }
 
 export async function isStatusInUse(slug: string): Promise<boolean> {
@@ -514,15 +513,13 @@ export async function deleteTask(id: number): Promise<void> {
 }
 
 export async function loadSubtaskLinks(parentTaskId: number): Promise<SubtaskLink[]> {
-  const db = await openTasksDatabase()
-  const transaction = db.transaction(SUBTASKS_STORE, 'readonly')
-  const store = transaction.objectStore(SUBTASKS_STORE)
-  const index = store.index('by_parent')
-  const links = (await requestToPromise(index.getAll(parentTaskId))) as SubtaskLink[]
-  await transactionToPromise(transaction)
+  return withStore(SUBTASKS_STORE, 'readonly', async (store) => {
+    const index = store.index('by_parent')
+    const links = (await requestToPromise(index.getAll(parentTaskId))) as SubtaskLink[]
 
-  links.sort(byRank)
-  return links
+    links.sort(byRank)
+    return links
+  })
 }
 
 export async function loadParentLink(childTaskId: number): Promise<SubtaskLink | undefined> {
@@ -590,17 +587,15 @@ export async function deleteView(slug: string): Promise<void> {
 }
 
 export async function loadScheduledTransitions(taskId: number): Promise<ScheduledTransition[]> {
-  const db = await openTasksDatabase()
-  const transaction = db.transaction(SCHEDULED_TRANSITIONS_STORE, 'readonly')
-  const store = transaction.objectStore(SCHEDULED_TRANSITIONS_STORE)
-  const records = (await requestToPromise(store.getAll())) as StoredScheduledTransition[]
-  const keys = await requestToPromise(store.getAllKeys())
-  await transactionToPromise(transaction)
+  return withStore(SCHEDULED_TRANSITIONS_STORE, 'readonly', async (store) => {
+    const records = (await requestToPromise(store.getAll())) as StoredScheduledTransition[]
+    const keys = await requestToPromise(store.getAllKeys())
 
-  return records
-    .map((record, index) => ({ id: keyToTaskId(keys[index]), ...record }))
-    .filter((t) => t.taskId === taskId)
-    .sort(byStringKey('date'))
+    return records
+      .map((record, index) => ({ id: keyToTaskId(keys[index]), ...record }))
+      .filter((t) => t.taskId === taskId)
+      .sort(byStringKey('date'))
+  })
 }
 
 export async function addScheduledTransition(taskId: number, date: string, statusSlug: string): Promise<ScheduledTransition> {
@@ -618,48 +613,40 @@ export async function deleteScheduledTransition(id: number): Promise<void> {
 }
 
 export async function loadAllDueTransitions(): Promise<ScheduledTransition[]> {
-  const db = await openTasksDatabase()
-  const transaction = db.transaction(SCHEDULED_TRANSITIONS_STORE, 'readonly')
-  const store = transaction.objectStore(SCHEDULED_TRANSITIONS_STORE)
-  const records = (await requestToPromise(store.getAll())) as StoredScheduledTransition[]
-  const keys = await requestToPromise(store.getAllKeys())
-  await transactionToPromise(transaction)
+  return withStore(SCHEDULED_TRANSITIONS_STORE, 'readonly', async (store) => {
+    const records = (await requestToPromise(store.getAll())) as StoredScheduledTransition[]
+    const keys = await requestToPromise(store.getAllKeys())
 
-  const today = new Date().toISOString().slice(0, 10)
-  return records
-    .map((record, index) => ({ id: keyToTaskId(keys[index]), ...record }))
-    .filter((t) => t.date <= today)
+    const today = new Date().toISOString().slice(0, 10)
+    return records
+      .map((record, index) => ({ id: keyToTaskId(keys[index]), ...record }))
+      .filter((t) => t.date <= today)
+  })
 }
 
 export async function loadBlocks(taskId: number): Promise<BlockingRelationship[]> {
-  const db = await openTasksDatabase()
-  const transaction = db.transaction(RELATIONSHIPS_STORE, 'readonly')
-  const store = transaction.objectStore(RELATIONSHIPS_STORE)
+  return withStore(RELATIONSHIPS_STORE, 'readonly', async (store) => {
+    const fromIndex = store.index('fromTaskId')
+    const toIndex = store.index('toTaskId')
 
-  const fromIndex = store.index('fromTaskId')
-  const toIndex = store.index('toTaskId')
+    const fromRecords = (await requestToPromise(fromIndex.getAll(taskId))) as StoredBlockingRelationship[]
+    const fromKeys = await requestToPromise(fromIndex.getAllKeys(taskId))
+    const toRecords = (await requestToPromise(toIndex.getAll(taskId))) as StoredBlockingRelationship[]
+    const toKeys = await requestToPromise(toIndex.getAllKeys(taskId))
 
-  const fromRecords = (await requestToPromise(fromIndex.getAll(taskId))) as StoredBlockingRelationship[]
-  const fromKeys = await requestToPromise(fromIndex.getAllKeys(taskId))
-  const toRecords = (await requestToPromise(toIndex.getAll(taskId))) as StoredBlockingRelationship[]
-  const toKeys = await requestToPromise(toIndex.getAllKeys(taskId))
-  await transactionToPromise(transaction)
-
-  const from = fromRecords.map((r, i) => ({ ...r, id: keyToTaskId(fromKeys[i]) }))
-  const to = toRecords.map((r, i) => ({ ...r, id: keyToTaskId(toKeys[i]) }))
-  return [...from, ...to]
+    const from = fromRecords.map((r, i) => ({ ...r, id: keyToTaskId(fromKeys[i]) }))
+    const to = toRecords.map((r, i) => ({ ...r, id: keyToTaskId(toKeys[i]) }))
+    return [...from, ...to]
+  })
 }
 
 export async function loadAllBlocks(): Promise<BlockingRelationship[]> {
-  const db = await openTasksDatabase()
-  const transaction = db.transaction(RELATIONSHIPS_STORE, 'readonly')
-  const store = transaction.objectStore(RELATIONSHIPS_STORE)
+  return withStore(RELATIONSHIPS_STORE, 'readonly', async (store) => {
+    const records = (await requestToPromise(store.getAll())) as StoredBlockingRelationship[]
+    const keys = await requestToPromise(store.getAllKeys())
 
-  const records = (await requestToPromise(store.getAll())) as StoredBlockingRelationship[]
-  const keys = await requestToPromise(store.getAllKeys())
-  await transactionToPromise(transaction)
-
-  return records.map((r, i) => ({ ...r, id: keyToTaskId(keys[i]) }))
+    return records.map((r, i) => ({ ...r, id: keyToTaskId(keys[i]) }))
+  })
 }
 
 export async function addBlock(fromTaskId: number, toTaskId: number, type: 'blocks'): Promise<BlockingRelationship> {
