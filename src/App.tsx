@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { loadTasks, loadStatuses, loadViews, loadAllDueTransitions, updateTaskStatus, deleteScheduledTransition, type Task, type Status, type View } from './db'
+import { readCurrentViewSlug, writeCurrentViewSlug, readRecentViewSlugs, writeRecentViewSlugs } from './storage'
 import MainPage from './MainPage'
 import SettingsPage from './SettingsPage'
 
@@ -14,14 +15,10 @@ export default function App() {
   const [statuses, setStatuses] = useState<Status[]>([])
   const [views, setViews] = useState<View[]>([])
   const [currentViewSlug, setCurrentViewSlug] = useState<string>(
-    () => localStorage.getItem('currentViewSlug') ?? ''
+    () => readCurrentViewSlug() ?? ''
   )
   const [recentViewSlugs, setRecentViewSlugs] = useState<string[]>(
-    () => {
-      try {
-        return JSON.parse(localStorage.getItem('recentViewSlugs') ?? '[]')
-      } catch { return [] }
-    }
+    () => readRecentViewSlugs()
   )
   const [page, setPage] = useState<Page>('main')
   const archiveRan = useRef(false)
@@ -88,18 +85,16 @@ export default function App() {
       setViews(loadedViews)
 
       if (loadedViews.length > 0) {
-        const storedSlug = localStorage.getItem('currentViewSlug')
+        const storedSlug = readCurrentViewSlug()
         const validSlug = storedSlug !== null && loadedViews.some((v) => v.slug === storedSlug)
           ? storedSlug
           : loadedViews[0].slug
         setCurrentViewSlug(validSlug)
         if (validSlug !== storedSlug) {
-          localStorage.setItem('currentViewSlug', validSlug)
+          writeCurrentViewSlug(validSlug)
         }
 
-        let storedRecent: string[]
-        try { storedRecent = JSON.parse(localStorage.getItem('recentViewSlugs') ?? '[]') }
-        catch { storedRecent = [] }
+        const storedRecent = readRecentViewSlugs()
         const validRecent = storedRecent.filter((s) => loadedViews.some((v) => v.slug === s))
         setRecentViewSlugs(validRecent.length > 0 ? validRecent : [validSlug])
       }
@@ -137,10 +132,10 @@ export default function App() {
 
   function openView(slug: string) {
     setCurrentViewSlug(slug)
-    localStorage.setItem('currentViewSlug', slug)
+    writeCurrentViewSlug(slug)
     setRecentViewSlugs((prev) => {
       const next = [slug, ...prev.filter((s) => s !== slug)]
-      localStorage.setItem('recentViewSlugs', JSON.stringify(next))
+      writeRecentViewSlugs(next)
       return next
     })
   }
