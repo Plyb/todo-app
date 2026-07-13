@@ -6,9 +6,9 @@ import {
   keyToTaskId,
   requestToPromise,
   withStore,
-  type ScheduledTransition,
   type StoredScheduledTransition,
 } from './client'
+import type { ScheduledTransition } from '../types'
 
 const storedScheduledTransitionSchema = z.object({
   taskId: z.number(),

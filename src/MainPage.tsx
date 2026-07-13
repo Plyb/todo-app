@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { createTask, deleteTask, loadAllBlocks, loadAllSubtaskLinks, updateTaskDone, updateTaskName, updateTaskNotes, updateTaskRank, updateTaskStatus, type BlockingRelationship, type SubtaskLink, type Task, type Status, type View } from './db'
+import { createTask, deleteTask, loadAllBlocks, loadAllSubtaskLinks, updateTaskDone, updateTaskName, updateTaskNotes, updateTaskRank, updateTaskStatus } from './db'
+import type { BlockingRelationship, SubtaskLink, Task, Status, View } from './types'
 import { DraggableList } from './DraggableList'
 import { AddTaskFab, NewTaskInputField, computeInsertRank, type NewTaskInput, type InsertSlotTarget } from './AddTaskInput'
 import { rankBetween } from './rank-utils'

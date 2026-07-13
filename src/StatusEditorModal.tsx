@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { type Status } from './db'
+import { type Status } from './types'
 import { theme } from './theme'
 
 export type StatusEditorModalProps = {

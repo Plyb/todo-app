@@ -1,4 +1,4 @@
-import type { Status } from './db'
+import type { Status } from './types'
 import { theme } from './theme'
 
 type StatusModalProps = {

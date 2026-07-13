@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { loadTasks, loadStatuses, loadViews, loadAllDueTransitions, updateTaskStatus, deleteScheduledTransition, type Task, type Status, type View } from './db'
+import { loadTasks, loadStatuses, loadViews, loadAllDueTransitions, updateTaskStatus, deleteScheduledTransition } from './db'
+import type { Task, Status, View } from './types'
 import { readCurrentViewSlug, writeCurrentViewSlug, readRecentViewSlugs, writeRecentViewSlugs } from './storage'
 import MainPage from './MainPage'
 import SettingsPage from './SettingsPage'

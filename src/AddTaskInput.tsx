@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react'
 import { isPrimaryButton, findInsertIndex } from './pointer-utils'
 import { rankBetween } from './rank-utils'
-import type { Task } from './db'
+import type { Task } from './types'
 import { theme } from './theme'
 
 export type NewTaskInput = {

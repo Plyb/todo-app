@@ -1,5 +1,6 @@
 import { z } from 'zod'
-import { VIEWS_STORE, requestToPromise, withStore, type View } from './client'
+import { VIEWS_STORE, requestToPromise, withStore } from './client'
+import type { View } from '../types'
 
 const viewSchema = z.object({
   slug: z.string(),

@@ -1,4 +1,4 @@
-import type { View } from './db'
+import type { View } from './types'
 import { theme } from './theme'
 
 type ViewModalProps = {

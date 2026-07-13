@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { Task, Status, ScheduledTransition } from './db'
+import type { Task, Status, ScheduledTransition } from './types'
 import { loadScheduledTransitions, addScheduledTransition, deleteScheduledTransition } from './db'
 import { theme } from './theme'
 
