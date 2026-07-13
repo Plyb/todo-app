@@ -121,42 +121,48 @@ async function getAllWithIds<T>(
   return records.map((record, index) => ({ ...record, id: keyToTaskId(keys[index]) }))
 }
 
-async function migrateAddDone(transaction: IDBTransaction): Promise<void> {
-  const store = transaction.objectStore(TASKS_STORE)
-  await iterateCursor(store, (cursor) => {
-    const record = cursor.value as StoredTask
-    if (record.done === undefined) {
-      cursor.update({ ...record, done: false })
-    }
-  })
-}
-
-async function migrateAddRanks(transaction: IDBTransaction): Promise<void> {
-  const store = transaction.objectStore(TASKS_STORE)
-  let rankGen = LexoRank.middle()
-
-  await iterateCursor(store, (cursor) => {
-    const record = cursor.value as { name: string; rank?: string }
-    if (!record.rank) {
-      cursor.update({ ...record, rank: rankGen.toString() })
-      rankGen = rankGen.genNext()
-    }
-  })
-}
-
-async function migrateAddStatuses(transaction: IDBTransaction): Promise<void> {
-  // Seed default statuses into the newly created store
+function seedDefaultStatuses(transaction: IDBTransaction): void {
   const statusStore = transaction.objectStore(STATUSES_STORE)
   for (const status of DEFAULT_STATUSES) {
     statusStore.put(status)
   }
+}
 
-  // Migrate existing tasks to have statusSlug: 'backlog'
-  const taskStore = transaction.objectStore(TASKS_STORE)
-  await iterateCursor(taskStore, (cursor) => {
-    const record = cursor.value as StoredTask & { statusSlug?: string }
-    if (!record.statusSlug) {
-      cursor.update({ ...record, statusSlug: 'backlog' })
+// Single cursor pass over TASKS_STORE that backfills every field a returning
+// user might be missing, gated on the version they last opened. Backfilling all
+// fields in one read-modify-update per record avoids the multi-version race
+// (issue #127): separate per-field passes each read the ORIGINAL record before
+// the others' cursor.update() committed, so each write spread a stale snapshot
+// and clobbered the previously-backfilled field.
+async function migrateTaskFields(transaction: IDBTransaction, oldVersion: number): Promise<void> {
+  const store = transaction.objectStore(TASKS_STORE)
+  let rankGen = LexoRank.middle()
+
+  await iterateCursor(store, (cursor) => {
+    const record = cursor.value as Partial<StoredTask>
+    const updated: Partial<StoredTask> = { ...record }
+    let changed = false
+
+    if (oldVersion < 2 && record.done === undefined) {
+      updated.done = false
+      changed = true
+    }
+    if (oldVersion < 3 && !record.rank) {
+      updated.rank = rankGen.toString()
+      rankGen = rankGen.genNext()
+      changed = true
+    }
+    if (oldVersion < 4 && !record.statusSlug) {
+      updated.statusSlug = 'backlog'
+      changed = true
+    }
+    if (oldVersion < 5 && record.notes === undefined) {
+      updated.notes = ''
+      changed = true
+    }
+
+    if (changed) {
+      cursor.update(updated)
     }
   })
 }
@@ -172,19 +178,9 @@ async function migrateAddViews(transaction: IDBTransaction): Promise<void> {
   }
 }
 
-async function migrateAddNotes(transaction: IDBTransaction): Promise<void> {
-  const store = transaction.objectStore(TASKS_STORE)
-  await iterateCursor(store, (cursor) => {
-    const record = cursor.value as { notes?: string }
-    if (record.notes === undefined) {
-      cursor.update({ ...record, notes: '' })
-    }
-  })
-}
-
 type MigrationStep = {
   version: number
-  migrate: (db: IDBDatabase, transaction: IDBTransaction) => void | Promise<void>
+  migrate: (db: IDBDatabase, transaction: IDBTransaction, oldVersion: number) => void | Promise<void>
 }
 
 const MIGRATION_STEPS: MigrationStep[] = [
@@ -197,25 +193,21 @@ const MIGRATION_STEPS: MigrationStep[] = [
     },
   },
   {
-    version: 2,
-    migrate: (_db, transaction) => migrateAddDone(transaction),
-  },
-  {
-    version: 3,
-    migrate: (_db, transaction) => migrateAddRanks(transaction),
-  },
-  {
     version: 4,
     migrate: (db, transaction) => {
       if (!db.objectStoreNames.contains(STATUSES_STORE)) {
         db.createObjectStore(STATUSES_STORE, { keyPath: 'slug' })
       }
-      return migrateAddStatuses(transaction)
+      seedDefaultStatuses(transaction)
     },
   },
   {
+    // Backfill done (v2), rank (v3), statusSlug (v4) and notes (v5) in one
+    // cursor pass. Gated at version 5 so it runs whenever any of those fields
+    // could be missing; the per-field oldVersion + presence guards inside pick
+    // exactly the ones this user still lacks.
     version: 5,
-    migrate: (_db, transaction) => migrateAddNotes(transaction),
+    migrate: (_db, transaction, oldVersion) => migrateTaskFields(transaction, oldVersion),
   },
   {
     version: 6,
@@ -285,7 +277,7 @@ async function openTasksDatabase(): Promise<IDBDatabase> {
       const pending: Promise<void>[] = []
       for (const step of MIGRATION_STEPS) {
         if (event.oldVersion < step.version) {
-          const result = step.migrate(db, transaction)
+          const result = step.migrate(db, transaction, event.oldVersion)
           if (result) {
             pending.push(result)
           }
