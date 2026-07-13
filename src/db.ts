@@ -1,4 +1,5 @@
 import { LexoRank } from 'lexorank'
+import { z } from 'zod'
 import { byRank, byStringKey } from './rank-utils'
 
 export type Status = {
@@ -22,6 +23,23 @@ export type BlockingRelationship = { id: number; fromTaskId: number; toTaskId: n
 type StoredTask = Omit<Task, 'id'>
 type StoredBlockingRelationship = Omit<BlockingRelationship, 'id'>
 type StoredSubtaskLink = Omit<SubtaskLink, 'id'>
+
+// A field missing/null in a stored record defaults rather than fails validation:
+// a database that already ran the pre-#127 buggy migration (see
+// migrateTaskFields) may be stuck on DB_VERSION 8 with done/rank/statusSlug/notes
+// still absent, since that migration only backfills once per oldVersion gate.
+// Same-store schemas for DB-8b should follow this withDefault + z.object pattern.
+function withDefault<T>(schema: z.ZodType<T>, fallback: () => T): z.ZodType<T> {
+  return z.preprocess((value) => (value === undefined || value === null ? fallback() : value), schema)
+}
+
+const storedTaskSchema = z.object({
+  name: z.string(),
+  done: withDefault(z.boolean(), () => false),
+  rank: withDefault(z.string(), () => LexoRank.middle().toString()),
+  statusSlug: withDefault(z.string(), () => 'backlog'),
+  notes: withDefault(z.string(), () => ''),
+}) satisfies z.ZodType<StoredTask>
 
 export type View = {
   slug: string
@@ -364,33 +382,10 @@ async function patchRecordById<T>(store: IDBObjectStore, id: number, patch: Part
   }
 }
 
-// Defaulting is still needed, despite every write path (createTask, saveTask,
-// the update* helpers, seedDemoTasks) always writing all four fields: when a
-// database jumps multiple MIGRATION_STEPS versions in a single upgrade (e.g. a
-// pre-v2 database opened after the app has shipped through v8), the four
-// TASKS_STORE-touching steps (migrateAddDone/migrateAddRanks/
-// migrateAddStatuses/migrateAddNotes) each open their own cursor over the same
-// store inside the one versionchange transaction without awaiting each other.
-// Because of how IDB's per-transaction request queue interleaves those
-// concurrent cursors, every step's cursor.update() ends up spreading a stale
-// pre-migration snapshot of the record, so each step's write clobbers the
-// previous step's backfilled field. Verified empirically via the "migration
-// replay" test in db.test.ts: dropping this defaulting made a legacy
-// (pre-v2) task persist as `{ name, notes: '' }` only — done/rank/statusSlug
-// were silently lost, not just displayed as missing. See PR description for
-// more detail; this is a pre-existing bug in the migration chain (unrelated to
-// this ticket's scope) that a follow-up should fix at the source.
 async function readTasks(): Promise<Task[]> {
   return withStore(TASKS_STORE, 'readonly', async (store) => {
-    const tasks = await getAllWithIds<StoredTask>(store)
-    return tasks.map(({ id, name, done, rank, statusSlug, notes }) => ({
-      id,
-      name,
-      done: done ?? false,
-      rank: rank ?? LexoRank.middle().toString(),
-      statusSlug: statusSlug ?? 'backlog',
-      notes: notes ?? '',
-    }))
+    const tasks = await getAllWithIds<Record<string, unknown>>(store)
+    return tasks.map(({ id, ...raw }) => ({ id, ...storedTaskSchema.parse(raw) }))
   })
 }
 

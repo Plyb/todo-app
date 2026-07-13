@@ -284,3 +284,46 @@ describe('migration integrity (raw store, issue #127)', () => {
     expect(rawRecord.notes).toBe('')
   })
 })
+
+describe('readTasks validation (Zod schema at the read boundary)', () => {
+  // Writes straight into the tasks store, bypassing db.ts's typed helpers, to
+  // simulate records the app itself would never write.
+  async function putRawTask(value: unknown): Promise<void> {
+    await new Promise<void>((resolve, reject) => {
+      const request = indexedDB.open(DB_NAME)
+      request.onsuccess = () => {
+        const rawDb = request.result
+        const tx = rawDb.transaction('tasks', 'readwrite')
+        tx.objectStore('tasks').add(value)
+        tx.oncomplete = () => {
+          rawDb.close()
+          resolve()
+        }
+        tx.onerror = () => reject(tx.error)
+      }
+      request.onerror = () => reject(request.error)
+    })
+  }
+
+  it('defaults done/rank/statusSlug/notes when a record at DB_VERSION 8 is still missing them', async () => {
+    const db = await import('./db')
+    await db.loadTasks() // opens the db at DB_VERSION 8 and seeds demo tasks
+
+    await putRawTask({ name: 'Stuck on old backfill' })
+
+    const tasks = await db.loadTasks()
+    const legacy = tasks.find((t) => t.name === 'Stuck on old backfill')
+    expect(legacy).toMatchObject({ done: false, statusSlug: 'backlog', notes: '' })
+    expect(typeof legacy?.rank).toBe('string')
+    expect(legacy?.rank.length).toBeGreaterThan(0)
+  })
+
+  it('throws rather than silently coercing a record with a wrong-typed field', async () => {
+    const db = await import('./db')
+    await db.loadTasks()
+
+    await putRawTask({ name: 'Bad task', done: 'not-a-boolean', rank: 'a', statusSlug: 'backlog', notes: '' })
+
+    await expect(db.loadTasks()).rejects.toThrow()
+  })
+})
