@@ -353,30 +353,48 @@ async function patchRecordById<T>(store: IDBObjectStore, id: number, patch: Part
   }
 }
 
-export async function loadTasks(): Promise<Task[]> {
-  const db = await openTasksDatabase()
-
-  const transaction = db.transaction(TASKS_STORE, 'readonly')
-  const store = transaction.objectStore(TASKS_STORE)
-  const storedTasks = (await requestToPromise(store.getAll())) as StoredTask[]
-  const taskKeys = await requestToPromise(store.getAllKeys())
-  await transactionToPromise(transaction)
-
-  if (storedTasks.length > 0) {
-    const tasks = storedTasks.map((task, index) => ({
-      id: keyToTaskId(taskKeys[index]),
-      name: task.name,
-      done: task.done ?? false,
-      rank: task.rank ?? LexoRank.middle().toString(),
-      statusSlug: task.statusSlug ?? 'backlog',
-      notes: task.notes ?? '',
+// Defaulting is still needed, despite every write path (createTask, saveTask,
+// the update* helpers, seedDemoTasks) always writing all four fields: when a
+// database jumps multiple MIGRATION_STEPS versions in a single upgrade (e.g. a
+// pre-v2 database opened after the app has shipped through v8), the four
+// TASKS_STORE-touching steps (migrateAddDone/migrateAddRanks/
+// migrateAddStatuses/migrateAddNotes) each open their own cursor over the same
+// store inside the one versionchange transaction without awaiting each other.
+// Because of how IDB's per-transaction request queue interleaves those
+// concurrent cursors, every step's cursor.update() ends up spreading a stale
+// pre-migration snapshot of the record, so each step's write clobbers the
+// previous step's backfilled field. Verified empirically via the "migration
+// replay" test in db.test.ts: dropping this defaulting made a legacy
+// (pre-v2) task persist as `{ name, notes: '' }` only — done/rank/statusSlug
+// were silently lost, not just displayed as missing. See PR description for
+// more detail; this is a pre-existing bug in the migration chain (unrelated to
+// this ticket's scope) that a follow-up should fix at the source.
+async function readTasks(): Promise<Task[]> {
+  return withStore(TASKS_STORE, 'readonly', async (store) => {
+    const tasks = await getAllWithIds<StoredTask>(store)
+    return tasks.map(({ id, name, done, rank, statusSlug, notes }) => ({
+      id,
+      name,
+      done: done ?? false,
+      rank: rank ?? LexoRank.middle().toString(),
+      statusSlug: statusSlug ?? 'backlog',
+      notes: notes ?? '',
     }))
+  })
+}
+
+export async function loadTasks(): Promise<Task[]> {
+  const tasks = await readTasks()
+  if (tasks.length > 0) {
     tasks.sort(byRank)
     return tasks
   }
 
+  const db = await openTasksDatabase()
   await seedDemoTasks(db)
-  return loadTasks()
+  const seededTasks = await readTasks()
+  seededTasks.sort(byRank)
+  return seededTasks
 }
 
 export async function loadStatuses(): Promise<Status[]> {
