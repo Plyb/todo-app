@@ -41,10 +41,6 @@ const storedTaskSchema = z.object({
   notes: withDefault(z.string(), () => ''),
 }) satisfies z.ZodType<StoredTask>
 
-// Statuses, views, subtask links, blocking relationships and scheduled
-// transitions were each created whole by a single migration step (no later
-// step ever added a field to them), so unlike storedTaskSchema they validate
-// strictly with no withDefault.
 const statusSchema = z.object({
   slug: z.string(),
   name: z.string(),
