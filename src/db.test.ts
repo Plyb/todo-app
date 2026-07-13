@@ -15,6 +15,25 @@ beforeEach(() => {
   vi.resetModules()
 })
 
+// Writes a record straight into a store, bypassing db.ts's typed helpers, so
+// tests can seed malformed or legacy-shaped records the app itself never writes.
+async function putRaw(storeName: string, value: unknown): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME)
+    request.onsuccess = () => {
+      const rawDb = request.result
+      const tx = rawDb.transaction(storeName, 'readwrite')
+      tx.objectStore(storeName).put(value)
+      tx.oncomplete = () => {
+        rawDb.close()
+        resolve()
+      }
+      tx.onerror = () => reject(tx.error)
+    }
+    request.onerror = () => reject(request.error)
+  })
+}
+
 describe('loadStatuses (simple read)', () => {
   it('returns the seeded default statuses on a fresh database', async () => {
     const db = await import('./db')
@@ -131,26 +150,6 @@ describe('updateTaskDone (guard against missing records)', () => {
 })
 
 describe('runner abort-on-error (rolls back a partial multi-store write)', () => {
-  // Writes a record straight into a store, bypassing db.ts's typed helpers, so
-  // we can seed a malformed view that makes reassignTasksAndViews throw
-  // mid-transaction (after the status delete + task update are already queued).
-  async function putRaw(storeName: string, value: unknown): Promise<void> {
-    await new Promise<void>((resolve, reject) => {
-      const request = indexedDB.open(DB_NAME)
-      request.onsuccess = () => {
-        const rawDb = request.result
-        const tx = rawDb.transaction(storeName, 'readwrite')
-        tx.objectStore(storeName).put(value)
-        tx.oncomplete = () => {
-          rawDb.close()
-          resolve()
-        }
-        tx.onerror = () => reject(tx.error)
-      }
-      request.onerror = () => reject(request.error)
-    })
-  }
-
   it('aborts the transaction on a thrown callback, leaving the stores unchanged', async () => {
     const db = await import('./db')
 
@@ -282,5 +281,29 @@ describe('migration integrity (raw store, issue #127)', () => {
     expect((rawRecord.rank as string).length).toBeGreaterThan(0)
     expect(rawRecord.statusSlug).toBe('backlog')
     expect(rawRecord.notes).toBe('')
+  })
+})
+
+describe('readTasks validation (Zod schema at the read boundary)', () => {
+  it('defaults done/rank/statusSlug/notes when a record at DB_VERSION 8 is still missing them', async () => {
+    const db = await import('./db')
+    await db.loadTasks() // opens the db at DB_VERSION 8 and seeds demo tasks
+
+    await putRaw('tasks', { name: 'Stuck on old backfill' })
+
+    const tasks = await db.loadTasks()
+    const legacy = tasks.find((t) => t.name === 'Stuck on old backfill')
+    expect(legacy).toMatchObject({ done: false, statusSlug: 'backlog', notes: '' })
+    expect(typeof legacy?.rank).toBe('string')
+    expect(legacy?.rank.length).toBeGreaterThan(0)
+  })
+
+  it('throws rather than silently coercing a record with a wrong-typed field', async () => {
+    const db = await import('./db')
+    await db.loadTasks()
+
+    await putRaw('tasks', { name: 'Bad task', done: 'not-a-boolean', rank: 'a', statusSlug: 'backlog', notes: '' })
+
+    await expect(db.loadTasks()).rejects.toThrow()
   })
 })

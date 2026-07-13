@@ -16,7 +16,8 @@
     "@dnd-kit/utilities": "^3.2.2",
     "lexorank": "^1.0.5",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^26.1.0",
