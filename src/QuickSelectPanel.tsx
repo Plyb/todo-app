@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Task, Status, SubtaskLink, ScheduledTransition, BlockingRelationship } from './types'
-import { loadSubtaskLinks, createSubtaskLink, updateSubtaskLinkRank, loadAllSubtaskLinks, loadParentLink, deleteSubtaskLinksByChild, createTask, loadScheduledTransitions, loadBlocks } from './db'
+import { loadSubtaskLinks, createSubtaskLink, updateSubtaskLinkRank, loadAllSubtaskLinks, loadParentLink, deleteSubtaskLinksByChild, loadScheduledTransitions, loadBlocks } from './db'
+import { useTasks } from './tasks-context'
 import { StatusModal } from './StatusModal'
 import { RelationshipModal, RelationshipGroup } from './RelationshipModal'
 import { LinkExistingTaskModal } from './LinkExistingTaskModal'
@@ -21,11 +22,11 @@ type QuickSelectPanelProps = {
   onOpenTask: (id: number) => void
   onDoneChange: (id: number, done: boolean) => void
   onBlockingRelationshipAdded?: () => void
-  onTaskCreated: (task: Task) => void
   onSubtaskLinkAdded?: () => void
 }
 
-export function QuickSelectPanel({ task, statuses, allTasks, onClose, onRename, onChangeStatus, onDelete, onUpdateNotes, onOpenTask, onDoneChange, onBlockingRelationshipAdded, onTaskCreated, onSubtaskLinkAdded }: QuickSelectPanelProps) {
+export function QuickSelectPanel({ task, statuses, allTasks, onClose, onRename, onChangeStatus, onDelete, onUpdateNotes, onOpenTask, onDoneChange, onBlockingRelationshipAdded, onSubtaskLinkAdded }: QuickSelectPanelProps) {
+  const { createTask } = useTasks()
   const [name, setName] = useState(task.name)
   const [backdropReady, setBackdropReady] = useState(false)
   const [statusModalOpen, setStatusModalOpen] = useState(false)
@@ -122,7 +123,6 @@ export function QuickSelectPanel({ task, statuses, allTasks, onClose, onRename, 
     const lastLink = subtaskLinks[subtaskLinks.length - 1] ?? null
     const linkRank = rankBetween(lastLink, null)
     const newTask = await createTask(trimmed, rankBetween(null, null), task.statusSlug)
-    onTaskCreated(newTask)
     const link = await createSubtaskLink(task.id, newTask.id, linkRank)
     setSubtaskLinks((prev) => [...prev, link])
     onSubtaskLinkAdded?.()

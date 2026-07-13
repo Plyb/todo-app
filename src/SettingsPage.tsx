@@ -1,17 +1,6 @@
 import { useState } from 'react'
-import {
-  saveView,
-  deleteView,
-  createStatus,
-  updateStatus,
-  deleteStatus,
-  getStatusUsage,
-  reassignStatus,
-  loadStatuses,
-  loadTasks,
-  loadViews,
-} from './db'
-import type { Status, View, Task } from './types'
+import type { Status, View } from './types'
+import { useStatuses, useViews } from './tasks-context'
 import { ViewEditorModal } from './ViewEditorModal'
 import { StatusEditorModal } from './StatusEditorModal'
 import { StatusModal } from './StatusModal'
@@ -38,26 +27,16 @@ const saveViewSelectorButtonVisibility = (value: string | null): void => {
 
 type SettingsPageProps = {
   onBack: () => void
-  statuses: Status[]
-  onStatusesChange: (statuses: Status[]) => void
-  views: View[]
-  onViewsChange: (views: View[]) => void
-  onTasksChange: (tasks: Task[]) => void
 }
 
-export default function SettingsPage({ onBack, statuses, onStatusesChange, views, onViewsChange, onTasksChange }: SettingsPageProps) {
+export default function SettingsPage({ onBack }: SettingsPageProps) {
+  const { statuses, createStatus, updateStatus, deleteStatus, reassignAndDeleteStatus, getStatusUsage } = useStatuses()
+  const { views, saveView, deleteView } = useViews()
   const [editingView, setEditingView] = useState<View | null>(null)
   const [editingStatus, setEditingStatus] = useState<Status | null>(null)
   const [reassignFromSlug, setReassignFromSlug] = useState<string | null>(null)
   const [autoArchiveSlug, setAutoArchiveSlug] = useState(loadAutoArchiveSetting)
   const [viewSelectorButtonVisibility, setViewSelectorButtonVisibility] = useState(loadViewSelectorButtonVisibility)
-
-  async function refreshAfterStatusChange() {
-    const [newStatuses, newTasks, newViews] = await Promise.all([loadStatuses(), loadTasks(), loadViews()])
-    onStatusesChange(newStatuses)
-    onTasksChange(newTasks)
-    onViewsChange(newViews)
-  }
 
   function handleAutoArchiveChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const slug = e.target.value === '' ? null : e.target.value
@@ -74,16 +53,10 @@ export default function SettingsPage({ onBack, statuses, onStatusesChange, views
   async function handleDeleteView(slug: string) {
     if (views.length === 1) return
     await deleteView(slug)
-    onViewsChange(views.filter((v) => v.slug !== slug))
   }
 
   async function handleSaveView(view: View) {
     await saveView(view)
-    if (views.some((v) => v.slug === view.slug)) {
-      onViewsChange(views.map((v) => (v.slug === view.slug ? view : v)))
-    } else {
-      onViewsChange([...views, view])
-    }
     setEditingView(null)
   }
 
@@ -104,7 +77,6 @@ export default function SettingsPage({ onBack, statuses, onStatusesChange, views
     } else {
       await updateStatus(editingStatus.slug, updated.slug, updated.name)
     }
-    await refreshAfterStatusChange()
     setEditingStatus(null)
   }
 
@@ -116,14 +88,11 @@ export default function SettingsPage({ onBack, statuses, onStatusesChange, views
       return
     }
     await deleteStatus(slug)
-    await refreshAfterStatusChange()
   }
 
   async function handleReassignAndDelete(toSlug: string) {
     if (!reassignFromSlug) return
-    await reassignStatus(reassignFromSlug, toSlug)
-    await deleteStatus(reassignFromSlug)
-    await refreshAfterStatusChange()
+    await reassignAndDeleteStatus(reassignFromSlug, toSlug)
     setReassignFromSlug(null)
   }
 
