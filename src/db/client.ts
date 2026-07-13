@@ -2,11 +2,13 @@ import { LexoRank } from 'lexorank'
 import { z } from 'zod'
 import type { BlockingRelationship, ScheduledTransition, Status, SubtaskLink, Task } from '../types'
 
-export type StoredTask = Omit<Task, 'id'>
-export type StoredBlockingRelationship = Omit<BlockingRelationship, 'id'>
-export type StoredSubtaskLink = Omit<SubtaskLink, 'id'>
+export type Stored<T extends { id: number }> = Omit<T, 'id'>
 
-export type StoredScheduledTransition = Omit<ScheduledTransition, 'id'>
+export type StoredTask = Stored<Task>
+export type StoredBlockingRelationship = Stored<BlockingRelationship>
+export type StoredSubtaskLink = Stored<SubtaskLink>
+
+export type StoredScheduledTransition = Stored<ScheduledTransition>
 
 // A field missing/null in a stored record defaults rather than fails validation:
 // a database that already ran the pre-#127 buggy migration (see
