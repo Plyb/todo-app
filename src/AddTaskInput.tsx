@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react'
 import { isPrimaryButton, findInsertIndex } from './pointer-utils'
 import { rankBetween } from './rank-utils'
 import type { Task } from './db'
+import { theme } from './theme'
 
 export type NewTaskInput = {
   sectionIndex: number
@@ -130,7 +131,7 @@ export function AddTaskFab({ listRef, onRequestInsert, onDragInsertSlot }: AddTa
         width: FAB_SIZE,
         height: FAB_SIZE,
         borderRadius: '50%',
-        background: '#1a73e8',
+        background: theme.colors.brand,
         color: '#fff',
         border: 'none',
         fontSize: 28,
@@ -174,9 +175,9 @@ export function NewTaskInputField({ sectionIndex, insertIndex, onBlur, onKeyDown
         width: '100%',
         boxSizing: 'border-box',
         padding: '8px 12px',
-        fontSize: 16,
-        border: '2px solid #1a73e8',
-        borderRadius: 6,
+        fontSize: theme.fontSizes.xl,
+        border: `2px solid ${theme.colors.brand}`,
+        borderRadius: theme.radii.md,
         outline: 'none',
         margin: '4px 0',
       }}

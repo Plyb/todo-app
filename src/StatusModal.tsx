@@ -1,4 +1,5 @@
 import type { Status } from './db'
+import { theme } from './theme'
 
 type StatusModalProps = {
   statuses: Status[]
@@ -18,8 +19,8 @@ export function StatusModal({ statuses, currentStatusSlug, onSelect, onClose, ti
         left: 0,
         right: 0,
         bottom: 0,
-        background: 'rgba(0,0,0,0.5)',
-        zIndex: 200,
+        background: theme.colors.overlay,
+        zIndex: theme.zIndex.modal,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -29,19 +30,19 @@ export function StatusModal({ statuses, currentStatusSlug, onSelect, onClose, ti
         onClick={(e) => e.stopPropagation()}
         style={{
           background: 'white',
-          borderRadius: 12,
+          borderRadius: theme.radii.xl,
           padding: '8px 0',
           minWidth: 240,
           maxWidth: 360,
           width: '80%',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+          boxShadow: theme.shadows.modal,
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 16px 4px' }}>
-          <span style={{ fontWeight: 600, fontSize: 16 }}>{title}</span>
+          <span style={{ fontWeight: 600, fontSize: theme.fontSizes.xl }}>{title}</span>
           <button
             onClick={onClose}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: 4 }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: theme.fontSizes.xxl, lineHeight: 1, padding: 4 }}
             aria-label="Close"
           >
             ×
@@ -56,17 +57,17 @@ export function StatusModal({ statuses, currentStatusSlug, onSelect, onClose, ti
               display: 'block',
               width: '100%',
               textAlign: 'left',
-              background: status.slug === currentStatusSlug ? '#e8f0fe' : 'none',
+              background: status.slug === currentStatusSlug ? theme.colors.selected : 'none',
               border: 'none',
               padding: '12px 16px',
               cursor: 'pointer',
-              fontSize: 15,
+              fontSize: theme.fontSizes.lg,
               fontWeight: status.slug === currentStatusSlug ? 600 : 400,
             }}
           >
             {status.name}
             {status.slug === currentStatusSlug && (
-              <span style={{ marginLeft: 8, color: '#1a73e8', fontSize: 12 }}>current</span>
+              <span style={{ marginLeft: 8, color: theme.colors.brand, fontSize: theme.fontSizes.xs }}>current</span>
             )}
           </button>
         ))}

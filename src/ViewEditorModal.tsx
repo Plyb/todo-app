@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { type Status, type View } from './db'
 import { DraggableList } from './DraggableList'
+import { theme } from './theme'
 
 export type ViewEditorModalProps = {
   view: View
@@ -48,8 +49,8 @@ export function ViewEditorModal({ view, statuses, onSave, onClose }: ViewEditorM
       style={{
         position: 'fixed',
         inset: 0,
-        background: 'rgba(0,0,0,0.5)',
-        zIndex: 300,
+        background: theme.colors.overlay,
+        zIndex: theme.zIndex.editorModal,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -59,19 +60,19 @@ export function ViewEditorModal({ view, statuses, onSave, onClose }: ViewEditorM
         onClick={(e) => e.stopPropagation()}
         style={{
           background: 'white',
-          borderRadius: 12,
+          borderRadius: theme.radii.xl,
           padding: 24,
           minWidth: 300,
           maxWidth: 400,
           width: '80%',
           maxHeight: '80vh',
           overflowY: 'auto',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+          boxShadow: theme.shadows.modal,
         }}
       >
         <h3 style={{ marginTop: 0, marginBottom: 16 }}>Edit View</h3>
         <label style={{ display: 'block', marginBottom: 16 }}>
-          <span style={{ fontSize: 14, color: '#555' }}>Name</span>
+          <span style={{ fontSize: theme.fontSizes.md, color: '#555' }}>Name</span>
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -81,9 +82,9 @@ export function ViewEditorModal({ view, statuses, onSave, onClose }: ViewEditorM
               marginTop: 4,
               boxSizing: 'border-box',
               padding: '8px 10px',
-              border: '1px solid #ccc',
-              borderRadius: 6,
-              fontSize: 15,
+              border: `1px solid ${theme.colors.border}`,
+              borderRadius: theme.radii.md,
+              fontSize: theme.fontSizes.lg,
             }}
           />
         </label>
@@ -94,7 +95,7 @@ export function ViewEditorModal({ view, statuses, onSave, onClose }: ViewEditorM
           sections={[{ items: selectedItems }]}
           onReorder={handleReorderStatuses}
           renderItem={(item) => (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: theme.space.sm, width: '100%' }}>
               <input type="checkbox" checked onChange={() => toggle(item.status.slug)} />
               <span style={{ flex: 1 }}>{item.status.name}</span>
             </div>
@@ -104,23 +105,23 @@ export function ViewEditorModal({ view, statuses, onSave, onClose }: ViewEditorM
         {unselectedStatuses.map((status) => (
           <div
             key={status.slug}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid #f0f0f0' }}
+            style={{ display: 'flex', alignItems: 'center', gap: theme.space.sm, padding: '6px 0', borderBottom: '1px solid #f0f0f0' }}
           >
             <input type="checkbox" checked={false} onChange={() => toggle(status.slug)} />
-            <span style={{ flex: 1, color: '#999' }}>{status.name}</span>
+            <span style={{ flex: 1, color: theme.colors.textTertiary }}>{status.name}</span>
           </div>
         ))}
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: theme.space.sm, marginTop: 20 }}>
           <button
             onClick={onClose}
-            style={{ padding: '8px 16px', border: '1px solid #ccc', borderRadius: 6, cursor: 'pointer', background: 'none' }}
+            style={{ padding: '8px 16px', border: `1px solid ${theme.colors.border}`, borderRadius: theme.radii.md, cursor: 'pointer', background: 'none' }}
           >
             Cancel
           </button>
           <button
             onClick={() => onSave({ ...view, name: name.trim() || 'Unnamed', statusSlugs: slugs })}
-            style={{ padding: '8px 16px', background: '#1a73e8', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}
+            style={{ padding: '8px 16px', background: theme.colors.brand, color: '#fff', border: 'none', borderRadius: theme.radii.md, cursor: 'pointer' }}
           >
             Save
           </button>

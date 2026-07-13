@@ -17,6 +17,7 @@ import {
 import { ViewEditorModal } from './ViewEditorModal'
 import { StatusEditorModal } from './StatusEditorModal'
 import { StatusModal } from './StatusModal'
+import { theme } from './theme'
 
 const loadAutoArchiveSetting = (): string | null => localStorage.getItem('auto-archive-status-slug')
 const saveAutoArchiveSetting = (slug: string | null): void => {
@@ -128,7 +129,7 @@ export default function SettingsPage({ onBack, statuses, onStatusesChange, views
   }
 
   return (
-    <main style={{ padding: 16, minHeight: '100vh' }}>
+    <main style={{ padding: theme.space.md, minHeight: '100vh' }}>
       <button onClick={onBack} style={{ position: 'fixed', top: 16, left: 16 }}>
         ←
       </button>
@@ -139,7 +140,7 @@ export default function SettingsPage({ onBack, statuses, onStatusesChange, views
           <button
             onClick={handleNewView}
             style={{
-              background: '#1a73e8',
+              background: theme.colors.brand,
               color: '#fff',
               border: 'none',
               borderRadius: '50%',
@@ -159,7 +160,7 @@ export default function SettingsPage({ onBack, statuses, onStatusesChange, views
         </div>
 
         {views.map((view) => (
-          <div key={view.slug} style={{ display: 'flex', alignItems: 'center', width: '100%', padding: '12px 16px', borderBottom: '1px solid #eee', boxSizing: 'border-box' }}>
+          <div key={view.slug} style={{ display: 'flex', alignItems: 'center', width: '100%', padding: '12px 16px', borderBottom: `1px solid ${theme.colors.divider}`, boxSizing: 'border-box' }}>
             <button
               onClick={() => setEditingView(view)}
               style={{
@@ -168,7 +169,7 @@ export default function SettingsPage({ onBack, statuses, onStatusesChange, views
                 background: 'none',
                 border: 'none',
                 cursor: 'pointer',
-                fontSize: 16,
+                fontSize: theme.fontSizes.xl,
                 padding: 0,
               }}
             >
@@ -181,8 +182,8 @@ export default function SettingsPage({ onBack, statuses, onStatusesChange, views
                 background: 'none',
                 border: 'none',
                 cursor: views.length === 1 ? 'default' : 'pointer',
-                fontSize: 16,
-                color: '#999',
+                fontSize: theme.fontSizes.xl,
+                color: theme.colors.textTertiary,
                 padding: '4px 8px',
                 opacity: views.length === 1 ? 0.4 : 1,
               }}
@@ -209,7 +210,7 @@ export default function SettingsPage({ onBack, statuses, onStatusesChange, views
           <button
             onClick={handleNewStatus}
             style={{
-              background: '#1a73e8',
+              background: theme.colors.brand,
               color: '#fff',
               border: 'none',
               borderRadius: '50%',
@@ -229,7 +230,7 @@ export default function SettingsPage({ onBack, statuses, onStatusesChange, views
         </div>
 
         {statuses.map((status) => (
-          <div key={status.slug} style={{ display: 'flex', alignItems: 'center', width: '100%', padding: '12px 16px', borderBottom: '1px solid #eee', boxSizing: 'border-box' }}>
+          <div key={status.slug} style={{ display: 'flex', alignItems: 'center', width: '100%', padding: '12px 16px', borderBottom: `1px solid ${theme.colors.divider}`, boxSizing: 'border-box' }}>
             <button
               onClick={() => setEditingStatus(status)}
               style={{
@@ -238,7 +239,7 @@ export default function SettingsPage({ onBack, statuses, onStatusesChange, views
                 background: 'none',
                 border: 'none',
                 cursor: 'pointer',
-                fontSize: 16,
+                fontSize: theme.fontSizes.xl,
                 padding: 0,
               }}
             >
@@ -251,8 +252,8 @@ export default function SettingsPage({ onBack, statuses, onStatusesChange, views
                 background: 'none',
                 border: 'none',
                 cursor: statuses.length === 1 ? 'default' : 'pointer',
-                fontSize: 16,
-                color: '#999',
+                fontSize: theme.fontSizes.xl,
+                color: theme.colors.textTertiary,
                 padding: '4px 8px',
                 opacity: statuses.length === 1 ? 0.4 : 1,
               }}

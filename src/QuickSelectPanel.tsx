@@ -7,6 +7,7 @@ import { LinkExistingTaskModal } from './LinkExistingTaskModal'
 import { ScheduleModal } from './ScheduleModal'
 import { DraggableList } from './DraggableList'
 import { rankBetween } from './rank-utils'
+import { theme } from './theme'
 
 type QuickSelectPanelProps = {
   task: Task
@@ -182,17 +183,17 @@ export function QuickSelectPanel({ task, statuses, allTasks, onClose, onRename, 
 
   return (
     <>
-      <div onClick={backdropReady ? handleClose : undefined} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 10, pointerEvents: backdropReady ? 'auto' : 'none' }} />
+      <div onClick={backdropReady ? handleClose : undefined} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: theme.zIndex.panel, pointerEvents: backdropReady ? 'auto' : 'none' }} />
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
           background: '#fff',
-          padding: 16,
-          zIndex: 11,
+          padding: theme.space.md,
+          zIndex: theme.zIndex.panelBackdrop,
           position: 'relative',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 16px', borderBottom: '1px solid #eee', margin: '-16px -16px 0' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: theme.space.sm, padding: '12px 16px', borderBottom: `1px solid ${theme.colors.divider}`, margin: '-16px -16px 0' }}>
           <input type="checkbox" checked={task.done} onChange={(e) => onDoneChange(task.id, e.target.checked)} />
           <input
             ref={inputRef}
@@ -202,11 +203,11 @@ export function QuickSelectPanel({ task, statuses, allTasks, onClose, onRename, 
             onKeyDown={handleKeyDown}
             style={{
               flex: 1,
-              fontSize: 16,
+              fontSize: theme.fontSizes.xl,
               border: 'none',
               outline: 'none',
               background: 'transparent',
-              color: task.done ? '#aaa' : undefined,
+              color: task.done ? theme.colors.textDisabled : undefined,
             }}
           />
         </div>
@@ -216,7 +217,7 @@ export function QuickSelectPanel({ task, statuses, allTasks, onClose, onRename, 
           maxHeight: expanded ? '1000px' : '0',
           transition: 'max-height 0.2s ease',
         }}>
-          <label style={{ display: 'block', fontSize: 14, color: '#555', marginTop: 12, marginBottom: 4 }}>
+          <label style={{ display: 'block', fontSize: theme.fontSizes.md, color: '#555', marginTop: 12, marginBottom: 4 }}>
             Notes
           </label>
           <textarea
@@ -227,25 +228,25 @@ export function QuickSelectPanel({ task, statuses, allTasks, onClose, onRename, 
               width: '100%',
               minHeight: 80,
               boxSizing: 'border-box',
-              fontSize: 15,
+              fontSize: theme.fontSizes.lg,
               padding: '8px 10px',
-              border: '1px solid #ccc',
-              borderRadius: 6,
+              border: `1px solid ${theme.colors.border}`,
+              borderRadius: theme.radii.md,
               resize: 'vertical',
             }}
           />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12 }}>
-            <span style={{ color: '#666', fontSize: 14 }}>Status:</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: theme.space.sm, marginTop: 12 }}>
+            <span style={{ color: '#666', fontSize: theme.fontSizes.md }}>Status:</span>
             <button
               onClick={() => setStatusModalOpen(true)}
               style={{
-                background: '#e8f0fe',
+                background: theme.colors.selected,
                 border: 'none',
-                borderRadius: 6,
+                borderRadius: theme.radii.md,
                 padding: '4px 10px',
                 cursor: 'pointer',
-                fontSize: 14,
-                color: '#1a73e8',
+                fontSize: theme.fontSizes.md,
+                color: theme.colors.brand,
                 fontWeight: 500,
               }}
             >
@@ -256,10 +257,10 @@ export function QuickSelectPanel({ task, statuses, allTasks, onClose, onRename, 
               style={{
                 background: '#f3e8ff',
                 border: 'none',
-                borderRadius: 6,
+                borderRadius: theme.radii.md,
                 padding: '4px 10px',
                 cursor: 'pointer',
-                fontSize: 14,
+                fontSize: theme.fontSizes.md,
                 color: '#7b1fa2',
                 fontWeight: 500,
               }}
@@ -273,13 +274,13 @@ export function QuickSelectPanel({ task, statuses, allTasks, onClose, onRename, 
               <p style={{ margin: '0 0 12px' }}>Are you sure?</p>
               <button
                 onClick={() => { onDelete(task.id); handleClose() }}
-                style={{ marginRight: 8, color: '#fff', background: '#d32f2f', border: 'none', borderRadius: 4, padding: '8px 16px', cursor: 'pointer' }}
+                style={{ marginRight: 8, color: '#fff', background: theme.colors.danger, border: 'none', borderRadius: theme.radii.sm, padding: '8px 16px', cursor: 'pointer' }}
               >
                 Confirm Delete
               </button>
               <button
                 onClick={() => setShowConfirm(false)}
-                style={{ border: '1px solid #ccc', borderRadius: 4, padding: '8px 16px', cursor: 'pointer' }}
+                style={{ border: `1px solid ${theme.colors.border}`, borderRadius: theme.radii.sm, padding: '8px 16px', cursor: 'pointer' }}
               >
                 Cancel
               </button>
@@ -287,27 +288,27 @@ export function QuickSelectPanel({ task, statuses, allTasks, onClose, onRename, 
           ) : (
             <button
               onClick={() => setShowConfirm(true)}
-              style={{ marginTop: 16, color: '#fff', background: '#d32f2f', border: 'none', borderRadius: 4, padding: '8px 16px', cursor: 'pointer' }}
+              style={{ marginTop: 16, color: '#fff', background: theme.colors.danger, border: 'none', borderRadius: theme.radii.sm, padding: '8px 16px', cursor: 'pointer' }}
             >
               Delete
             </button>
           )}
 
           <div style={{ marginTop: 16 }}>
-            <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 8 }}>Parent</div>
+            <div style={{ fontWeight: 600, fontSize: theme.fontSizes.lg, marginBottom: 8 }}>Parent</div>
 
             {parentTask ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: theme.space.sm }}>
                 <button
                   onClick={() => onOpenTask(parentTask.id)}
                   style={{
-                    background: '#e8f0fe',
+                    background: theme.colors.selected,
                     border: 'none',
-                    borderRadius: 6,
+                    borderRadius: theme.radii.md,
                     padding: '4px 10px',
                     cursor: 'pointer',
-                    fontSize: 14,
-                    color: '#1a73e8',
+                    fontSize: theme.fontSizes.md,
+                    color: theme.colors.brand,
                     fontWeight: 500,
                   }}
                 >
@@ -315,7 +316,7 @@ export function QuickSelectPanel({ task, statuses, allTasks, onClose, onRename, 
                 </button>
                 <button
                   onClick={handleClearParent}
-                  style={{ background: 'none', border: 'none', color: '#d32f2f', cursor: 'pointer', fontSize: 14 }}
+                  style={{ background: 'none', border: 'none', color: theme.colors.danger, cursor: 'pointer', fontSize: theme.fontSizes.md }}
                 >
                   Remove
                 </button>
@@ -327,9 +328,9 @@ export function QuickSelectPanel({ task, statuses, allTasks, onClose, onRename, 
                   padding: '8px 16px',
                   background: '#f5f5f5',
                   border: '1px solid #ddd',
-                  borderRadius: 8,
+                  borderRadius: theme.radii.lg,
                   cursor: 'pointer',
-                  fontSize: 14,
+                  fontSize: theme.fontSizes.md,
                 }}
               >
                 Set Parent
@@ -338,7 +339,7 @@ export function QuickSelectPanel({ task, statuses, allTasks, onClose, onRename, 
           </div>
 
           <div style={{ marginTop: 16 }}>
-            <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 8 }}>Subtasks</div>
+            <div style={{ fontWeight: 600, fontSize: theme.fontSizes.lg, marginBottom: 8 }}>Subtasks</div>
 
             {subtaskItems.length > 0 && (
               <DraggableList
@@ -351,7 +352,7 @@ export function QuickSelectPanel({ task, statuses, allTasks, onClose, onRename, 
                       checked={childTask.done}
                       onChange={(e) => onDoneChange(childTask.id, e.target.checked)}
                     />
-                    <span onClick={() => onOpenTask(childTask.id)} style={{ marginLeft: 8, cursor: 'pointer', color: childTask.done ? '#aaa' : undefined }}>
+                    <span onClick={() => onOpenTask(childTask.id)} style={{ marginLeft: 8, cursor: 'pointer', color: childTask.done ? theme.colors.textDisabled : undefined }}>
                       {childTask.name}
                     </span>
                   </>
@@ -369,9 +370,9 @@ export function QuickSelectPanel({ task, statuses, allTasks, onClose, onRename, 
               style={{
                 width: '100%',
                 padding: '8px 10px',
-                fontSize: 14,
+                fontSize: theme.fontSizes.md,
                 border: '1px solid #ddd',
-                borderRadius: 6,
+                borderRadius: theme.radii.md,
                 marginTop: subtaskItems.length > 0 ? 8 : 0,
                 boxSizing: 'border-box',
               }}
@@ -384,9 +385,9 @@ export function QuickSelectPanel({ task, statuses, allTasks, onClose, onRename, 
                 padding: '8px 16px',
                 background: '#f5f5f5',
                 border: '1px solid #ddd',
-                borderRadius: 8,
+                borderRadius: theme.radii.lg,
                 cursor: 'pointer',
-                fontSize: 14,
+                fontSize: theme.fontSizes.md,
               }}
             >
               Link Existing Task
@@ -394,10 +395,10 @@ export function QuickSelectPanel({ task, statuses, allTasks, onClose, onRename, 
           </div>
 
           <div style={{ marginTop: 16 }}>
-            <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 8 }}>Related Tasks</div>
+            <div style={{ fontWeight: 600, fontSize: theme.fontSizes.lg, marginBottom: 8 }}>Related Tasks</div>
 
             {relatedGroups.length === 0 ? (
-              <div style={{ color: '#aaa', fontSize: 14, marginBottom: 12 }}>No related tasks</div>
+              <div style={{ color: theme.colors.textDisabled, fontSize: theme.fontSizes.md, marginBottom: 12 }}>No related tasks</div>
             ) : (
               relatedGroups.map((group) => (
                 <RelationshipGroup
@@ -415,12 +416,12 @@ export function QuickSelectPanel({ task, statuses, allTasks, onClose, onRename, 
               style={{
                 marginTop: 4,
                 padding: '8px 16px',
-                backgroundColor: '#1a73e8',
+                backgroundColor: theme.colors.brand,
                 color: '#fff',
                 border: 'none',
-                borderRadius: 8,
+                borderRadius: theme.radii.lg,
                 cursor: 'pointer',
-                fontSize: 14,
+                fontSize: theme.fontSizes.md,
               }}
             >
               Add Relationship

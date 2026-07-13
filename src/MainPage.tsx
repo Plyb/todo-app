@@ -5,6 +5,7 @@ import { AddTaskFab, NewTaskInputField, computeInsertRank, type NewTaskInput, ty
 import { rankBetween } from './rank-utils'
 import { QuickSelectPanel } from './QuickSelectPanel'
 import { ViewModal } from './ViewModal'
+import { theme } from './theme'
 
 const OVERSCROLL_TRIGGER_DISTANCE = 100
 
@@ -55,19 +56,19 @@ function ViewSelectorButton({ viewName, onClick }: { viewName: string; onClick: 
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 8,
+        gap: theme.space.sm,
         width: '100%',
         padding: '14px 16px',
         border: 'none',
         borderBottom: '1px solid #e0e0e0',
         background: 'white',
-        fontSize: 16,
+        fontSize: theme.fontSizes.xl,
         fontWeight: 600,
         cursor: 'pointer',
       }}
     >
       {viewName}
-      <span style={{ color: '#1a73e8' }}>▾</span>
+      <span style={{ color: theme.colors.brand }}>▾</span>
     </button>
   )
 }
@@ -80,12 +81,12 @@ function TaskRow({ task, onDoneChange, showIndicator, isBlocked, parentTaskName 
         checked={task.done}
         onChange={(e) => onDoneChange(e.target.checked)}
       />
-      <span style={task.done ? { color: '#aaa' } : undefined}>
-        {isBlocked && <span style={{ marginRight: 4, color: '#d32f2f' }}>⊘</span>}
+      <span style={task.done ? { color: theme.colors.textDisabled } : undefined}>
+        {isBlocked && <span style={{ marginRight: 4, color: theme.colors.danger }}>⊘</span>}
         {task.name}
       </span>
       {parentTaskName && (
-        <span style={{ marginLeft: 6, fontSize: 12, color: '#888' }}>↳ {parentTaskName}</span>
+        <span style={{ marginLeft: 6, fontSize: theme.fontSizes.xs, color: theme.colors.textSecondary }}>↳ {parentTaskName}</span>
       )}
       {showIndicator && (
         <span style={{ marginLeft: 6, width: 8, height: 8, borderRadius: '50%', background: '#fbc02d', display: 'inline-block', verticalAlign: 'middle' }} />
@@ -365,7 +366,7 @@ export default function MainPage({
     const isFaded = selectedTaskId !== null && !isSelected
     return {
       opacity: isFaded ? 0.4 : 1,
-      backgroundColor: isSelected ? '#e8f0fe' : 'transparent',
+      backgroundColor: isSelected ? theme.colors.selected : 'transparent',
     }
   }
 
@@ -391,8 +392,8 @@ export default function MainPage({
           <div style={{
             height: 44,
             background: 'rgba(26,115,232,0.08)',
-            borderRadius: 6,
-            border: '2px dashed #1a73e8',
+            borderRadius: theme.radii.md,
+            border: `2px dashed ${theme.colors.brand}`,
             margin: '4px 0',
             transition: 'all 0.15s ease',
           }} />
@@ -404,7 +405,7 @@ export default function MainPage({
     const status = statuses.find((s) => s.slug === slug)
     return {
       header: (
-        <h2 style={{ padding: '16px 16px 8px', margin: 0, fontSize: 18, fontWeight: 700 }}>
+        <h2 style={{ padding: '16px 16px 8px', margin: 0, fontSize: theme.fontSizes.xxl, fontWeight: 700 }}>
           {status?.name ?? slug}
         </h2>
       ),
@@ -428,7 +429,7 @@ export default function MainPage({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: 16,
+        padding: theme.space.md,
       }}
     >
       <div style={{ width: '100%', maxWidth: 480, maxHeight: '90vh', overflowY: 'auto' }}>
@@ -463,7 +464,7 @@ export default function MainPage({
         height: 28,
         borderRadius: '50%',
         pointerEvents: 'none',
-        color: overscrollArmed ? '#1a73e8' : '#9e9e9e',
+        color: overscrollArmed ? theme.colors.brand : '#9e9e9e',
         background: `conic-gradient(currentColor ${overscrollPct * 100}%, transparent ${overscrollPct * 100}%)`,
       }}
     />

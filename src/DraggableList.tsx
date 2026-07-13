@@ -12,6 +12,7 @@ import {
 } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import { theme } from './theme'
 
 type Section<T> = {
   header?: React.ReactNode
@@ -70,7 +71,7 @@ function SortableItem<T extends { id: number }>({
       style={{
         cursor: isDragging ? 'grabbing' : 'grab',
         padding: '12px 16px',
-        borderBottom: '1px solid #eee',
+        borderBottom: `1px solid ${theme.colors.divider}`,
         boxSizing: 'border-box',
         position: 'relative',
         ...itemStyle?.(item),
@@ -202,7 +203,7 @@ export function DraggableList<T extends { id: number }>({
             style={{
               padding: '12px 16px',
               boxSizing: 'border-box',
-              borderBottom: '1px solid #eee',
+              borderBottom: `1px solid ${theme.colors.divider}`,
               backgroundColor: 'white',
               opacity: 0.85,
               transform: 'scale(1.05)',
