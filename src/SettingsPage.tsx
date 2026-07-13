@@ -17,6 +17,7 @@ import {
 import { ViewEditorModal } from './ViewEditorModal'
 import { StatusEditorModal } from './StatusEditorModal'
 import { StatusModal } from './StatusModal'
+import { EditableListSection } from './EditableListSection'
 import { theme } from './theme'
 
 const loadAutoArchiveSetting = (): string | null => localStorage.getItem('auto-archive-status-slug')
@@ -135,64 +136,16 @@ export default function SettingsPage({ onBack, statuses, onStatusesChange, views
       </button>
 
       <div style={{ marginTop: 56 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-          <h2 style={{ margin: 0, fontSize: 20 }}>Views</h2>
-          <button
-            onClick={handleNewView}
-            style={{
-              background: theme.colors.brand,
-              color: '#fff',
-              border: 'none',
-              borderRadius: '50%',
-              width: 32,
-              height: 32,
-              cursor: 'pointer',
-              fontSize: 20,
-              lineHeight: 1,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: 0,
-            }}
-          >
-            +
-          </button>
-        </div>
-
-        {views.map((view) => (
-          <div key={view.slug} style={{ display: 'flex', alignItems: 'center', width: '100%', padding: '12px 16px', borderBottom: `1px solid ${theme.colors.divider}`, boxSizing: 'border-box' }}>
-            <button
-              onClick={() => setEditingView(view)}
-              style={{
-                flex: 1,
-                textAlign: 'left',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                fontSize: theme.fontSizes.xl,
-                padding: 0,
-              }}
-            >
-              {view.name}
-            </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); handleDeleteView(view.slug) }}
-              disabled={views.length === 1}
-              style={{
-                background: 'none',
-                border: 'none',
-                cursor: views.length === 1 ? 'default' : 'pointer',
-                fontSize: theme.fontSizes.xl,
-                color: theme.colors.textTertiary,
-                padding: '4px 8px',
-                opacity: views.length === 1 ? 0.4 : 1,
-              }}
-              aria-label={`Delete ${view.name}`}
-            >
-              ✕
-            </button>
-          </div>
-        ))}
+        <EditableListSection
+          title="Views"
+          items={views}
+          getKey={(view) => view.slug}
+          getLabel={(view) => view.name}
+          onEdit={setEditingView}
+          onDelete={(view) => handleDeleteView(view.slug)}
+          onAdd={handleNewView}
+          canDelete={(_view, allViews) => allViews.length > 1}
+        />
       </div>
 
       {editingView && (
@@ -205,64 +158,16 @@ export default function SettingsPage({ onBack, statuses, onStatusesChange, views
       )}
 
       <div style={{ marginTop: 32 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-          <h2 style={{ margin: 0, fontSize: 20 }}>Statuses</h2>
-          <button
-            onClick={handleNewStatus}
-            style={{
-              background: theme.colors.brand,
-              color: '#fff',
-              border: 'none',
-              borderRadius: '50%',
-              width: 32,
-              height: 32,
-              cursor: 'pointer',
-              fontSize: 20,
-              lineHeight: 1,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: 0,
-            }}
-          >
-            +
-          </button>
-        </div>
-
-        {statuses.map((status) => (
-          <div key={status.slug} style={{ display: 'flex', alignItems: 'center', width: '100%', padding: '12px 16px', borderBottom: `1px solid ${theme.colors.divider}`, boxSizing: 'border-box' }}>
-            <button
-              onClick={() => setEditingStatus(status)}
-              style={{
-                flex: 1,
-                textAlign: 'left',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                fontSize: theme.fontSizes.xl,
-                padding: 0,
-              }}
-            >
-              {status.name}
-            </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); handleDeleteStatus(status.slug) }}
-              disabled={statuses.length === 1}
-              style={{
-                background: 'none',
-                border: 'none',
-                cursor: statuses.length === 1 ? 'default' : 'pointer',
-                fontSize: theme.fontSizes.xl,
-                color: theme.colors.textTertiary,
-                padding: '4px 8px',
-                opacity: statuses.length === 1 ? 0.4 : 1,
-              }}
-              aria-label={`Delete ${status.name}`}
-            >
-              ✕
-            </button>
-          </div>
-        ))}
+        <EditableListSection
+          title="Statuses"
+          items={statuses}
+          getKey={(status) => status.slug}
+          getLabel={(status) => status.name}
+          onEdit={setEditingStatus}
+          onDelete={(status) => handleDeleteStatus(status.slug)}
+          onAdd={handleNewStatus}
+          canDelete={(_status, allStatuses) => allStatuses.length > 1}
+        />
       </div>
 
       {editingStatus && (
