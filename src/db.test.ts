@@ -130,6 +130,49 @@ describe('updateTaskDone (guard against missing records)', () => {
   })
 })
 
+describe('runner abort-on-error (rolls back a partial multi-store write)', () => {
+  // Writes a record straight into a store, bypassing db.ts's typed helpers, so
+  // we can seed a malformed view that makes reassignTasksAndViews throw
+  // mid-transaction (after the status delete + task update are already queued).
+  async function putRaw(storeName: string, value: unknown): Promise<void> {
+    await new Promise<void>((resolve, reject) => {
+      const request = indexedDB.open(DB_NAME)
+      request.onsuccess = () => {
+        const rawDb = request.result
+        const tx = rawDb.transaction(storeName, 'readwrite')
+        tx.objectStore(storeName).put(value)
+        tx.oncomplete = () => {
+          rawDb.close()
+          resolve()
+        }
+        tx.onerror = () => reject(tx.error)
+      }
+      request.onerror = () => reject(request.error)
+    })
+  }
+
+  it('aborts the transaction on a thrown callback, leaving the stores unchanged', async () => {
+    const db = await import('./db')
+
+    await db.createStatus('Custom', 'custom')
+    const task = await db.createTask('Task in custom status', LexoRank.middle().toString(), 'custom')
+    // A view missing `statusSlugs` makes `view.statusSlugs.includes(...)` throw
+    // inside reassignTasksAndViews, after the status delete + task reassignment
+    // have been queued in the same transaction.
+    await putRaw('views', { slug: 'malformed', name: 'Malformed' })
+
+    await expect(db.updateStatus('custom', 'custom-renamed', 'Custom Renamed')).rejects.toThrow()
+
+    // The abort must roll back the queued delete and task update.
+    const statuses = await db.loadStatuses()
+    expect(statuses).toContainEqual({ slug: 'custom', name: 'Custom' })
+    expect(statuses.some((s) => s.slug === 'custom-renamed')).toBe(false)
+
+    const tasks = await db.loadTasks()
+    expect(tasks.find((t) => t.id === task.id)?.statusSlug).toBe('custom')
+  })
+})
+
 describe('migration replay', () => {
   it('upgrades a v1 database (tasks store only, no done/rank/statusSlug/notes) to v8', async () => {
     // Simulate a database left behind by the very first shipped schema: only
