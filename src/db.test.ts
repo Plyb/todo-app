@@ -93,6 +93,30 @@ describe('updateStatus (multi-store write)', () => {
   })
 })
 
+describe('deleteTask (atomic cascade)', () => {
+  it('removes the task, its subtask links, and its blocking relationships together', async () => {
+    const db = await import('./db')
+
+    const parent = await db.createTask('Parent', LexoRank.middle().toString(), 'backlog')
+    const child = await db.createTask('Child', LexoRank.middle().genNext().toString(), 'backlog')
+    const other = await db.createTask('Other', LexoRank.middle().genNext().genNext().toString(), 'backlog')
+
+    await db.createSubtaskLink(parent.id, child.id, LexoRank.middle().toString())
+    await db.addBlock(parent.id, other.id, 'blocks')
+
+    await db.deleteTask(parent.id)
+
+    const tasks = await db.loadTasks()
+    expect(tasks.find((t) => t.id === parent.id)).toBeUndefined()
+
+    const subtaskLinks = await db.loadAllSubtaskLinks()
+    expect(subtaskLinks.some((l) => l.parentTaskId === parent.id || l.childTaskId === parent.id)).toBe(false)
+
+    const blocks = await db.loadAllBlocks()
+    expect(blocks.some((b) => b.fromTaskId === parent.id || b.toTaskId === parent.id)).toBe(false)
+  })
+})
+
 describe('migration replay', () => {
   it('upgrades a v1 database (tasks store only, no done/rank/statusSlug/notes) to v8', async () => {
     // Simulate a database left behind by the very first shipped schema: only
