@@ -81,12 +81,12 @@ function TaskRow({ task, onDoneChange, showIndicator, isBlocked, parentTaskName 
         checked={task.done}
         onChange={(e) => onDoneChange(e.target.checked)}
       />
-      <span style={task.done ? { color: theme.colors.greyLight } : undefined}>
+      <span style={task.done ? { color: theme.colors.textDisabled } : undefined}>
         {isBlocked && <span style={{ marginRight: 4, color: theme.colors.danger }}>⊘</span>}
         {task.name}
       </span>
       {parentTaskName && (
-        <span style={{ marginLeft: 6, fontSize: theme.fontSizes.xs, color: theme.colors.greyDark }}>↳ {parentTaskName}</span>
+        <span style={{ marginLeft: 6, fontSize: theme.fontSizes.xs, color: theme.colors.textSecondary }}>↳ {parentTaskName}</span>
       )}
       {showIndicator && (
         <span style={{ marginLeft: 6, width: 8, height: 8, borderRadius: '50%', background: '#fbc02d', display: 'inline-block', verticalAlign: 'middle' }} />

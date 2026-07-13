@@ -64,7 +64,7 @@ export function LinkExistingTaskModal({ currentTaskId, allTasks, excludedTaskIds
           }}
         />
         {filtered.length === 0 ? (
-          <div style={{ color: theme.colors.greyLight, textAlign: 'center', padding: '16px 0' }}>No tasks found</div>
+          <div style={{ color: theme.colors.textDisabled, textAlign: 'center', padding: '16px 0' }}>No tasks found</div>
         ) : (
           filtered.map((task) => (
             <div

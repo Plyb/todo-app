@@ -108,7 +108,7 @@ export function ViewEditorModal({ view, statuses, onSave, onClose }: ViewEditorM
             style={{ display: 'flex', alignItems: 'center', gap: theme.space.sm, padding: '6px 0', borderBottom: '1px solid #f0f0f0' }}
           >
             <input type="checkbox" checked={false} onChange={() => toggle(status.slug)} />
-            <span style={{ flex: 1, color: theme.colors.greyMedium }}>{status.name}</span>
+            <span style={{ flex: 1, color: theme.colors.textTertiary }}>{status.name}</span>
           </div>
         ))}
 

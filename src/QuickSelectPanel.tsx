@@ -207,7 +207,7 @@ export function QuickSelectPanel({ task, statuses, allTasks, onClose, onRename, 
               border: 'none',
               outline: 'none',
               background: 'transparent',
-              color: task.done ? theme.colors.greyLight : undefined,
+              color: task.done ? theme.colors.textDisabled : undefined,
             }}
           />
         </div>
@@ -352,7 +352,7 @@ export function QuickSelectPanel({ task, statuses, allTasks, onClose, onRename, 
                       checked={childTask.done}
                       onChange={(e) => onDoneChange(childTask.id, e.target.checked)}
                     />
-                    <span onClick={() => onOpenTask(childTask.id)} style={{ marginLeft: 8, cursor: 'pointer', color: childTask.done ? theme.colors.greyLight : undefined }}>
+                    <span onClick={() => onOpenTask(childTask.id)} style={{ marginLeft: 8, cursor: 'pointer', color: childTask.done ? theme.colors.textDisabled : undefined }}>
                       {childTask.name}
                     </span>
                   </>
@@ -398,7 +398,7 @@ export function QuickSelectPanel({ task, statuses, allTasks, onClose, onRename, 
             <div style={{ fontWeight: 600, fontSize: theme.fontSizes.lg, marginBottom: 8 }}>Related Tasks</div>
 
             {relatedGroups.length === 0 ? (
-              <div style={{ color: theme.colors.greyLight, fontSize: theme.fontSizes.md, marginBottom: 12 }}>No related tasks</div>
+              <div style={{ color: theme.colors.textDisabled, fontSize: theme.fontSizes.md, marginBottom: 12 }}>No related tasks</div>
             ) : (
               relatedGroups.map((group) => (
                 <RelationshipGroup

@@ -183,7 +183,7 @@ export default function SettingsPage({ onBack, statuses, onStatusesChange, views
                 border: 'none',
                 cursor: views.length === 1 ? 'default' : 'pointer',
                 fontSize: theme.fontSizes.xl,
-                color: theme.colors.greyMedium,
+                color: theme.colors.textTertiary,
                 padding: '4px 8px',
                 opacity: views.length === 1 ? 0.4 : 1,
               }}
@@ -253,7 +253,7 @@ export default function SettingsPage({ onBack, statuses, onStatusesChange, views
                 border: 'none',
                 cursor: statuses.length === 1 ? 'default' : 'pointer',
                 fontSize: theme.fontSizes.xl,
-                color: theme.colors.greyMedium,
+                color: theme.colors.textTertiary,
                 padding: '4px 8px',
                 opacity: statuses.length === 1 ? 0.4 : 1,
               }}

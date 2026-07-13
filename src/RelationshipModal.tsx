@@ -21,7 +21,7 @@ export function RelatedTaskEntry({ task, onOpen, onDoneChange }: RelatedTaskEntr
         checked={task.done}
         onChange={(e) => onDoneChange(task.id, e.target.checked)}
       />
-      <span onClick={() => onOpen(task.id)} style={{ cursor: 'pointer', color: task.done ? theme.colors.greyLight : undefined }}>
+      <span onClick={() => onOpen(task.id)} style={{ cursor: 'pointer', color: task.done ? theme.colors.textDisabled : undefined }}>
         {task.name}
       </span>
     </div>
@@ -133,7 +133,7 @@ export function RelationshipModal({ currentTaskId, allTasks, onClose, onBlocking
               }}
             />
             {filtered.length === 0 ? (
-              <div style={{ color: theme.colors.greyLight, textAlign: 'center', padding: '16px 0' }}>No tasks found</div>
+              <div style={{ color: theme.colors.textDisabled, textAlign: 'center', padding: '16px 0' }}>No tasks found</div>
             ) : (
               filtered.map((task) => (
                 <div
@@ -163,7 +163,7 @@ export function RelationshipModal({ currentTaskId, allTasks, onClose, onBlocking
               </button>
               <span style={{ fontWeight: 700, fontSize: theme.fontSizes.xl }}>Choose relationship type</span>
             </div>
-            <div style={{ color: theme.colors.greyDark, fontSize: theme.fontSizes.md, marginBottom: 8 }}>
+            <div style={{ color: theme.colors.textSecondary, fontSize: theme.fontSizes.md, marginBottom: 8 }}>
               Relating to: <strong>{state.selectedTask.name}</strong>
             </div>
             <TypeButton

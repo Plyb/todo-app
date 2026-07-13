@@ -1,14 +1,10 @@
-// Design tokens shared across components. These are extracted from literals
-// that were previously copy-pasted inline across ~13 files; values here must
-// stay byte-for-byte identical to what they replace (pixel-identical output).
-
 export const colors = {
   brand: '#1a73e8',
   selected: '#e8f0fe',
   danger: '#d32f2f',
-  greyDark: '#888',
-  greyMedium: '#999',
-  greyLight: '#aaa',
+  textSecondary: '#888',
+  textTertiary: '#999',
+  textDisabled: '#aaa',
   overlay: 'rgba(0,0,0,0.5)',
   border: '#ccc',
   divider: '#eee',
