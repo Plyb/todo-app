@@ -343,8 +343,6 @@ async function withStore<T>(
     await transactionToPromise(transaction)
     return result
   } catch (error) {
-    // A thrown callback must roll back rather than silently commit the writes
-    // queued so far: abort the transaction before rethrowing.
     abortTransaction(transaction)
     throw error
   }
@@ -362,8 +360,6 @@ async function withTransaction<T>(
     await transactionToPromise(transaction)
     return result
   } catch (error) {
-    // A thrown callback must roll back rather than silently commit the writes
-    // queued so far: abort the transaction before rethrowing.
     abortTransaction(transaction)
     throw error
   }
