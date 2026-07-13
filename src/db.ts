@@ -41,11 +41,35 @@ const storedTaskSchema = z.object({
   notes: withDefault(z.string(), () => ''),
 }) satisfies z.ZodType<StoredTask>
 
+const statusSchema = z.object({
+  slug: z.string(),
+  name: z.string(),
+}) satisfies z.ZodType<Status>
+
+const subtaskLinkSchema = z.object({
+  id: z.number(),
+  parentTaskId: z.number(),
+  childTaskId: z.number(),
+  rank: z.string(),
+}) satisfies z.ZodType<SubtaskLink>
+
+const storedBlockingRelationshipSchema = z.object({
+  fromTaskId: z.number(),
+  toTaskId: z.number(),
+  type: z.literal('blocks'),
+}) satisfies z.ZodType<StoredBlockingRelationship>
+
 export type View = {
   slug: string
   name: string
   statusSlugs: string[]
 }
+
+const viewSchema = z.object({
+  slug: z.string(),
+  name: z.string(),
+  statusSlugs: z.array(z.string()),
+}) satisfies z.ZodType<View>
 
 export type ScheduledTransition = {
   id: number
@@ -55,6 +79,12 @@ export type ScheduledTransition = {
 }
 
 type StoredScheduledTransition = Omit<ScheduledTransition, 'id'>
+
+const storedScheduledTransitionSchema = z.object({
+  taskId: z.number(),
+  date: z.string(),
+  statusSlug: z.string(),
+}) satisfies z.ZodType<StoredScheduledTransition>
 
 const DB_NAME = 'todo-app'
 const DB_VERSION = 8
@@ -404,9 +434,10 @@ export async function loadTasks(): Promise<Task[]> {
 }
 
 export async function loadStatuses(): Promise<Status[]> {
-  return withStore(STATUSES_STORE, 'readonly', async (store) =>
-    (await requestToPromise(store.getAll())) as Status[],
-  )
+  return withStore(STATUSES_STORE, 'readonly', async (store) => {
+    const raw = await requestToPromise(store.getAll())
+    return raw.map((record) => statusSchema.parse(record))
+  })
 }
 
 export async function createStatus(name: string, slug: string): Promise<Status> {
@@ -531,7 +562,8 @@ export async function deleteTask(id: number): Promise<void> {
 export async function loadSubtaskLinks(parentTaskId: number): Promise<SubtaskLink[]> {
   return withStore(SUBTASKS_STORE, 'readonly', async (store) => {
     const index = store.index('by_parent')
-    const links = (await requestToPromise(index.getAll(parentTaskId))) as SubtaskLink[]
+    const raw = await requestToPromise(index.getAll(parentTaskId))
+    const links = raw.map((record) => subtaskLinkSchema.parse(record))
 
     links.sort(byRank)
     return links
@@ -541,14 +573,16 @@ export async function loadSubtaskLinks(parentTaskId: number): Promise<SubtaskLin
 export async function loadParentLink(childTaskId: number): Promise<SubtaskLink | undefined> {
   return withStore(SUBTASKS_STORE, 'readonly', async (store) => {
     const index = store.index('by_child')
-    return (await requestToPromise(index.get(childTaskId))) as SubtaskLink | undefined
+    const raw = await requestToPromise(index.get(childTaskId))
+    return raw === undefined ? undefined : subtaskLinkSchema.parse(raw)
   })
 }
 
 export async function loadAllSubtaskLinks(): Promise<SubtaskLink[]> {
-  return withStore(SUBTASKS_STORE, 'readonly', async (store) =>
-    (await requestToPromise(store.getAll())) as SubtaskLink[],
-  )
+  return withStore(SUBTASKS_STORE, 'readonly', async (store) => {
+    const raw = await requestToPromise(store.getAll())
+    return raw.map((record) => subtaskLinkSchema.parse(record))
+  })
 }
 
 export async function createSubtaskLink(parentTaskId: number, childTaskId: number, rank: string): Promise<SubtaskLink> {
@@ -589,9 +623,10 @@ export async function deleteSubtaskLinksByChild(childTaskId: number): Promise<vo
 }
 
 export async function loadViews(): Promise<View[]> {
-  return withStore(VIEWS_STORE, 'readonly', async (store) =>
-    (await requestToPromise(store.getAll())) as View[],
-  )
+  return withStore(VIEWS_STORE, 'readonly', async (store) => {
+    const raw = await requestToPromise(store.getAll())
+    return raw.map((record) => viewSchema.parse(record))
+  })
 }
 
 export async function saveView(view: View): Promise<void> {
@@ -608,7 +643,8 @@ export async function deleteView(slug: string): Promise<void> {
 
 export async function loadScheduledTransitions(taskId: number): Promise<ScheduledTransition[]> {
   return withStore(SCHEDULED_TRANSITIONS_STORE, 'readonly', async (store) => {
-    const transitions = await getAllWithIds<StoredScheduledTransition>(store)
+    const records = await getAllWithIds<Record<string, unknown>>(store)
+    const transitions = records.map(({ id, ...raw }) => ({ id, ...storedScheduledTransitionSchema.parse(raw) }))
 
     return transitions
       .filter((t) => t.taskId === taskId)
@@ -632,7 +668,8 @@ export async function deleteScheduledTransition(id: number): Promise<void> {
 
 export async function loadAllDueTransitions(): Promise<ScheduledTransition[]> {
   return withStore(SCHEDULED_TRANSITIONS_STORE, 'readonly', async (store) => {
-    const transitions = await getAllWithIds<StoredScheduledTransition>(store)
+    const records = await getAllWithIds<Record<string, unknown>>(store)
+    const transitions = records.map(({ id, ...raw }) => ({ id, ...storedScheduledTransitionSchema.parse(raw) }))
 
     const today = new Date().toISOString().slice(0, 10)
     return transitions.filter((t) => t.date <= today)
@@ -644,16 +681,17 @@ export async function loadBlocks(taskId: number): Promise<BlockingRelationship[]
     const fromIndex = store.index('fromTaskId')
     const toIndex = store.index('toTaskId')
 
-    const from = await getAllWithIds<StoredBlockingRelationship>(fromIndex, taskId)
-    const to = await getAllWithIds<StoredBlockingRelationship>(toIndex, taskId)
-    return [...from, ...to]
+    const from = await getAllWithIds<Record<string, unknown>>(fromIndex, taskId)
+    const to = await getAllWithIds<Record<string, unknown>>(toIndex, taskId)
+    return [...from, ...to].map(({ id, ...raw }) => ({ id, ...storedBlockingRelationshipSchema.parse(raw) }))
   })
 }
 
 export async function loadAllBlocks(): Promise<BlockingRelationship[]> {
-  return withStore(RELATIONSHIPS_STORE, 'readonly', async (store) =>
-    getAllWithIds<StoredBlockingRelationship>(store),
-  )
+  return withStore(RELATIONSHIPS_STORE, 'readonly', async (store) => {
+    const records = await getAllWithIds<Record<string, unknown>>(store)
+    return records.map(({ id, ...raw }) => ({ id, ...storedBlockingRelationshipSchema.parse(raw) }))
+  })
 }
 
 export async function addBlock(fromTaskId: number, toTaskId: number, type: 'blocks'): Promise<BlockingRelationship> {

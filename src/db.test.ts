@@ -307,3 +307,54 @@ describe('readTasks validation (Zod schema at the read boundary)', () => {
     await expect(db.loadTasks()).rejects.toThrow()
   })
 })
+
+describe('remaining-store read validation (Zod schema at the read boundary)', () => {
+  it('loadStatuses throws on a wrong-typed field', async () => {
+    const db = await import('./db')
+    await db.loadStatuses()
+
+    await putRaw('statuses', { slug: 'bad', name: 42 })
+
+    await expect(db.loadStatuses()).rejects.toThrow()
+  })
+
+  it('loadViews throws on a wrong-typed field', async () => {
+    const db = await import('./db')
+    await db.loadViews()
+
+    await putRaw('views', { slug: 'bad', name: 'Bad', statusSlugs: 'not-an-array' })
+
+    await expect(db.loadViews()).rejects.toThrow()
+  })
+
+  it('loadAllSubtaskLinks throws on a wrong-typed field', async () => {
+    const db = await import('./db')
+    const parent = await db.createTask('Parent', LexoRank.middle().toString(), 'backlog')
+    const child = await db.createTask('Child', LexoRank.middle().genNext().toString(), 'backlog')
+
+    await putRaw('subtasks', { parentTaskId: parent.id, childTaskId: child.id, rank: 42 })
+
+    await expect(db.loadAllSubtaskLinks()).rejects.toThrow()
+  })
+
+  it('loadAllBlocks throws on a wrong-typed field', async () => {
+    const db = await import('./db')
+    const a = await db.createTask('A', LexoRank.middle().toString(), 'backlog')
+    const b = await db.createTask('B', LexoRank.middle().genNext().toString(), 'backlog')
+    await db.addBlock(a.id, b.id, 'blocks')
+
+    await putRaw('relationships', { fromTaskId: a.id, toTaskId: b.id, type: 'not-blocks' })
+
+    await expect(db.loadAllBlocks()).rejects.toThrow()
+  })
+
+  it('loadAllDueTransitions throws on a wrong-typed field', async () => {
+    const db = await import('./db')
+    const task = await db.createTask('Task', LexoRank.middle().toString(), 'backlog')
+    await db.addScheduledTransition(task.id, '2020-01-01', 'backlog')
+
+    await putRaw('scheduledTransitions', { taskId: task.id, date: 20200101, statusSlug: 'backlog' })
+
+    await expect(db.loadAllDueTransitions()).rejects.toThrow()
+  })
+})
