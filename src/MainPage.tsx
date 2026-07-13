@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { createTask, deleteTask, loadAllBlocks, loadAllSubtaskLinks, updateTaskDone, updateTaskName, updateTaskNotes, updateTaskRank, updateTaskStatus } from './db'
-import type { BlockingRelationship, SubtaskLink, Task, Status, View } from './types'
+import { loadAllBlocks, loadAllSubtaskLinks } from './db'
+import type { BlockingRelationship, SubtaskLink, Task } from './types'
 import { DraggableList } from './DraggableList'
 import { AddTaskFab, NewTaskInputField, computeInsertRank, type NewTaskInput, type InsertSlotTarget } from './AddTaskInput'
 import { rankBetween } from './rank-utils'
@@ -8,6 +8,7 @@ import { QuickSelectPanel } from './QuickSelectPanel'
 import { ViewModal } from './ViewModal'
 import { theme } from './theme'
 import { useOverscrollGesture } from './useOverscrollGesture'
+import { useTasks, useStatuses, useViews } from './tasks-context'
 
 const OVERSCROLL_TRIGGER_DISTANCE = 100
 
@@ -23,16 +24,7 @@ function shouldShowViewSelectorButton(): boolean {
 }
 
 type MainPageProps = {
-  tasks: Task[]
-  setTasks: React.Dispatch<React.SetStateAction<Task[]>>
-  statuses: Status[]
-  views: View[]
-  currentViewSlug: string
-  recentViewSlugs: string[]
-  onOpenView: (slug: string) => void
   onNavigateToSettings: () => void
-  autoTransitionedTaskIds?: Set<number>
-  onClearAutoTransitionIndicator?: (id: number) => void
 }
 
 function computeNewRank(sectionTasks: Task[], insertIndex: number, draggedTaskId: number): string {
@@ -97,18 +89,21 @@ function TaskRow({ task, onDoneChange, showIndicator, isBlocked, parentTaskName 
   )
 }
 
-export default function MainPage({
-  tasks,
-  setTasks,
-  statuses,
-  views,
-  currentViewSlug,
-  recentViewSlugs,
-  onOpenView,
-  onNavigateToSettings,
-  autoTransitionedTaskIds,
-  onClearAutoTransitionIndicator,
-}: MainPageProps) {
+export default function MainPage({ onNavigateToSettings }: MainPageProps) {
+  const {
+    tasks,
+    autoTransitionedTaskIds,
+    setDone,
+    moveTask,
+    setStatus,
+    renameTask,
+    updateNotes,
+    deleteTask,
+    createTask,
+    clearAutoTransitionIndicator,
+  } = useTasks()
+  const { statuses } = useStatuses()
+  const { views, currentViewSlug, recentViewSlugs, openView } = useViews()
   const [newTaskInput, setNewTaskInput] = useState<NewTaskInput | null>(null)
   const [fabDragSlot, setFabDragSlot] = useState<InsertSlotTarget | null>(null)
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null)
@@ -150,8 +145,8 @@ export default function MainPage({
     // away, not whatever was shown when this effect last ran.
     return () => {
       displayedTasksRef.current.forEach((task) => {
-        if (autoTransitionedTaskIdsRef.current?.has(task.id)) {
-          onClearAutoTransitionIndicator?.(task.id)
+        if (autoTransitionedTaskIdsRef.current.has(task.id)) {
+          clearAutoTransitionIndicator(task.id)
         }
       })
     }
@@ -170,16 +165,6 @@ export default function MainPage({
     setNewTaskInput({ sectionIndex, insertIndex })
   }
 
-  function handleDoneChange(id: number, done: boolean) {
-    updateTaskDone(id, done)
-    setTasks(tasks.map((t) => (t.id === id ? { ...t, done } : t)))
-  }
-
-  function handleUpdateNotes(id: number, notes: string) {
-    updateTaskNotes(id, notes)
-    setTasks(tasks.map((t) => (t.id === id ? { ...t, notes } : t)))
-  }
-
   function handleReorder(draggedId: number, toSectionIndex: number, insertIndex: number) {
     if (!currentView) return
     const toStatusSlug = currentView.statusSlugs[toSectionIndex]
@@ -187,35 +172,16 @@ export default function MainPage({
     const toSectionTasks = tasks.filter((t) => t.statusSlug === toStatusSlug)
     const newRank = computeNewRank(toSectionTasks, insertIndex, draggedId)
     const needsStatusChange = draggedTask.statusSlug !== toStatusSlug
-    if (needsStatusChange) {
-      updateTaskStatus(draggedId, toStatusSlug)
-    }
-    updateTaskRank(draggedId, newRank)
-    setTasks((prev) => {
-      const updated = prev.map((t) =>
-        t.id === draggedId ? { ...t, rank: newRank, statusSlug: toStatusSlug } : t
-      )
-      return updated.sort((a, b) => (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0))
-    })
-  }
-
-  function handleRename(id: number, name: string) {
-    updateTaskName(id, name)
-    setTasks(tasks.map((t) => (t.id === id ? { ...t, name } : t)))
-  }
-
-  async function applyStatusChange(id: number, statusSlug: string) {
-    await updateTaskStatus(id, statusSlug)
-    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, statusSlug } : t)))
+    moveTask(draggedId, toStatusSlug, newRank, needsStatusChange)
   }
 
   async function handleChangeStatus(id: number, statusSlug: string) {
-    await applyStatusChange(id, statusSlug)
+    await setStatus(id, statusSlug)
     setSelectedTaskId(null)
   }
 
   async function handleModalChangeStatus(id: number, statusSlug: string) {
-    await applyStatusChange(id, statusSlug)
+    await setStatus(id, statusSlug)
     setModalTaskId(null)
   }
 
@@ -229,12 +195,7 @@ export default function MainPage({
     const statusSlug = currentView.statusSlugs[sectionIndex]
     const sectionTasks = tasks.filter((t) => t.statusSlug === statusSlug)
     const rank = computeInsertRank(sectionTasks, insertIndex)
-    const task = await createTask(trimmed, rank, statusSlug)
-    setTasks((prev) => {
-      const next = [...prev, task]
-      next.sort((a, b) => (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0))
-      return next
-    })
+    await createTask(trimmed, rank, statusSlug)
     if (andOpenAnother) {
       openInput(sectionIndex, insertIndex + 1)
     } else {
@@ -257,30 +218,17 @@ export default function MainPage({
 
   function handleTaskClick(taskId: number) {
     setSelectedTaskId((prev) => (prev === taskId ? null : taskId))
-    onClearAutoTransitionIndicator?.(taskId)
-  }
-
-  async function applyDelete(id: number) {
-    await deleteTask(id)
-    setTasks((prev) => prev.filter((t) => t.id !== id))
+    clearAutoTransitionIndicator(taskId)
   }
 
   async function handleDelete(id: number) {
-    await applyDelete(id)
+    await deleteTask(id)
     setSelectedTaskId(null)
   }
 
   async function handleModalDelete(id: number) {
-    await applyDelete(id)
+    await deleteTask(id)
     setModalTaskId(null)
-  }
-
-  function handleTaskCreated(task: Task) {
-    setTasks((prev) => {
-      const next = [...prev, task]
-      next.sort((a, b) => (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0))
-      return next
-    })
   }
 
   const parentTaskNameByChildId = new Map(
@@ -300,14 +248,13 @@ export default function MainPage({
         allTasks: tasks,
         statuses,
         onClose: () => setSelectedTaskId(null),
-        onRename: handleRename,
+        onRename: renameTask,
         onChangeStatus: handleChangeStatus,
         onDelete: handleDelete,
-        onUpdateNotes: handleUpdateNotes,
+        onUpdateNotes: updateNotes,
         onOpenTask: (id: number) => setModalTaskId(id),
-        onDoneChange: handleDoneChange,
+        onDoneChange: setDone,
         onBlockingRelationshipAdded: () => loadAllBlocks().then(setBlockingRelationships),
-        onTaskCreated: handleTaskCreated,
         onSubtaskLinkAdded: () => loadAllSubtaskLinks().then(setSubtaskLinks),
       }
     : null
@@ -320,14 +267,13 @@ export default function MainPage({
         allTasks: tasks,
         statuses,
         onClose: () => setModalTaskId(null),
-        onRename: handleRename,
+        onRename: renameTask,
         onChangeStatus: handleModalChangeStatus,
         onDelete: handleModalDelete,
-        onUpdateNotes: handleUpdateNotes,
+        onUpdateNotes: updateNotes,
         onOpenTask: (id: number) => setModalTaskId(id),
-        onDoneChange: handleDoneChange,
+        onDoneChange: setDone,
         onBlockingRelationshipAdded: () => loadAllBlocks().then(setBlockingRelationships),
-        onTaskCreated: handleTaskCreated,
         onSubtaskLinkAdded: () => loadAllSubtaskLinks().then(setSubtaskLinks),
       }
     : null
@@ -414,7 +360,7 @@ export default function MainPage({
       views={views}
       recentViewSlugs={recentViewSlugs}
       currentViewSlug={currentViewSlug}
-      onSelect={onOpenView}
+      onSelect={openView}
       onClose={() => setViewModalOpen(false)}
     />
   )
@@ -456,8 +402,8 @@ export default function MainPage({
         renderItem={(task) => (
           <TaskRow
             task={task}
-            onDoneChange={(done) => handleDoneChange(task.id, done)}
-            showIndicator={autoTransitionedTaskIds?.has(task.id)}
+            onDoneChange={(done) => setDone(task.id, done)}
+            showIndicator={autoTransitionedTaskIds.has(task.id)}
             isBlocked={blockingRelationships.some((r) => r.toTaskId === task.id)}
             parentTaskName={parentTaskNameByChildId.get(task.id)}
           />
