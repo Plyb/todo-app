@@ -7,6 +7,7 @@ import { rankBetween } from './rank-utils'
 import { QuickSelectPanel } from './QuickSelectPanel'
 import { ViewModal } from './ViewModal'
 import { theme } from './theme'
+import { useOverscrollGesture } from './useOverscrollGesture'
 
 const OVERSCROLL_TRIGGER_DISTANCE = 100
 
@@ -115,8 +116,6 @@ export default function MainPage({
   const [viewModalOpen, setViewModalOpen] = useState(false)
   const [blockingRelationships, setBlockingRelationships] = useState<BlockingRelationship[]>([])
   const [subtaskLinks, setSubtaskLinks] = useState<SubtaskLink[]>([])
-  const [pullDistance, setPullDistance] = useState(0)
-  const [isTouching, setIsTouching] = useState(false)
 
   useEffect(() => {
     loadAllBlocks().then(setBlockingRelationships)
@@ -126,41 +125,12 @@ export default function MainPage({
   const listRef = useRef<HTMLDivElement>(null)
   const inputKeyRef = useRef(0)
 
-  const pullDistanceRef = useRef(0)
   const noModalOpen = selectedTaskId === null && !viewModalOpen && modalTaskId === null
-
-  useEffect(() => {
-    function handleScroll() {
-      // Negative scrollY only occurs during a rubber-band overscroll, which is only
-      // reachable in an installed iOS PWA - other platforms don't overscroll at all,
-      // so they rely on the view-selector button instead of this gesture.
-      const distance = Math.max(0, -window.scrollY)
-      // Read synchronously in handleTouchEnd below without needing pullDistance in this
-      // effect's dependency array (which would tear down/reattach these listeners on
-      // every scroll tick); the state copy exists only to re-render the pie's fill.
-      pullDistanceRef.current = distance
-      setPullDistance(distance)
-    }
-    function handleTouchStart() {
-      setIsTouching(true)
-    }
-    function handleTouchEnd() {
-      setIsTouching(false)
-      if (pullDistanceRef.current >= OVERSCROLL_TRIGGER_DISTANCE && noModalOpen) {
-        setViewModalOpen(true)
-      }
-    }
-    window.addEventListener('scroll', handleScroll, { passive: true })
-    window.addEventListener('touchstart', handleTouchStart, { passive: true })
-    window.addEventListener('touchend', handleTouchEnd, { passive: true })
-    window.addEventListener('touchcancel', handleTouchEnd, { passive: true })
-    return () => {
-      window.removeEventListener('scroll', handleScroll)
-      window.removeEventListener('touchstart', handleTouchStart)
-      window.removeEventListener('touchend', handleTouchEnd)
-      window.removeEventListener('touchcancel', handleTouchEnd)
-    }
-  }, [noModalOpen])
+  const { pullDistance, isTouching } = useOverscrollGesture({
+    enabled: noModalOpen,
+    threshold: OVERSCROLL_TRIGGER_DISTANCE,
+    onTrigger: () => setViewModalOpen(true),
+  })
 
   const currentView = views.find((v) => v.slug === currentViewSlug)
 
