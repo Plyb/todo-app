@@ -6,8 +6,8 @@ import {
   requestToPromise,
   withStore,
   type StoredSubtaskLink,
-  type SubtaskLink,
 } from './client'
+import type { SubtaskLink } from '../types'
 
 const subtaskLinkSchema = z.object({
   id: z.number(),

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { type Status, type View } from './db'
+import { type Status, type View } from './types'
 import { DraggableList } from './DraggableList'
 import { theme } from './theme'
 

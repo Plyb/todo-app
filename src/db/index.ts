@@ -5,7 +5,7 @@ export type {
   SubtaskLink,
   Task,
   View,
-} from './client'
+} from '../types'
 export * from './tasks'
 export * from './statuses'
 export * from './views'

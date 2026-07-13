@@ -10,10 +10,8 @@ import {
   loadStatuses,
   loadTasks,
   loadViews,
-  type Status,
-  type View,
-  type Task,
 } from './db'
+import type { Status, View, Task } from './types'
 import { ViewEditorModal } from './ViewEditorModal'
 import { StatusEditorModal } from './StatusEditorModal'
 import { StatusModal } from './StatusModal'

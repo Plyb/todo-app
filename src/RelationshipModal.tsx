@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { Task } from './db'
+import type { Task } from './types'
 import { addBlock } from './db'
 import { theme } from './theme'
 

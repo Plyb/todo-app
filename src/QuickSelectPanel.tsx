@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Task, Status, SubtaskLink, ScheduledTransition, BlockingRelationship } from './db'
+import type { Task, Status, SubtaskLink, ScheduledTransition, BlockingRelationship } from './types'
 import { loadSubtaskLinks, createSubtaskLink, updateSubtaskLinkRank, loadAllSubtaskLinks, loadParentLink, deleteSubtaskLinksByChild, createTask, loadScheduledTransitions, loadBlocks } from './db'
 import { StatusModal } from './StatusModal'
 import { RelationshipModal, RelationshipGroup } from './RelationshipModal'

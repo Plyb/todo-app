@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { Task } from './db'
+import type { Task } from './types'
 import { theme } from './theme'
 
 type LinkExistingTaskModalProps = {

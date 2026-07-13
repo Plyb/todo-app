@@ -5,9 +5,9 @@ import {
   keyToTaskId,
   requestToPromise,
   withStore,
-  type BlockingRelationship,
   type StoredBlockingRelationship,
 } from './client'
+import type { BlockingRelationship } from '../types'
 
 const storedBlockingRelationshipSchema = z.object({
   fromTaskId: z.number(),

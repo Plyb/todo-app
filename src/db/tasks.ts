@@ -15,8 +15,8 @@ import {
   withStore,
   withTransaction,
   type StoredTask,
-  type Task,
 } from './client'
+import type { Task } from '../types'
 import { deleteBlocksByTaskInStore } from './blocks'
 import { deleteSubtaskLinksByChildInStore, deleteSubtaskLinksByParentInStore } from './subtasks'
 

@@ -8,10 +8,9 @@ import {
   requestToPromise,
   withStore,
   withTransaction,
-  type Status,
   type StoredTask,
-  type View,
 } from './client'
+import type { Status, View } from '../types'
 
 const statusSchema = z.object({
   slug: z.string(),
