@@ -223,3 +223,64 @@ describe('migration replay', () => {
     })
   })
 })
+
+describe('migration integrity (raw store, issue #127)', () => {
+  it('persists done/rank/statusSlug into the raw store after a multi-version v1 -> v8 upgrade', async () => {
+    // Seed a v1 database whose sole task record predates the
+    // done/rank/statusSlug/notes fields entirely.
+    await new Promise<void>((resolve, reject) => {
+      const request = indexedDB.open(DB_NAME, 1)
+      request.onupgradeneeded = () => {
+        request.result.createObjectStore('tasks', { autoIncrement: true })
+      }
+      request.onsuccess = () => {
+        const legacyDb = request.result
+        const tx = legacyDb.transaction('tasks', 'readwrite')
+        tx.objectStore('tasks').add({ name: 'Legacy task' })
+        tx.oncomplete = () => {
+          legacyDb.close()
+          resolve()
+        }
+        tx.onerror = () => reject(tx.error)
+      }
+      request.onerror = () => reject(request.error)
+    })
+
+    // Trigger the full v1 -> v8 upgrade through db.ts.
+    vi.resetModules()
+    const db = await import('./db')
+    await db.loadTasks()
+
+    // Read the raw object store directly (NOT loadTasks) so we assert what the
+    // migration actually PERSISTED, not what loadTasks defaults at read time.
+    // If the concurrent-cursor race is present, done/rank/statusSlug are absent
+    // from storage and only notes survives.
+    const rawRecord = await new Promise<Record<string, unknown>>((resolve, reject) => {
+      const request = indexedDB.open(DB_NAME)
+      request.onupgradeneeded = () => reject(new Error('unexpected upgrade needed; migration did not reach version 8'))
+      request.onsuccess = () => {
+        const openedDb = request.result
+        const tx = openedDb.transaction('tasks', 'readonly')
+        const getAll = tx.objectStore('tasks').getAll()
+        getAll.onsuccess = () => {
+          const records = getAll.result as Record<string, unknown>[]
+          const legacy = records.find((r) => r.name === 'Legacy task')
+          openedDb.close()
+          if (!legacy) {
+            reject(new Error('legacy task not found in raw store'))
+            return
+          }
+          resolve(legacy)
+        }
+        getAll.onerror = () => reject(getAll.error)
+      }
+      request.onerror = () => reject(request.error)
+    })
+
+    expect(rawRecord.done).toBe(false)
+    expect(typeof rawRecord.rank).toBe('string')
+    expect((rawRecord.rank as string).length).toBeGreaterThan(0)
+    expect(rawRecord.statusSlug).toBe('backlog')
+    expect(rawRecord.notes).toBe('')
+  })
+})
