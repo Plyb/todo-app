@@ -346,6 +346,13 @@ async function withTransaction<T>(
   return result
 }
 
+async function patchRecordById<T>(store: IDBObjectStore, id: number, patch: Partial<T>): Promise<void> {
+  const existing = (await requestToPromise(store.get(id))) as T | undefined
+  if (existing) {
+    store.put({ ...existing, ...patch }, id)
+  }
+}
+
 export async function loadTasks(): Promise<Task[]> {
   const db = await openTasksDatabase()
 
@@ -471,46 +478,23 @@ export async function saveTask(task: Task): Promise<void> {
 }
 
 export async function updateTaskDone(id: number, done: boolean): Promise<void> {
-  await withStore(TASKS_STORE, 'readwrite', async (store) => {
-    const record = await requestToPromise(store.get(id)) as StoredTask
-    store.put({ ...record, done }, id)
-  })
+  await withStore(TASKS_STORE, 'readwrite', (store) => patchRecordById<StoredTask>(store, id, { done }))
 }
 
 export async function updateTaskRank(id: number, rank: string): Promise<void> {
-  await withStore(TASKS_STORE, 'readwrite', async (store) => {
-    const existing = (await requestToPromise(store.get(id))) as StoredTask | undefined
-    if (existing) {
-      store.put({ ...existing, rank }, id)
-    }
-  })
+  await withStore(TASKS_STORE, 'readwrite', (store) => patchRecordById<StoredTask>(store, id, { rank }))
 }
 
 export async function updateTaskName(id: number, name: string): Promise<void> {
-  await withStore(TASKS_STORE, 'readwrite', async (store) => {
-    const existing = (await requestToPromise(store.get(id))) as StoredTask | undefined
-    if (existing) {
-      store.put({ ...existing, name }, id)
-    }
-  })
+  await withStore(TASKS_STORE, 'readwrite', (store) => patchRecordById<StoredTask>(store, id, { name }))
 }
 
 export async function updateTaskNotes(id: number, notes: string): Promise<void> {
-  await withStore(TASKS_STORE, 'readwrite', async (store) => {
-    const existing = (await requestToPromise(store.get(id))) as StoredTask | undefined
-    if (existing) {
-      store.put({ ...existing, notes }, id)
-    }
-  })
+  await withStore(TASKS_STORE, 'readwrite', (store) => patchRecordById<StoredTask>(store, id, { notes }))
 }
 
 export async function updateTaskStatus(id: number, statusSlug: string): Promise<void> {
-  await withStore(TASKS_STORE, 'readwrite', async (store) => {
-    const existing = (await requestToPromise(store.get(id))) as StoredTask | undefined
-    if (existing) {
-      store.put({ ...existing, statusSlug }, id)
-    }
-  })
+  await withStore(TASKS_STORE, 'readwrite', (store) => patchRecordById<StoredTask>(store, id, { statusSlug }))
 }
 
 export async function deleteTask(id: number): Promise<void> {

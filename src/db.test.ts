@@ -117,6 +117,19 @@ describe('deleteTask (atomic cascade)', () => {
   })
 })
 
+describe('updateTaskDone (guard against missing records)', () => {
+  it('is a no-op when the task id does not exist, rather than creating a corrupted record', async () => {
+    const db = await import('./db')
+    const seeded = await db.loadTasks()
+
+    await db.updateTaskDone(999, true)
+
+    const tasks = await db.loadTasks()
+    expect(tasks).toHaveLength(seeded.length)
+    expect(tasks.some((t) => t.id === 999)).toBe(false)
+  })
+})
+
 describe('migration replay', () => {
   it('upgrades a v1 database (tasks store only, no done/rank/statusSlug/notes) to v8', async () => {
     // Simulate a database left behind by the very first shipped schema: only
