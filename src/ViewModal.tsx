@@ -1,4 +1,5 @@
 import type { View } from './db'
+import { theme } from './theme'
 
 type ViewModalProps = {
   views: View[]
@@ -27,8 +28,8 @@ export function ViewModal({ views, recentViewSlugs, currentViewSlug, onSelect, o
         left: 0,
         right: 0,
         bottom: 0,
-        background: 'rgba(0,0,0,0.5)',
-        zIndex: 200,
+        background: theme.colors.overlay,
+        zIndex: theme.zIndex.modal,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -38,19 +39,19 @@ export function ViewModal({ views, recentViewSlugs, currentViewSlug, onSelect, o
         onClick={(e) => e.stopPropagation()}
         style={{
           background: 'white',
-          borderRadius: 12,
+          borderRadius: theme.radii.xl,
           padding: '8px 0',
           minWidth: 240,
           maxWidth: 360,
           width: '80%',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+          boxShadow: theme.shadows.modal,
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 16px 4px' }}>
-          <span style={{ fontWeight: 600, fontSize: 16 }}>Open</span>
+          <span style={{ fontWeight: 600, fontSize: theme.fontSizes.xl }}>Open</span>
           <button
             onClick={onClose}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: 4 }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: theme.fontSizes.xxl, lineHeight: 1, padding: 4 }}
             aria-label="Close"
           >
             ×
@@ -65,17 +66,17 @@ export function ViewModal({ views, recentViewSlugs, currentViewSlug, onSelect, o
               display: 'block',
               width: '100%',
               textAlign: 'left',
-              background: view.slug === currentViewSlug ? '#e8f0fe' : 'none',
+              background: view.slug === currentViewSlug ? theme.colors.selected : 'none',
               border: 'none',
               padding: '12px 16px',
               cursor: 'pointer',
-              fontSize: 15,
+              fontSize: theme.fontSizes.lg,
               fontWeight: view.slug === currentViewSlug ? 600 : 400,
             }}
           >
             {view.name}
             {view.slug === currentViewSlug && (
-              <span style={{ marginLeft: 8, color: '#1a73e8', fontSize: 12 }}>current</span>
+              <span style={{ marginLeft: 8, color: theme.colors.brand, fontSize: theme.fontSizes.xs }}>current</span>
             )}
           </button>
         ))}

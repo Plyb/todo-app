@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { Task } from './db'
+import { theme } from './theme'
 
 type LinkExistingTaskModalProps = {
   currentTaskId: number
@@ -22,8 +23,8 @@ export function LinkExistingTaskModal({ currentTaskId, allTasks, excludedTaskIds
       style={{
         position: 'fixed',
         inset: 0,
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        zIndex: 200,
+        backgroundColor: theme.colors.overlay,
+        zIndex: theme.zIndex.modal,
         display: 'flex',
         alignItems: 'flex-end',
       }}
@@ -35,14 +36,14 @@ export function LinkExistingTaskModal({ currentTaskId, allTasks, excludedTaskIds
           width: '100%',
           backgroundColor: '#fff',
           borderRadius: '12px 12px 0 0',
-          padding: 16,
+          padding: theme.space.md,
           maxHeight: '80vh',
           overflowY: 'auto',
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <span style={{ fontWeight: 700, fontSize: 16 }}>{title}</span>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer' }}>
+          <span style={{ fontWeight: 700, fontSize: theme.fontSizes.xl }}>{title}</span>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: theme.fontSizes.xxl, cursor: 'pointer' }}>
             ✕
           </button>
         </div>
@@ -55,15 +56,15 @@ export function LinkExistingTaskModal({ currentTaskId, allTasks, excludedTaskIds
           style={{
             width: '100%',
             padding: '8px 10px',
-            fontSize: 15,
+            fontSize: theme.fontSizes.lg,
             border: '1px solid #ddd',
-            borderRadius: 8,
+            borderRadius: theme.radii.lg,
             marginBottom: 12,
             boxSizing: 'border-box',
           }}
         />
         {filtered.length === 0 ? (
-          <div style={{ color: '#aaa', textAlign: 'center', padding: '16px 0' }}>No tasks found</div>
+          <div style={{ color: theme.colors.greyLight, textAlign: 'center', padding: '16px 0' }}>No tasks found</div>
         ) : (
           filtered.map((task) => (
             <div
@@ -71,7 +72,7 @@ export function LinkExistingTaskModal({ currentTaskId, allTasks, excludedTaskIds
               onClick={() => onSelect(task)}
               style={{
                 padding: '10px 0',
-                borderBottom: '1px solid #eee',
+                borderBottom: `1px solid ${theme.colors.divider}`,
                 cursor: 'pointer',
               }}
             >

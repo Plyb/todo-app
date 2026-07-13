@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { Task } from './db'
 import { addBlock } from './db'
+import { theme } from './theme'
 
 type RelatedTaskEntryProps = { task: Task; onOpen: (id: number) => void; onDoneChange: (id: number, done: boolean) => void }
 
@@ -10,9 +11,9 @@ export function RelatedTaskEntry({ task, onOpen, onDoneChange }: RelatedTaskEntr
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 8,
+        gap: theme.space.sm,
         padding: '8px 0',
-        borderBottom: '1px solid #eee',
+        borderBottom: `1px solid ${theme.colors.divider}`,
       }}
     >
       <input
@@ -20,7 +21,7 @@ export function RelatedTaskEntry({ task, onOpen, onDoneChange }: RelatedTaskEntr
         checked={task.done}
         onChange={(e) => onDoneChange(task.id, e.target.checked)}
       />
-      <span onClick={() => onOpen(task.id)} style={{ cursor: 'pointer', color: task.done ? '#aaa' : undefined }}>
+      <span onClick={() => onOpen(task.id)} style={{ cursor: 'pointer', color: task.done ? theme.colors.greyLight : undefined }}>
         {task.name}
       </span>
     </div>
@@ -32,7 +33,7 @@ type RelationshipGroupProps = { label: string; tasks: Task[]; onOpenTask: (id: n
 export function RelationshipGroup({ label, tasks, onOpenTask, onDoneChange }: RelationshipGroupProps) {
   return (
     <div style={{ marginBottom: 12 }}>
-      <div style={{ fontWeight: 600, fontSize: 13, color: '#555', marginBottom: 4 }}>{label}</div>
+      <div style={{ fontWeight: 600, fontSize: theme.fontSizes.sm, color: '#555', marginBottom: 4 }}>{label}</div>
       {tasks.map((task) => (
         <RelatedTaskEntry key={task.id} task={task} onOpen={onOpenTask} onDoneChange={onDoneChange} />
       ))}
@@ -52,9 +53,9 @@ function TypeButton({ label, description, onClick }: TypeButtonProps) {
         textAlign: 'left',
         background: '#f5f5f5',
         border: '1px solid #ddd',
-        borderRadius: 8,
+        borderRadius: theme.radii.lg,
         cursor: 'pointer',
-        fontSize: 15,
+        fontSize: theme.fontSizes.lg,
         marginBottom: 8,
       }}
     >
@@ -89,8 +90,8 @@ export function RelationshipModal({ currentTaskId, allTasks, onClose, onBlocking
       style={{
         position: 'fixed',
         inset: 0,
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        zIndex: 200,
+        backgroundColor: theme.colors.overlay,
+        zIndex: theme.zIndex.modal,
         display: 'flex',
         alignItems: 'flex-end',
       }}
@@ -102,7 +103,7 @@ export function RelationshipModal({ currentTaskId, allTasks, onClose, onBlocking
           width: '100%',
           backgroundColor: '#fff',
           borderRadius: '12px 12px 0 0',
-          padding: 16,
+          padding: theme.space.md,
           maxHeight: '80vh',
           overflowY: 'auto',
         }}
@@ -110,8 +111,8 @@ export function RelationshipModal({ currentTaskId, allTasks, onClose, onBlocking
         {state.view === 'search' && (
           <>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <span style={{ fontWeight: 700, fontSize: 16 }}>Add Relationship</span>
-              <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer' }}>
+              <span style={{ fontWeight: 700, fontSize: theme.fontSizes.xl }}>Add Relationship</span>
+              <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: theme.fontSizes.xxl, cursor: 'pointer' }}>
                 ✕
               </button>
             </div>
@@ -124,15 +125,15 @@ export function RelationshipModal({ currentTaskId, allTasks, onClose, onBlocking
               style={{
                 width: '100%',
                 padding: '8px 10px',
-                fontSize: 15,
+                fontSize: theme.fontSizes.lg,
                 border: '1px solid #ddd',
-                borderRadius: 8,
+                borderRadius: theme.radii.lg,
                 marginBottom: 12,
                 boxSizing: 'border-box',
               }}
             />
             {filtered.length === 0 ? (
-              <div style={{ color: '#aaa', textAlign: 'center', padding: '16px 0' }}>No tasks found</div>
+              <div style={{ color: theme.colors.greyLight, textAlign: 'center', padding: '16px 0' }}>No tasks found</div>
             ) : (
               filtered.map((task) => (
                 <div
@@ -140,7 +141,7 @@ export function RelationshipModal({ currentTaskId, allTasks, onClose, onBlocking
                   onClick={() => setState({ view: 'choose-type', selectedTask: task })}
                   style={{
                     padding: '10px 0',
-                    borderBottom: '1px solid #eee',
+                    borderBottom: `1px solid ${theme.colors.divider}`,
                     cursor: 'pointer',
                   }}
                 >
@@ -153,16 +154,16 @@ export function RelationshipModal({ currentTaskId, allTasks, onClose, onBlocking
 
         {state.view === 'choose-type' && (
           <>
-            <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12, gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12, gap: theme.space.sm }}>
               <button
                 onClick={() => setState({ view: 'search' })}
-                style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', padding: 0 }}
+                style={{ background: 'none', border: 'none', fontSize: theme.fontSizes.xxl, cursor: 'pointer', padding: 0 }}
               >
                 ←
               </button>
-              <span style={{ fontWeight: 700, fontSize: 16 }}>Choose relationship type</span>
+              <span style={{ fontWeight: 700, fontSize: theme.fontSizes.xl }}>Choose relationship type</span>
             </div>
-            <div style={{ color: '#888', fontSize: 14, marginBottom: 8 }}>
+            <div style={{ color: theme.colors.greyDark, fontSize: theme.fontSizes.md, marginBottom: 8 }}>
               Relating to: <strong>{state.selectedTask.name}</strong>
             </div>
             <TypeButton
