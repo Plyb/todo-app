@@ -200,14 +200,31 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
     moveTask(draggedId, toStatusSlug, newRank, needsStatusChange)
   }
 
-  async function handleChangeStatus(id: number, statusSlug: string) {
-    await setStatus(id, statusSlug)
-    setSelectedTaskId(null)
-  }
-
-  async function handleModalChangeStatus(id: number, statusSlug: string) {
-    await setStatus(id, statusSlug)
-    setModalTaskId(null)
+  function buildPanelProps(
+    task: Task,
+    { onClose, onAfterChangeStatus, onAfterDelete }: {
+      onClose: () => void
+      onAfterChangeStatus: () => void
+      onAfterDelete: () => void
+    }
+  ) {
+    return {
+      task,
+      allTasks: tasks,
+      statuses,
+      onClose,
+      onChangeStatus: async (id: number, statusSlug: string) => {
+        await setStatus(id, statusSlug)
+        onAfterChangeStatus()
+      },
+      onDelete: async (id: number) => {
+        await deleteTask(id)
+        onAfterDelete()
+      },
+      onOpenTask: (id: number) => setModalTaskId(id),
+      onBlockingRelationshipAdded: () => loadAllBlocks().then(setBlockingRelationships),
+      onSubtaskLinkAdded: () => loadAllSubtaskLinks().then(setSubtaskLinks),
+    }
   }
 
   async function commitInput(value: string, sectionIndex: number, insertIndex: number, andOpenAnother: boolean) {
@@ -246,46 +263,24 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
     clearAutoTransitionIndicator(taskId)
   }
 
-  async function handleDelete(id: number) {
-    await deleteTask(id)
-    setSelectedTaskId(null)
-  }
-
-  async function handleModalDelete(id: number) {
-    await deleteTask(id)
-    setModalTaskId(null)
-  }
-
   const selectedTask = selectedTaskId !== null ? tasks.find((t) => t.id === selectedTaskId) ?? null : null
 
   const quickSelectPanelProps = selectedTask
-    ? {
-        task: selectedTask,
-        allTasks: tasks,
-        statuses,
+    ? buildPanelProps(selectedTask, {
         onClose: () => setSelectedTaskId(null),
-        onChangeStatus: handleChangeStatus,
-        onDelete: handleDelete,
-        onOpenTask: (id: number) => setModalTaskId(id),
-        onBlockingRelationshipAdded: () => loadAllBlocks().then(setBlockingRelationships),
-        onSubtaskLinkAdded: () => loadAllSubtaskLinks().then(setSubtaskLinks),
-      }
+        onAfterChangeStatus: () => setSelectedTaskId(null),
+        onAfterDelete: () => setSelectedTaskId(null),
+      })
     : null
 
   const modalTask = modalTaskId !== null ? tasks.find((t) => t.id === modalTaskId) ?? null : null
 
   const relatedTaskModalProps = modalTask
-    ? {
-        task: modalTask,
-        allTasks: tasks,
-        statuses,
+    ? buildPanelProps(modalTask, {
         onClose: () => setModalTaskId(null),
-        onChangeStatus: handleModalChangeStatus,
-        onDelete: handleModalDelete,
-        onOpenTask: (id: number) => setModalTaskId(id),
-        onBlockingRelationshipAdded: () => loadAllBlocks().then(setBlockingRelationships),
-        onSubtaskLinkAdded: () => loadAllSubtaskLinks().then(setSubtaskLinks),
-      }
+        onAfterChangeStatus: () => setModalTaskId(null),
+        onAfterDelete: () => setModalTaskId(null),
+      })
     : null
 
   const itemStyleFn = (task: Task) => {
