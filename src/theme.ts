@@ -42,6 +42,11 @@ export const zIndex = {
   editorModal: 300,
 } as const
 
+export const durations = {
+  panelExpand: 200,
+  panelBackdropArm: 350,
+} as const
+
 export const theme = {
   colors,
   space,
@@ -49,6 +54,7 @@ export const theme = {
   fontSizes,
   shadows,
   zIndex,
+  durations,
 } as const
 
 export type Theme = typeof theme

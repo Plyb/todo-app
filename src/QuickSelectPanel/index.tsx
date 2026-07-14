@@ -33,7 +33,8 @@ export function QuickSelectPanel({ task, statuses, allTasks, onClose, onChangeSt
   }, [])
 
   useEffect(() => {
-    const t = setTimeout(() => setBackdropReady(true), 350)
+    // Delay backdrop interaction until after panel animation finishes to prevent accidental close
+    const t = setTimeout(() => setBackdropReady(true), theme.durations.panelBackdropArm)
     return () => clearTimeout(t)
   }, [])
 
@@ -43,7 +44,7 @@ export function QuickSelectPanel({ task, statuses, allTasks, onClose, onChangeSt
 
   function handleClose() {
     setExpanded(false)
-    setTimeout(onClose, 200)
+    setTimeout(onClose, theme.durations.panelExpand)
   }
 
   return (
@@ -63,7 +64,7 @@ export function QuickSelectPanel({ task, statuses, allTasks, onClose, onChangeSt
         <div style={{
           overflow: 'hidden',
           maxHeight: expanded ? '1000px' : '0',
-          transition: 'max-height 0.2s ease',
+          transition: `max-height ${theme.durations.panelExpand}ms ease`,
         }}>
           <NotesSection task={task} />
 
