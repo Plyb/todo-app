@@ -17,6 +17,10 @@ import { theme } from './theme'
 import { resolveReorder } from './drag-utils'
 import { findInsertIndex } from './pointer-utils'
 
+const MOUSE_DRAG_ACTIVATION_PX = 8
+const TOUCH_DRAG_DELAY_MS = 400
+const TOUCH_DRAG_TOLERANCE_PX = 8
+
 function toItemId(id: UniqueIdentifier): number {
   return typeof id === 'number' ? id : Number(id)
 }
@@ -124,8 +128,8 @@ export function DraggableList<T extends { id: number }>({
   const [activeId, setActiveId] = useState<number | null>(null)
 
   const sensors = useSensors(
-    useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 400, tolerance: 8 } }),
+    useSensor(MouseSensor, { activationConstraint: { distance: MOUSE_DRAG_ACTIVATION_PX } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: TOUCH_DRAG_DELAY_MS, tolerance: TOUCH_DRAG_TOLERANCE_PX } }),
   )
 
   const allItems = sections.flatMap((s) => s.items)
