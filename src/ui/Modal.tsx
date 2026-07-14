@@ -1,5 +1,13 @@
-import type { CSSProperties, ReactNode } from 'react'
+import { useEffect, type CSSProperties, type ReactNode } from 'react'
 import { theme } from '../theme'
+
+function useScrollLock() {
+  useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
+  }, [])
+}
 
 type ModalVariant = 'modal' | 'editorModal'
 
@@ -11,6 +19,8 @@ type ModalProps = {
 }
 
 export function Modal({ onClose, children, cardStyle, variant = 'modal' }: ModalProps) {
+  useScrollLock()
+
   return (
     <div
       onClick={onClose}
@@ -45,6 +55,8 @@ type BottomSheetProps = {
 }
 
 export function BottomSheet({ onClose, children }: BottomSheetProps) {
+  useScrollLock()
+
   return (
     <div
       onClick={onClose}

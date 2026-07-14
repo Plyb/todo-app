@@ -3,6 +3,7 @@ import type { Task } from './types'
 import { addBlock } from './db'
 import { theme } from './theme'
 import { BottomSheet } from './ui/Modal'
+import { CloseButton } from './ui/CloseButton'
 import { selectableTasks } from './storage'
 
 type RelatedTaskEntryProps = { task: Task; onOpen: (id: number) => void; onDoneChange: (id: number, done: boolean) => void }
@@ -92,9 +93,7 @@ export function RelationshipModal({ currentTaskId, allTasks, onClose, onBlocking
         <>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <span style={{ fontWeight: 700, fontSize: theme.fontSizes.xl }}>Add Relationship</span>
-            <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: theme.fontSizes.xxl, cursor: 'pointer' }}>
-              ✕
-            </button>
+            <CloseButton onClick={onClose} />
           </div>
           <input
             autoFocus

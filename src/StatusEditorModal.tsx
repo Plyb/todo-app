@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { type Status } from './types'
 import { theme } from './theme'
 import { Modal } from './ui/Modal'
@@ -13,12 +13,6 @@ export type StatusEditorModalProps = {
 export function StatusEditorModal({ status, onSave, onClose }: StatusEditorModalProps) {
   const [name, setName] = useState(status.name)
   const [slug, setSlug] = useState(status.slug)
-
-  useEffect(() => {
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => { document.body.style.overflow = prev }
-  }, [])
 
   const canSave = name.trim() !== '' && slug.trim() !== ''
 

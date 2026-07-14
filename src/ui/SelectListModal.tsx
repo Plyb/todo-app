@@ -1,5 +1,6 @@
 import { theme } from '../theme'
 import { Modal } from './Modal'
+import { CloseButton } from './CloseButton'
 
 type SelectListModalProps<T> = {
   items: T[]
@@ -16,13 +17,7 @@ export function SelectListModal<T>({ items, getKey, getLabel, isCurrent, title, 
     <Modal onClose={onClose} cardStyle={{ padding: '8px 0', minWidth: 240, maxWidth: 360, width: '80%' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 16px 4px' }}>
         <span style={{ fontWeight: 600, fontSize: theme.fontSizes.xl }}>{title}</span>
-        <button
-          onClick={onClose}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: theme.fontSizes.xxl, lineHeight: 1, padding: 4 }}
-          aria-label="Close"
-        >
-          ×
-        </button>
+        <CloseButton onClick={onClose} />
       </div>
 
       {items.map((item) => (
