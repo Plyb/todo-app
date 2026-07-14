@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { Task, SubtaskLink } from '../types'
 import { createSubtaskLink, updateSubtaskLinkRank, loadAllSubtaskLinks } from '../db'
 import { useTasks } from '../tasks-context'
@@ -21,17 +21,24 @@ export function SubtasksSection({ task, allTasks, subtaskLinks, setSubtaskLinks,
   const [newSubtaskName, setNewSubtaskName] = useState('')
   const [showLinkExistingModal, setShowLinkExistingModal] = useState(false)
   const [linkedTaskIds, setLinkedTaskIds] = useState<Set<number>>(new Set())
+  const submittingRef = useRef(false)
 
   async function handleAddSubtask() {
+    if (submittingRef.current) return
     const trimmed = newSubtaskName.trim()
     if (!trimmed) return
-    const lastLink = subtaskLinks[subtaskLinks.length - 1] ?? null
-    const linkRank = rankBetween(lastLink, null)
-    const newTask = await createTask(trimmed, rankBetween(null, null), task.statusSlug)
-    const link = await createSubtaskLink(task.id, newTask.id, linkRank)
-    setSubtaskLinks((prev) => [...prev, link])
-    onSubtaskLinkAdded()
-    setNewSubtaskName('')
+    submittingRef.current = true
+    try {
+      const lastLink = subtaskLinks[subtaskLinks.length - 1] ?? null
+      const linkRank = rankBetween(lastLink, null)
+      const newTask = await createTask(trimmed, rankBetween(null, null), task.statusSlug)
+      const link = await createSubtaskLink(task.id, newTask.id, linkRank)
+      setSubtaskLinks((prev) => [...prev, link])
+      onSubtaskLinkAdded()
+      setNewSubtaskName('')
+    } finally {
+      submittingRef.current = false
+    }
   }
 
   function handleSubtaskReorder(draggedLinkId: number, insertIndex: number) {
