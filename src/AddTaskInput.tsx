@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react'
-import { isPrimaryButton, findInsertIndex } from './pointer-utils'
+import { isPrimaryButton } from './pointer-utils'
 import { theme } from './theme'
+import { getInsertSlotAt } from './DraggableList'
 
 export type NewTaskInput = {
   sectionIndex: number
@@ -48,24 +49,6 @@ export function AddTaskFab({ listRef, onRequestInsert, onDragInsertSlot }: AddTa
     return Math.sqrt(dx * dx + dy * dy) < FAB_SIZE * 1.5
   }
 
-  function getInsertSlotFromPointer(clientY: number): InsertSlotTarget {
-    const container = listRef.current
-    if (!container) return { sectionIndex: 0, index: 0 }
-    const sectionEls = Array.from(container.querySelectorAll<HTMLElement>('[data-section-index]'))
-    if (sectionEls.length === 0) return { sectionIndex: 0, index: 0 }
-    let sectionIndex = sectionEls.length - 1
-    for (let i = 0; i < sectionEls.length; i++) {
-      if (clientY < sectionEls[i].getBoundingClientRect().bottom) {
-        sectionIndex = i
-        break
-      }
-    }
-    const listItems = Array.from(
-      sectionEls[sectionIndex].querySelectorAll<HTMLElement>('li:not([data-insert-slot])')
-    )
-    return { sectionIndex, index: findInsertIndex(listItems, clientY) }
-  }
-
   function handleFabPointerDown(e: React.PointerEvent<HTMLButtonElement>) {
     if (!isPrimaryButton(e)) return
     e.preventDefault()
@@ -83,7 +66,7 @@ export function AddTaskFab({ listRef, onRequestInsert, onDragInsertSlot }: AddTa
     if (fabDragState === null) return
     didMoveRef.current = true
     const atFab = isNearFabStart(e.clientX, e.clientY)
-    const slot = atFab ? null : getInsertSlotFromPointer(e.clientY)
+    const slot = atFab ? null : listRef.current ? getInsertSlotAt(listRef.current, e.clientY) : { sectionIndex: 0, index: 0 }
     setFabDragState({
       pointerX: e.clientX,
       pointerY: e.clientY,
