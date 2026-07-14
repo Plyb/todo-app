@@ -1,3 +1,5 @@
+import type { Task } from './types'
+
 export function readJSON<T>(key: string, fallback: T): T {
   const raw = localStorage.getItem(key)
   if (raw === null) return fallback
@@ -29,4 +31,27 @@ export function readRecentViewSlugs(): string[] {
 
 export function writeRecentViewSlugs(slugs: string[]): void {
   writeJSON(RECENT_VIEW_SLUGS_KEY, slugs)
+}
+
+const AUTO_ARCHIVE_SLUG_KEY = 'auto-archive-status-slug'
+
+export function getAutoArchiveSlug(): string | null {
+  return localStorage.getItem(AUTO_ARCHIVE_SLUG_KEY)
+}
+
+export function setAutoArchiveSlug(slug: string | null): void {
+  if (slug === null) {
+    localStorage.removeItem(AUTO_ARCHIVE_SLUG_KEY)
+  } else {
+    localStorage.setItem(AUTO_ARCHIVE_SLUG_KEY, slug)
+  }
+}
+
+export function selectableTasks(allTasks: Task[], opts: { currentTaskId: number; excludedIds?: Set<number> }): Task[] {
+  const autoArchiveSlug = getAutoArchiveSlug()
+  return allTasks.filter((t) =>
+    t.id !== opts.currentTaskId &&
+    !opts.excludedIds?.has(t.id) &&
+    t.statusSlug !== autoArchiveSlug
+  )
 }

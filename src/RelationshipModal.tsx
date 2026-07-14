@@ -3,6 +3,7 @@ import type { Task } from './types'
 import { addBlock } from './db'
 import { theme } from './theme'
 import { BottomSheet } from './ui/Modal'
+import { selectableTasks } from './storage'
 
 type RelatedTaskEntryProps = { task: Task; onOpen: (id: number) => void; onDoneChange: (id: number, done: boolean) => void }
 
@@ -80,8 +81,7 @@ export function RelationshipModal({ currentTaskId, allTasks, onClose, onBlocking
   const [state, setState] = useState<RelationshipModalState>({ view: 'search' })
   const [query, setQuery] = useState('')
 
-  const autoArchiveSlug = localStorage.getItem('auto-archive-status-slug')
-  const otherTasks = allTasks.filter((t) => t.id !== currentTaskId && t.statusSlug !== autoArchiveSlug)
+  const otherTasks = selectableTasks(allTasks, { currentTaskId })
   const filtered = otherTasks.filter((t) =>
     t.name.toLowerCase().includes(query.toLowerCase())
   )
