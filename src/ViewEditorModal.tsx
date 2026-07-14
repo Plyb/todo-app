@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { type Status, type View } from './types'
 import { DraggableList } from './DraggableList'
 import { theme } from './theme'
+import { Modal } from './ui/Modal'
 
 export type ViewEditorModalProps = {
   view: View
@@ -44,89 +45,67 @@ export function ViewEditorModal({ view, statuses, onSave, onClose }: ViewEditorM
   const selectedItems: StatusListItem[] = selectedStatuses.map((status, i) => ({ id: i, status }))
 
   return (
-    <div
-      onClick={onClose}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: theme.colors.overlay,
-        zIndex: theme.zIndex.editorModal,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
+    <Modal
+      onClose={onClose}
+      variant="editorModal"
+      cardStyle={{ padding: 24, minWidth: 300, maxWidth: 400, width: '80%', maxHeight: '80vh', overflowY: 'auto' }}
     >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          background: 'white',
-          borderRadius: theme.radii.xl,
-          padding: 24,
-          minWidth: 300,
-          maxWidth: 400,
-          width: '80%',
-          maxHeight: '80vh',
-          overflowY: 'auto',
-          boxShadow: theme.shadows.modal,
-        }}
-      >
-        <h3 style={{ marginTop: 0, marginBottom: 16 }}>Edit View</h3>
-        <label style={{ display: 'block', marginBottom: 16 }}>
-          <span style={{ fontSize: theme.fontSizes.md, color: '#555' }}>Name</span>
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            style={{
-              display: 'block',
-              width: '100%',
-              marginTop: 4,
-              boxSizing: 'border-box',
-              padding: '8px 10px',
-              border: `1px solid ${theme.colors.border}`,
-              borderRadius: theme.radii.md,
-              fontSize: theme.fontSizes.lg,
-            }}
-          />
-        </label>
-
-        <div style={{ fontWeight: 600, marginBottom: 8 }}>Statuses</div>
-
-        <DraggableList
-          sections={[{ items: selectedItems }]}
-          onReorder={handleReorderStatuses}
-          renderItem={(item) => (
-            <div style={{ display: 'flex', alignItems: 'center', gap: theme.space.sm, width: '100%' }}>
-              <input type="checkbox" checked onChange={() => toggle(item.status.slug)} />
-              <span style={{ flex: 1 }}>{item.status.name}</span>
-            </div>
-          )}
+      <h3 style={{ marginTop: 0, marginBottom: 16 }}>Edit View</h3>
+      <label style={{ display: 'block', marginBottom: 16 }}>
+        <span style={{ fontSize: theme.fontSizes.md, color: '#555' }}>Name</span>
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          style={{
+            display: 'block',
+            width: '100%',
+            marginTop: 4,
+            boxSizing: 'border-box',
+            padding: '8px 10px',
+            border: `1px solid ${theme.colors.border}`,
+            borderRadius: theme.radii.md,
+            fontSize: theme.fontSizes.lg,
+          }}
         />
+      </label>
 
-        {unselectedStatuses.map((status) => (
-          <div
-            key={status.slug}
-            style={{ display: 'flex', alignItems: 'center', gap: theme.space.sm, padding: '6px 0', borderBottom: '1px solid #f0f0f0' }}
-          >
-            <input type="checkbox" checked={false} onChange={() => toggle(status.slug)} />
-            <span style={{ flex: 1, color: theme.colors.textTertiary }}>{status.name}</span>
+      <div style={{ fontWeight: 600, marginBottom: 8 }}>Statuses</div>
+
+      <DraggableList
+        sections={[{ items: selectedItems }]}
+        onReorder={handleReorderStatuses}
+        renderItem={(item) => (
+          <div style={{ display: 'flex', alignItems: 'center', gap: theme.space.sm, width: '100%' }}>
+            <input type="checkbox" checked onChange={() => toggle(item.status.slug)} />
+            <span style={{ flex: 1 }}>{item.status.name}</span>
           </div>
-        ))}
+        )}
+      />
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: theme.space.sm, marginTop: 20 }}>
-          <button
-            onClick={onClose}
-            style={{ padding: '8px 16px', border: `1px solid ${theme.colors.border}`, borderRadius: theme.radii.md, cursor: 'pointer', background: 'none' }}
-          >
-            Cancel
-          </button>
-          <button
-            onClick={() => onSave({ ...view, name: name.trim() || 'Unnamed', statusSlugs: slugs })}
-            style={{ padding: '8px 16px', background: theme.colors.brand, color: '#fff', border: 'none', borderRadius: theme.radii.md, cursor: 'pointer' }}
-          >
-            Save
-          </button>
+      {unselectedStatuses.map((status) => (
+        <div
+          key={status.slug}
+          style={{ display: 'flex', alignItems: 'center', gap: theme.space.sm, padding: '6px 0', borderBottom: '1px solid #f0f0f0' }}
+        >
+          <input type="checkbox" checked={false} onChange={() => toggle(status.slug)} />
+          <span style={{ flex: 1, color: theme.colors.textTertiary }}>{status.name}</span>
         </div>
+      ))}
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: theme.space.sm, marginTop: 20 }}>
+        <button
+          onClick={onClose}
+          style={{ padding: '8px 16px', border: `1px solid ${theme.colors.border}`, borderRadius: theme.radii.md, cursor: 'pointer', background: 'none' }}
+        >
+          Cancel
+        </button>
+        <button
+          onClick={() => onSave({ ...view, name: name.trim() || 'Unnamed', statusSlugs: slugs })}
+          style={{ padding: '8px 16px', background: theme.colors.brand, color: '#fff', border: 'none', borderRadius: theme.radii.md, cursor: 'pointer' }}
+        >
+          Save
+        </button>
       </div>
-    </div>
+    </Modal>
   )
 }
