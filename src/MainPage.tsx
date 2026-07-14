@@ -168,10 +168,9 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
   function handleReorder(draggedId: number, toSectionIndex: number, insertIndex: number) {
     if (!currentView) return
     const toStatusSlug = currentView.statusSlugs[toSectionIndex]
-    const draggedTask = tasks.find((t) => t.id === draggedId)!
     const toSectionTasks = tasks.filter((t) => t.statusSlug === toStatusSlug)
     const newRank = computeNewRank(toSectionTasks, insertIndex, draggedId)
-    const needsStatusChange = draggedTask.statusSlug !== toStatusSlug
+    const needsStatusChange = !toSectionTasks.some((t) => t.id === draggedId)
     moveTask(draggedId, toStatusSlug, newRank, needsStatusChange)
   }
 
@@ -332,7 +331,7 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
 
   const expandedSlot = quickSelectPanelProps
     ? {
-        afterItemId: selectedTaskId!,
+        afterItemId: quickSelectPanelProps.task.id,
         content: <QuickSelectPanel {...quickSelectPanelProps} />,
       }
     : undefined
