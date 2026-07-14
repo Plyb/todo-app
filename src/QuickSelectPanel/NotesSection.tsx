@@ -1,18 +1,19 @@
 import { useState } from 'react'
 import type { Task } from '../types'
+import { useTasks } from '../tasks-context'
 import { theme } from '../theme'
 
 type NotesSectionProps = {
   task: Task
-  onUpdateNotes: (id: number, notes: string) => void
 }
 
-export function NotesSection({ task, onUpdateNotes }: NotesSectionProps) {
+export function NotesSection({ task }: NotesSectionProps) {
+  const { updateNotes } = useTasks()
   const [notes, setNotes] = useState(task.notes)
 
   function handleBlur() {
     if (notes !== task.notes) {
-      onUpdateNotes(task.id, notes)
+      updateNotes(task.id, notes)
     }
   }
 

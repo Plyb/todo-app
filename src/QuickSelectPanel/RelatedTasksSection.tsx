@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { Task, BlockingRelationship } from '../types'
 import { loadBlocks } from '../db'
+import { useTasks } from '../tasks-context'
 import { RelationshipModal, RelationshipGroup } from '../RelationshipModal'
 import { theme } from '../theme'
 import { PrimaryButton } from '../ui/Button'
@@ -9,11 +10,11 @@ type RelatedTasksSectionProps = {
   task: Task
   allTasks: Task[]
   onOpenTask: (id: number) => void
-  onDoneChange: (id: number, done: boolean) => void
-  onBlockingRelationshipAdded?: () => void
+  onBlockingRelationshipAdded: () => void
 }
 
-export function RelatedTasksSection({ task, allTasks, onOpenTask, onDoneChange, onBlockingRelationshipAdded }: RelatedTasksSectionProps) {
+export function RelatedTasksSection({ task, allTasks, onOpenTask, onBlockingRelationshipAdded }: RelatedTasksSectionProps) {
+  const { setDone } = useTasks()
   const [showRelationshipModal, setShowRelationshipModal] = useState(false)
   const [blockingRelationships, setBlockingRelationships] = useState<BlockingRelationship[]>([])
 
@@ -23,7 +24,7 @@ export function RelatedTasksSection({ task, allTasks, onOpenTask, onDoneChange, 
 
   function reloadRelationships() {
     loadBlocks(task.id).then(setBlockingRelationships)
-    onBlockingRelationshipAdded?.()
+    onBlockingRelationshipAdded()
   }
 
   const blocksGroup = {
@@ -61,7 +62,7 @@ export function RelatedTasksSection({ task, allTasks, onOpenTask, onDoneChange, 
               label={group.label}
               tasks={group.tasks}
               onOpenTask={onOpenTask}
-              onDoneChange={onDoneChange}
+              onDoneChange={setDone}
             />
           ))
         )}
