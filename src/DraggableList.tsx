@@ -15,9 +15,26 @@ import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-
 import { CSS } from '@dnd-kit/utilities'
 import { theme } from './theme'
 import { resolveReorder } from './drag-utils'
+import { findInsertIndex } from './pointer-utils'
 
 function toItemId(id: UniqueIdentifier): number {
   return typeof id === 'number' ? id : Number(id)
+}
+
+export function getInsertSlotAt(container: HTMLElement, clientY: number): { sectionIndex: number; index: number } {
+  const sectionEls = Array.from(container.querySelectorAll<HTMLElement>('[data-section-index]'))
+  if (sectionEls.length === 0) return { sectionIndex: 0, index: 0 }
+  let sectionIndex = sectionEls.length - 1
+  for (let i = 0; i < sectionEls.length; i++) {
+    if (clientY < sectionEls[i].getBoundingClientRect().bottom) {
+      sectionIndex = i
+      break
+    }
+  }
+  const listItems = Array.from(
+    sectionEls[sectionIndex].querySelectorAll<HTMLElement>('li:not([data-insert-slot])')
+  )
+  return { sectionIndex, index: findInsertIndex(listItems, clientY) }
 }
 
 type Section<T> = {
