@@ -10,7 +10,7 @@ type ParentSectionProps = {
   allTasks: Task[]
   subtaskLinks: SubtaskLink[]
   onOpenTask: (id: number) => void
-  onSubtaskLinkAdded?: () => void
+  onSubtaskLinkAdded: () => void
 }
 
 export function ParentSection({ task, allTasks, subtaskLinks, onOpenTask, onSubtaskLinkAdded }: ParentSectionProps) {
@@ -30,14 +30,14 @@ export function ParentSection({ task, allTasks, subtaskLinks, onOpenTask, onSubt
     const rank = rankBetween(lastLink, null)
     const link = await createSubtaskLink(selected.id, task.id, rank)
     setParentLink(link)
-    onSubtaskLinkAdded?.()
+    onSubtaskLinkAdded()
     setShowSetParentModal(false)
   }
 
   async function handleClearParent() {
     await deleteSubtaskLinksByChild(task.id)
     setParentLink(undefined)
-    onSubtaskLinkAdded?.()
+    onSubtaskLinkAdded()
   }
 
   return (

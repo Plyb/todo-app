@@ -15,17 +15,14 @@ type QuickSelectPanelProps = {
   statuses: Status[]
   allTasks: Task[]
   onClose: () => void
-  onRename: (id: number, name: string) => void
   onChangeStatus: (id: number, statusSlug: string) => void
   onDelete: (id: number) => void
-  onUpdateNotes: (id: number, notes: string) => void
   onOpenTask: (id: number) => void
-  onDoneChange: (id: number, done: boolean) => void
-  onBlockingRelationshipAdded?: () => void
-  onSubtaskLinkAdded?: () => void
+  onBlockingRelationshipAdded: () => void
+  onSubtaskLinkAdded: () => void
 }
 
-export function QuickSelectPanel({ task, statuses, allTasks, onClose, onRename, onChangeStatus, onDelete, onUpdateNotes, onOpenTask, onDoneChange, onBlockingRelationshipAdded, onSubtaskLinkAdded }: QuickSelectPanelProps) {
+export function QuickSelectPanel({ task, statuses, allTasks, onClose, onChangeStatus, onDelete, onOpenTask, onBlockingRelationshipAdded, onSubtaskLinkAdded }: QuickSelectPanelProps) {
   const [backdropReady, setBackdropReady] = useState(false)
   const [expanded, setExpanded] = useState(false)
   const [subtaskLinks, setSubtaskLinks] = useState<SubtaskLink[]>([])
@@ -61,14 +58,14 @@ export function QuickSelectPanel({ task, statuses, allTasks, onClose, onRename, 
           position: 'relative',
         }}
       >
-        <PanelHeader task={task} onRename={onRename} onDoneChange={onDoneChange} onClose={handleClose} />
+        <PanelHeader task={task} onClose={handleClose} />
 
         <div style={{
           overflow: 'hidden',
           maxHeight: expanded ? '1000px' : '0',
           transition: 'max-height 0.2s ease',
         }}>
-          <NotesSection task={task} onUpdateNotes={onUpdateNotes} />
+          <NotesSection task={task} />
 
           <StatusScheduleSection task={task} statuses={statuses} onChangeStatus={onChangeStatus} />
 
@@ -88,7 +85,6 @@ export function QuickSelectPanel({ task, statuses, allTasks, onClose, onRename, 
             subtaskLinks={subtaskLinks}
             setSubtaskLinks={setSubtaskLinks}
             onOpenTask={onOpenTask}
-            onDoneChange={onDoneChange}
             onSubtaskLinkAdded={onSubtaskLinkAdded}
           />
 
@@ -96,7 +92,6 @@ export function QuickSelectPanel({ task, statuses, allTasks, onClose, onRename, 
             task={task}
             allTasks={allTasks}
             onOpenTask={onOpenTask}
-            onDoneChange={onDoneChange}
             onBlockingRelationshipAdded={onBlockingRelationshipAdded}
           />
         </div>

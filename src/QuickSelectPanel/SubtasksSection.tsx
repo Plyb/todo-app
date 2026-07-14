@@ -13,12 +13,11 @@ type SubtasksSectionProps = {
   subtaskLinks: SubtaskLink[]
   setSubtaskLinks: React.Dispatch<React.SetStateAction<SubtaskLink[]>>
   onOpenTask: (id: number) => void
-  onDoneChange: (id: number, done: boolean) => void
-  onSubtaskLinkAdded?: () => void
+  onSubtaskLinkAdded: () => void
 }
 
-export function SubtasksSection({ task, allTasks, subtaskLinks, setSubtaskLinks, onOpenTask, onDoneChange, onSubtaskLinkAdded }: SubtasksSectionProps) {
-  const { createTask } = useTasks()
+export function SubtasksSection({ task, allTasks, subtaskLinks, setSubtaskLinks, onOpenTask, onSubtaskLinkAdded }: SubtasksSectionProps) {
+  const { createTask, setDone } = useTasks()
   const [newSubtaskName, setNewSubtaskName] = useState('')
   const [showLinkExistingModal, setShowLinkExistingModal] = useState(false)
   const [linkedTaskIds, setLinkedTaskIds] = useState<Set<number>>(new Set())
@@ -31,7 +30,7 @@ export function SubtasksSection({ task, allTasks, subtaskLinks, setSubtaskLinks,
     const newTask = await createTask(trimmed, rankBetween(null, null), task.statusSlug)
     const link = await createSubtaskLink(task.id, newTask.id, linkRank)
     setSubtaskLinks((prev) => [...prev, link])
-    onSubtaskLinkAdded?.()
+    onSubtaskLinkAdded()
     setNewSubtaskName('')
   }
 
@@ -59,7 +58,7 @@ export function SubtasksSection({ task, allTasks, subtaskLinks, setSubtaskLinks,
     const rank = rankBetween(lastLink, null)
     const link = await createSubtaskLink(task.id, selected.id, rank)
     setSubtaskLinks((prev) => [...prev, link])
-    onSubtaskLinkAdded?.()
+    onSubtaskLinkAdded()
     setShowLinkExistingModal(false)
   }
 
@@ -84,7 +83,7 @@ export function SubtasksSection({ task, allTasks, subtaskLinks, setSubtaskLinks,
                 <input
                   type="checkbox"
                   checked={childTask.done}
-                  onChange={(e) => onDoneChange(childTask.id, e.target.checked)}
+                  onChange={(e) => setDone(childTask.id, e.target.checked)}
                 />
                 <span onClick={() => onOpenTask(childTask.id)} style={{ marginLeft: 8, cursor: 'pointer', color: childTask.done ? theme.colors.textDisabled : undefined }}>
                   {childTask.name}
