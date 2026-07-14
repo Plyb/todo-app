@@ -3,6 +3,7 @@ import { type Status, type View } from './types'
 import { DraggableList } from './DraggableList'
 import { theme } from './theme'
 import { Modal } from './ui/Modal'
+import { PrimaryButton, SecondaryButton } from './ui/Button'
 
 export type ViewEditorModalProps = {
   view: View
@@ -93,18 +94,12 @@ export function ViewEditorModal({ view, statuses, onSave, onClose }: ViewEditorM
       ))}
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: theme.space.sm, marginTop: 20 }}>
-        <button
-          onClick={onClose}
-          style={{ padding: '8px 16px', border: `1px solid ${theme.colors.border}`, borderRadius: theme.radii.md, cursor: 'pointer', background: 'none' }}
-        >
+        <SecondaryButton onClick={onClose}>
           Cancel
-        </button>
-        <button
-          onClick={() => onSave({ ...view, name: name.trim() || 'Unnamed', statusSlugs: slugs })}
-          style={{ padding: '8px 16px', background: theme.colors.brand, color: '#fff', border: 'none', borderRadius: theme.radii.md, cursor: 'pointer' }}
-        >
+        </SecondaryButton>
+        <PrimaryButton onClick={() => onSave({ ...view, name: name.trim() || 'Unnamed', statusSlugs: slugs })}>
           Save
-        </button>
+        </PrimaryButton>
       </div>
     </Modal>
   )
