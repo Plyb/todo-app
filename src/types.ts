@@ -28,3 +28,5 @@ export type ScheduledTransition = {
   date: string  // ISO date string 'YYYY-MM-DD'
   statusSlug: string
 }
+
+export type ViewSelectorVisibility = 'always-show' | 'always-hide' | null

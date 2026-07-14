@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { Task } from './types'
 
 export function readJSON<T>(key: string, fallback: T): T {
@@ -45,6 +46,19 @@ export function setAutoArchiveSlug(slug: string | null): void {
   } else {
     localStorage.setItem(AUTO_ARCHIVE_SLUG_KEY, slug)
   }
+}
+
+export function useLocalStorageSetting<T extends string>(key: string): [T | null, (value: T | null) => void] {
+  const [value, setValue] = useState<T | null>(() => localStorage.getItem(key) as T | null)
+  const setAndPersist = (next: T | null) => {
+    setValue(next)
+    if (next === null) {
+      localStorage.removeItem(key)
+    } else {
+      localStorage.setItem(key, next)
+    }
+  }
+  return [value, setAndPersist]
 }
 
 export function selectableTasks(allTasks: Task[], opts: { currentTaskId: number; excludedIds?: Set<number> }): Task[] {

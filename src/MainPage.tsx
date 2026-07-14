@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { loadAllBlocks, loadAllSubtaskLinks } from './db'
-import type { BlockingRelationship, SubtaskLink, Task } from './types'
+import type { BlockingRelationship, SubtaskLink, Task, ViewSelectorVisibility } from './types'
 import { DraggableList } from './DraggableList'
 import { AddTaskFab, NewTaskInputField, type NewTaskInput, type InsertSlotTarget } from './AddTaskInput'
 import { rankAtInsertIndex } from './rank-utils'
@@ -18,7 +18,7 @@ function isIosPwa(): boolean {
 }
 
 function shouldShowViewSelectorButton(): boolean {
-  const visibility = localStorage.getItem('view-selector-button-visibility')
+  const visibility = localStorage.getItem('view-selector-button-visibility') as ViewSelectorVisibility
   if (visibility === 'always-show') return true
   if (visibility === 'always-hide') return false
   return !isIosPwa()
