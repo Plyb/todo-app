@@ -4,6 +4,7 @@ import { addBlock } from './db'
 import { theme } from './theme'
 import { BottomSheet } from './ui/Modal'
 import { CloseButton } from './ui/CloseButton'
+import { TaskSearchList } from './ui/TaskSearchList'
 import { selectableTasks } from './storage'
 
 type RelatedTaskEntryProps = { task: Task; onOpen: (id: number) => void; onDoneChange: (id: number, done: boolean) => void }
@@ -80,12 +81,8 @@ type RelationshipModalProps = {
 
 export function RelationshipModal({ currentTaskId, allTasks, onClose, onBlockingRelationshipAdded }: RelationshipModalProps) {
   const [state, setState] = useState<RelationshipModalState>({ view: 'search' })
-  const [query, setQuery] = useState('')
 
   const otherTasks = selectableTasks(allTasks, { currentTaskId })
-  const filtered = otherTasks.filter((t) =>
-    t.name.toLowerCase().includes(query.toLowerCase())
-  )
 
   return (
     <BottomSheet onClose={onClose}>
@@ -95,39 +92,7 @@ export function RelationshipModal({ currentTaskId, allTasks, onClose, onBlocking
             <span style={{ fontWeight: 700, fontSize: theme.fontSizes.xl }}>Add Relationship</span>
             <CloseButton onClick={onClose} />
           </div>
-          <input
-            autoFocus
-            type="text"
-            placeholder="Search tasks..."
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '8px 10px',
-              fontSize: theme.fontSizes.lg,
-              border: '1px solid #ddd',
-              borderRadius: theme.radii.lg,
-              marginBottom: 12,
-              boxSizing: 'border-box',
-            }}
-          />
-          {filtered.length === 0 ? (
-            <div style={{ color: theme.colors.textDisabled, textAlign: 'center', padding: '16px 0' }}>No tasks found</div>
-          ) : (
-            filtered.map((task) => (
-              <div
-                key={task.id}
-                onClick={() => setState({ view: 'choose-type', selectedTask: task })}
-                style={{
-                  padding: '10px 0',
-                  borderBottom: `1px solid ${theme.colors.divider}`,
-                  cursor: 'pointer',
-                }}
-              >
-                {task.name}
-              </div>
-            ))
-          )}
+          <TaskSearchList tasks={otherTasks} onSelect={(task) => setState({ view: 'choose-type', selectedTask: task })} />
         </>
       )}
 
