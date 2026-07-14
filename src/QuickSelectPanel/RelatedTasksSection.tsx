@@ -1,0 +1,95 @@
+import { useEffect, useState } from 'react'
+import type { Task, BlockingRelationship } from '../types'
+import { loadBlocks } from '../db'
+import { RelationshipModal, RelationshipGroup } from '../RelationshipModal'
+import { theme } from '../theme'
+
+type RelatedTasksSectionProps = {
+  task: Task
+  allTasks: Task[]
+  onOpenTask: (id: number) => void
+  onDoneChange: (id: number, done: boolean) => void
+  onBlockingRelationshipAdded?: () => void
+}
+
+export function RelatedTasksSection({ task, allTasks, onOpenTask, onDoneChange, onBlockingRelationshipAdded }: RelatedTasksSectionProps) {
+  const [showRelationshipModal, setShowRelationshipModal] = useState(false)
+  const [blockingRelationships, setBlockingRelationships] = useState<BlockingRelationship[]>([])
+
+  useEffect(() => {
+    loadBlocks(task.id).then(setBlockingRelationships)
+  }, [task.id])
+
+  function reloadRelationships() {
+    loadBlocks(task.id).then(setBlockingRelationships)
+    onBlockingRelationshipAdded?.()
+  }
+
+  const blocksGroup = {
+    label: 'Blocks',
+    tasks: blockingRelationships
+      .filter((r) => r.fromTaskId === task.id)
+      .map((r) => allTasks.find((t) => t.id === r.toTaskId))
+      .filter((t): t is Task => t !== undefined),
+  }
+
+  const blockedByGroup = {
+    label: 'Blocked by',
+    tasks: blockingRelationships
+      .filter((r) => r.toTaskId === task.id)
+      .map((r) => allTasks.find((t) => t.id === r.fromTaskId))
+      .filter((t): t is Task => t !== undefined),
+  }
+
+  const relatedGroups: Array<{ label: string; tasks: Task[] }> = [
+    ...(blocksGroup.tasks.length > 0 ? [blocksGroup] : []),
+    ...(blockedByGroup.tasks.length > 0 ? [blockedByGroup] : []),
+  ]
+
+  return (
+    <>
+      <div style={{ marginTop: 16 }}>
+        <div style={{ fontWeight: 600, fontSize: theme.fontSizes.lg, marginBottom: 8 }}>Related Tasks</div>
+
+        {relatedGroups.length === 0 ? (
+          <div style={{ color: theme.colors.textDisabled, fontSize: theme.fontSizes.md, marginBottom: 12 }}>No related tasks</div>
+        ) : (
+          relatedGroups.map((group) => (
+            <RelationshipGroup
+              key={group.label}
+              label={group.label}
+              tasks={group.tasks}
+              onOpenTask={onOpenTask}
+              onDoneChange={onDoneChange}
+            />
+          ))
+        )}
+
+        <button
+          onClick={() => setShowRelationshipModal(true)}
+          style={{
+            marginTop: 4,
+            padding: '8px 16px',
+            backgroundColor: theme.colors.brand,
+            color: '#fff',
+            border: 'none',
+            borderRadius: theme.radii.lg,
+            cursor: 'pointer',
+            fontSize: theme.fontSizes.md,
+          }}
+        >
+          Add Relationship
+        </button>
+      </div>
+
+      {showRelationshipModal && (
+        <RelationshipModal
+          currentTaskId={task.id}
+          allTasks={allTasks}
+          onClose={() => setShowRelationshipModal(false)}
+          onBlockingRelationshipAdded={reloadRelationships}
+        />
+      )}
+    </>
+  )
+}
