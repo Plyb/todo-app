@@ -1,5 +1,6 @@
 import type { View } from './types'
 import { SelectListModal } from './ui/SelectListModal'
+import { sortViewsByRecency } from './modal-derivations'
 
 type ViewModalProps = {
   views: View[]
@@ -10,14 +11,7 @@ type ViewModalProps = {
 }
 
 export function ViewModal({ views, recentViewSlugs, currentViewSlug, onSelect, onClose }: ViewModalProps) {
-  const sortedViews = [...views].sort((a, b) => {
-    const aIndex = recentViewSlugs.indexOf(a.slug)
-    const bIndex = recentViewSlugs.indexOf(b.slug)
-    if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex
-    if (aIndex !== -1) return -1
-    if (bIndex !== -1) return 1
-    return 0
-  })
+  const sortedViews = sortViewsByRecency(views, recentViewSlugs)
 
   return (
     <SelectListModal
