@@ -28,6 +28,12 @@ type AddTaskFabProps = {
   onDragInsertSlot: (slot: InsertSlotTarget | null) => void
 }
 
+// AddTaskFab uses raw pointer events rather than dnd-kit to enable immediate
+// pointer-capture activation on pointerDown (vs. dnd-kit's sensor delays), a
+// fixed-corner element that physically follows the pointer, and tap-vs-drag
+// semantics with a cancel dead-zone (isNearFabStart). dnd-kit's sortable-list
+// collision model doesn't accommodate these constraints. Revisit this choice if
+// future requirements like auto-scroll or live reorder preview require integration.
 export function AddTaskFab({ listRef, onRequestInsert, onDragInsertSlot }: AddTaskFabProps) {
   const [fabDragState, setFabDragState] = useState<FabDragState | null>(null)
   const didMoveRef = useRef(false)
