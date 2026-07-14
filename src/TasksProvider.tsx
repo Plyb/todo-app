@@ -125,14 +125,19 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     setViews(newViews)
   }
 
+  // Refetch (not roll back) on write failure: rolling back to a stale snapshot could erase a concurrently-succeeded edit.
+  async function refetchTasks(): Promise<void> {
+    setTasks(await db.loadTasks())
+  }
+
   function setDone(id: number, done: boolean): void {
-    db.updateTaskDone(id, done)
+    db.updateTaskDone(id, done).catch(() => refetchTasks())
     setTasks(prev => prev.map(t => t.id === id ? { ...t, done } : t))
   }
 
   function moveTask(id: number, toStatusSlug: string, newRank: string, changeStatus: boolean): void {
-    if (changeStatus) db.updateTaskStatus(id, toStatusSlug)
-    db.updateTaskRank(id, newRank)
+    if (changeStatus) db.updateTaskStatus(id, toStatusSlug).catch(() => refetchTasks())
+    db.updateTaskRank(id, newRank).catch(() => refetchTasks())
     setTasks(prev => {
       const updated = prev.map(t => t.id === id ? { ...t, rank: newRank, statusSlug: toStatusSlug } : t)
       return updated.sort(byRank)
@@ -140,29 +145,42 @@ export function TasksProvider({ children }: { children: ReactNode }) {
   }
 
   async function setStatus(id: number, statusSlug: string): Promise<void> {
-    await db.updateTaskStatus(id, statusSlug)
-    setTasks(prev => prev.map(t => t.id === id ? { ...t, statusSlug } : t))
+    try {
+      await db.updateTaskStatus(id, statusSlug)
+      setTasks(prev => prev.map(t => t.id === id ? { ...t, statusSlug } : t))
+    } catch {
+      await refetchTasks()
+    }
   }
 
   function renameTask(id: number, name: string): void {
-    db.updateTaskName(id, name)
+    db.updateTaskName(id, name).catch(() => refetchTasks())
     setTasks(prev => prev.map(t => t.id === id ? { ...t, name } : t))
   }
 
   function updateNotes(id: number, notes: string): void {
-    db.updateTaskNotes(id, notes)
+    db.updateTaskNotes(id, notes).catch(() => refetchTasks())
     setTasks(prev => prev.map(t => t.id === id ? { ...t, notes } : t))
   }
 
   async function deleteTask(id: number): Promise<void> {
-    await db.deleteTask(id)
-    setTasks(prev => prev.filter(t => t.id !== id))
+    try {
+      await db.deleteTask(id)
+      setTasks(prev => prev.filter(t => t.id !== id))
+    } catch {
+      await refetchTasks()
+    }
   }
 
   async function createTask(name: string, rank: string, statusSlug: string): Promise<Task> {
-    const task = await db.createTask(name, rank, statusSlug)
-    setTasks(prev => [...prev, task].sort(byRank))
-    return task
+    try {
+      const task = await db.createTask(name, rank, statusSlug)
+      setTasks(prev => [...prev, task].sort(byRank))
+      return task
+    } catch (err) {
+      await refetchTasks()
+      throw err
+    }
   }
 
   function clearAutoTransitionIndicator(id: number): void {
