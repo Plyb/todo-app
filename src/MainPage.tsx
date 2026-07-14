@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { loadAllBlocks, loadAllSubtaskLinks } from './db'
-import type { BlockingRelationship, SubtaskLink, Task } from './types'
+import type { BlockingRelationship, SubtaskLink, Task, ViewSelectorVisibility } from './types'
 import { DraggableList } from './DraggableList'
 import { AddTaskFab, NewTaskInputField, type NewTaskInput, type InsertSlotTarget } from './AddTaskInput'
 import { rankAtInsertIndex } from './rank-utils'
@@ -10,6 +10,7 @@ import { theme } from './theme'
 import { useOverscrollGesture } from './useOverscrollGesture'
 import { useTasks, useStatuses, useViews } from './tasks-context'
 import { OverscrollIndicator } from './OverscrollIndicator'
+import { VIEW_SELECTOR_VISIBILITY_KEY } from './storage'
 
 const OVERSCROLL_TRIGGER_DISTANCE = 100
 
@@ -18,7 +19,7 @@ function isIosPwa(): boolean {
 }
 
 function shouldShowViewSelectorButton(): boolean {
-  const visibility = localStorage.getItem('view-selector-button-visibility')
+  const visibility = localStorage.getItem(VIEW_SELECTOR_VISIBILITY_KEY) as ViewSelectorVisibility
   if (visibility === 'always-show') return true
   if (visibility === 'always-hide') return false
   return !isIosPwa()

@@ -1,21 +1,12 @@
 import { useState } from 'react'
-import type { Status, View } from './types'
+import type { Status, View, ViewSelectorVisibility } from './types'
 import { useStatuses, useViews } from './tasks-context'
 import { ViewEditorModal } from './ViewEditorModal'
 import { StatusEditorModal } from './StatusEditorModal'
 import { StatusModal } from './StatusModal'
 import { EditableListSection } from './EditableListSection'
 import { theme } from './theme'
-import { getAutoArchiveSlug, setAutoArchiveSlug } from './storage'
-
-const loadViewSelectorButtonVisibility = (): string | null => localStorage.getItem('view-selector-button-visibility')
-const saveViewSelectorButtonVisibility = (value: string | null): void => {
-  if (value === null) {
-    localStorage.removeItem('view-selector-button-visibility')
-  } else {
-    localStorage.setItem('view-selector-button-visibility', value)
-  }
-}
+import { getAutoArchiveSlug, setAutoArchiveSlug, useLocalStorageSetting, VIEW_SELECTOR_VISIBILITY_KEY } from './storage'
 
 type SettingsPageProps = {
   onBack: () => void
@@ -28,7 +19,7 @@ export default function SettingsPage({ onBack }: SettingsPageProps) {
   const [editingStatus, setEditingStatus] = useState<Status | null>(null)
   const [reassignFromSlug, setReassignFromSlug] = useState<string | null>(null)
   const [autoArchiveSlug, setAutoArchiveSlugState] = useState(getAutoArchiveSlug)
-  const [viewSelectorButtonVisibility, setViewSelectorButtonVisibility] = useState(loadViewSelectorButtonVisibility)
+  const [viewSelectorButtonVisibility, setViewSelectorButtonVisibility] = useLocalStorageSetting<Exclude<ViewSelectorVisibility, null>>(VIEW_SELECTOR_VISIBILITY_KEY)
 
   function handleAutoArchiveChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const slug = e.target.value === '' ? null : e.target.value
@@ -38,8 +29,7 @@ export default function SettingsPage({ onBack }: SettingsPageProps) {
 
   function handleViewSelectorButtonVisibilityChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const value = e.target.value === '' ? null : e.target.value
-    setViewSelectorButtonVisibility(value)
-    saveViewSelectorButtonVisibility(value)
+    setViewSelectorButtonVisibility(value as ViewSelectorVisibility)
   }
 
   async function handleDeleteView(slug: string) {
