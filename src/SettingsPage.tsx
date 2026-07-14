@@ -6,9 +6,7 @@ import { StatusEditorModal } from './StatusEditorModal'
 import { StatusModal } from './StatusModal'
 import { EditableListSection } from './EditableListSection'
 import { theme } from './theme'
-import { getAutoArchiveSlug, setAutoArchiveSlug as saveAutoArchiveSetting } from './storage'
-
-const loadAutoArchiveSetting = getAutoArchiveSlug
+import { getAutoArchiveSlug, setAutoArchiveSlug } from './storage'
 
 const loadViewSelectorButtonVisibility = (): string | null => localStorage.getItem('view-selector-button-visibility')
 const saveViewSelectorButtonVisibility = (value: string | null): void => {
@@ -29,13 +27,13 @@ export default function SettingsPage({ onBack }: SettingsPageProps) {
   const [editingView, setEditingView] = useState<View | null>(null)
   const [editingStatus, setEditingStatus] = useState<Status | null>(null)
   const [reassignFromSlug, setReassignFromSlug] = useState<string | null>(null)
-  const [autoArchiveSlug, setAutoArchiveSlug] = useState(loadAutoArchiveSetting)
+  const [autoArchiveSlug, setAutoArchiveSlugState] = useState(getAutoArchiveSlug)
   const [viewSelectorButtonVisibility, setViewSelectorButtonVisibility] = useState(loadViewSelectorButtonVisibility)
 
   function handleAutoArchiveChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const slug = e.target.value === '' ? null : e.target.value
+    setAutoArchiveSlugState(slug)
     setAutoArchiveSlug(slug)
-    saveAutoArchiveSetting(slug)
   }
 
   function handleViewSelectorButtonVisibilityChange(e: React.ChangeEvent<HTMLSelectElement>) {
