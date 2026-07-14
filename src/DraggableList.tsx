@@ -14,6 +14,7 @@ import {
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { theme } from './theme'
+import { resolveReorder } from './drag-utils'
 
 function toItemId(id: UniqueIdentifier): number {
   return typeof id === 'number' ? id : Number(id)
@@ -120,26 +121,7 @@ export function DraggableList<T extends { id: number }>({
 
   function handleDragEnd({ active, over }: DragEndEvent) {
     if (over && active.id !== over.id) {
-      // over.id always matches a section item: each item is the only droppable
-      // target (via useSortable), so `over` is only set when hovering one of them.
-      const toSectionIndex = sections.findIndex((s) => s.items.some((t) => t.id === over.id))
-      const toSection = sections[toSectionIndex]
-      const fromSectionIndex = sections.findIndex((s) => s.items.some((t) => t.id === active.id))
-
-      let insertIndex: number
-      if (fromSectionIndex === toSectionIndex) {
-        const sectionItems = toSection.items
-        const oldIndex = sectionItems.findIndex((t) => t.id === active.id)
-        const overIndex = sectionItems.findIndex((t) => t.id === over.id)
-        const others = sectionItems.filter((t) => t.id !== active.id)
-        const othersOverIndex = others.findIndex((t) => t.id === over.id)
-        // dragging down → insert after over; dragging up → insert before over
-        insertIndex = oldIndex < overIndex ? othersOverIndex + 1 : othersOverIndex
-      } else {
-        // cross-section: dragged item is not in target section, insert before the over item
-        insertIndex = toSection.items.findIndex((t) => t.id === over.id)
-      }
-
+      const { toSectionIndex, insertIndex } = resolveReorder(sections, toItemId(active.id), toItemId(over.id))
       onReorder(toItemId(active.id), toSectionIndex, insertIndex)
     }
     setActiveId(null)
