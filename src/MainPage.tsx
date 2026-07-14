@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { loadAllBlocks, loadAllSubtaskLinks } from './db'
 import type { BlockingRelationship, SubtaskLink, Task } from './types'
 import { DraggableList } from './DraggableList'
@@ -125,7 +125,41 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
   // Tasks shown across all sections of the current view, used below so the
   // cleanup effect can clear indicators for whatever was actually on screen
   // right before the view changes.
-  const displayedTasks = currentView ? tasks.filter((t) => currentView.statusSlugs.includes(t.statusSlug)) : []
+  const displayedTasks = useMemo(
+    () => (currentView ? tasks.filter((t) => currentView.statusSlugs.includes(t.statusSlug)) : []),
+    [currentView, tasks]
+  )
+
+  const parentTaskNameByChildId = useMemo(
+    () =>
+      new Map(
+        subtaskLinks
+          .map((link) => {
+            const parentTask = tasks.find((t) => t.id === link.parentTaskId)
+            return parentTask ? [link.childTaskId, parentTask.name] as const : undefined
+          })
+          .filter((entry): entry is [number, string] => entry !== undefined)
+      ),
+    [subtaskLinks, tasks]
+  )
+
+  const sections = useMemo(
+    () =>
+      currentView
+        ? currentView.statusSlugs.map((slug) => {
+            const status = statuses.find((s) => s.slug === slug)
+            return {
+              header: (
+                <h2 style={{ padding: '16px 16px 8px', margin: 0, fontSize: theme.fontSizes.xxl, fontWeight: 700 }}>
+                  {status?.name ?? slug}
+                </h2>
+              ),
+              items: tasks.filter((t) => t.statusSlug === slug),
+            }
+          })
+        : [],
+    [currentView, statuses, tasks]
+  )
 
   const displayedTasksRef = useRef(displayedTasks)
   displayedTasksRef.current = displayedTasks
@@ -223,15 +257,6 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
     setModalTaskId(null)
   }
 
-  const parentTaskNameByChildId = new Map(
-    subtaskLinks
-      .map((link) => {
-        const parentTask = tasks.find((t) => t.id === link.parentTaskId)
-        return parentTask ? [link.childTaskId, parentTask.name] as const : undefined
-      })
-      .filter((entry): entry is [number, string] => entry !== undefined)
-  )
-
   const selectedTask = selectedTaskId !== null ? tasks.find((t) => t.id === selectedTaskId) ?? null : null
 
   const quickSelectPanelProps = selectedTask
@@ -309,18 +334,6 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
         ),
       }
     : undefined
-
-  const sections = currentView.statusSlugs.map((slug) => {
-    const status = statuses.find((s) => s.slug === slug)
-    return {
-      header: (
-        <h2 style={{ padding: '16px 16px 8px', margin: 0, fontSize: theme.fontSizes.xxl, fontWeight: 700 }}>
-          {status?.name ?? slug}
-        </h2>
-      ),
-      items: tasks.filter((t) => t.statusSlug === slug),
-    }
-  })
 
   const expandedSlot = quickSelectPanelProps
     ? {
