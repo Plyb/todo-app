@@ -9,10 +9,15 @@ import {
   closestCenter,
   type DragEndEvent,
   type DragStartEvent,
+  type UniqueIdentifier,
 } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { theme } from './theme'
+
+function toItemId(id: UniqueIdentifier): number {
+  return typeof id === 'number' ? id : Number(id)
+}
 
 type Section<T> = {
   header?: React.ReactNode
@@ -109,7 +114,7 @@ export function DraggableList<T extends { id: number }>({
   const activeItem = activeId !== null ? allItems.find((t) => t.id === activeId) ?? null : null
 
   function handleDragStart({ active }: DragStartEvent) {
-    setActiveId(active.id as number)
+    setActiveId(toItemId(active.id))
     onDragStart?.()
   }
 
@@ -135,7 +140,7 @@ export function DraggableList<T extends { id: number }>({
         insertIndex = toSection.items.findIndex((t) => t.id === over.id)
       }
 
-      onReorder(active.id as number, toSectionIndex, insertIndex)
+      onReorder(toItemId(active.id), toSectionIndex, insertIndex)
     }
     setActiveId(null)
     onDragEnd?.()
