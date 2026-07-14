@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { loadAllBlocks, loadAllSubtaskLinks } from './db'
 import type { BlockingRelationship, SubtaskLink, Task } from './types'
 import { DraggableList } from './DraggableList'
-import { AddTaskFab, NewTaskInputField, computeInsertRank, type NewTaskInput, type InsertSlotTarget } from './AddTaskInput'
-import { rankBetween } from './rank-utils'
+import { AddTaskFab, NewTaskInputField, type NewTaskInput, type InsertSlotTarget } from './AddTaskInput'
+import { rankAtInsertIndex } from './rank-utils'
 import { QuickSelectPanel } from './QuickSelectPanel'
 import { ViewModal } from './ViewModal'
 import { theme } from './theme'
@@ -25,13 +25,6 @@ function shouldShowViewSelectorButton(): boolean {
 
 type MainPageProps = {
   onNavigateToSettings: () => void
-}
-
-function computeNewRank(sectionTasks: Task[], insertIndex: number, draggedTaskId: number): string {
-  const others = sectionTasks.filter((t) => t.id !== draggedTaskId)
-  const prev = insertIndex > 0 ? others[insertIndex - 1] : null
-  const next = insertIndex < others.length ? others[insertIndex] : null
-  return rankBetween(prev, next)
 }
 
 function SettingsButton({ onClick }: { onClick: () => void }) {
@@ -169,7 +162,7 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
     if (!currentView) return
     const toStatusSlug = currentView.statusSlugs[toSectionIndex]
     const toSectionTasks = tasks.filter((t) => t.statusSlug === toStatusSlug)
-    const newRank = computeNewRank(toSectionTasks, insertIndex, draggedId)
+    const newRank = rankAtInsertIndex(toSectionTasks, insertIndex, draggedId)
     const needsStatusChange = !toSectionTasks.some((t) => t.id === draggedId)
     moveTask(draggedId, toStatusSlug, newRank, needsStatusChange)
   }
@@ -193,7 +186,7 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
     if (!currentView) return
     const statusSlug = currentView.statusSlugs[sectionIndex]
     const sectionTasks = tasks.filter((t) => t.statusSlug === statusSlug)
-    const rank = computeInsertRank(sectionTasks, insertIndex)
+    const rank = rankAtInsertIndex(sectionTasks, insertIndex)
     await createTask(trimmed, rank, statusSlug)
     if (andOpenAnother) {
       openInput(sectionIndex, insertIndex + 1)
