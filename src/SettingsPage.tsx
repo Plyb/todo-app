@@ -6,7 +6,7 @@ import { StatusEditorModal } from './StatusEditorModal'
 import { StatusModal } from './StatusModal'
 import { EditableListSection } from './EditableListSection'
 import { theme } from './theme'
-import { getAutoArchiveSlug, setAutoArchiveSlug, useLocalStorageSetting } from './storage'
+import { getAutoArchiveSlug, setAutoArchiveSlug, useLocalStorageSetting, VIEW_SELECTOR_VISIBILITY_KEY } from './storage'
 
 type SettingsPageProps = {
   onBack: () => void
@@ -19,7 +19,7 @@ export default function SettingsPage({ onBack }: SettingsPageProps) {
   const [editingStatus, setEditingStatus] = useState<Status | null>(null)
   const [reassignFromSlug, setReassignFromSlug] = useState<string | null>(null)
   const [autoArchiveSlug, setAutoArchiveSlugState] = useState(getAutoArchiveSlug)
-  const [viewSelectorButtonVisibility, setViewSelectorButtonVisibility] = useLocalStorageSetting<Exclude<ViewSelectorVisibility, null>>('view-selector-button-visibility')
+  const [viewSelectorButtonVisibility, setViewSelectorButtonVisibility] = useLocalStorageSetting<Exclude<ViewSelectorVisibility, null>>(VIEW_SELECTOR_VISIBILITY_KEY)
 
   function handleAutoArchiveChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const slug = e.target.value === '' ? null : e.target.value
@@ -29,7 +29,7 @@ export default function SettingsPage({ onBack }: SettingsPageProps) {
 
   function handleViewSelectorButtonVisibilityChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const value = e.target.value === '' ? null : e.target.value
-    setViewSelectorButtonVisibility(value as Exclude<ViewSelectorVisibility, null> | null)
+    setViewSelectorButtonVisibility(value as ViewSelectorVisibility)
   }
 
   async function handleDeleteView(slug: string) {

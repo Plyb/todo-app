@@ -48,6 +48,8 @@ export function setAutoArchiveSlug(slug: string | null): void {
   }
 }
 
+export const VIEW_SELECTOR_VISIBILITY_KEY = 'view-selector-button-visibility'
+
 export function useLocalStorageSetting<T extends string>(key: string): [T | null, (value: T | null) => void] {
   const [value, setValue] = useState<T | null>(() => localStorage.getItem(key) as T | null)
   const setAndPersist = (next: T | null) => {
