@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { Task } from './types'
 import { theme } from './theme'
 import { BottomSheet } from './ui/Modal'
+import { selectableTasks } from './storage'
 
 type LinkExistingTaskModalProps = {
   currentTaskId: number
@@ -15,8 +16,7 @@ type LinkExistingTaskModalProps = {
 export function LinkExistingTaskModal({ currentTaskId, allTasks, excludedTaskIds, title = 'Link Existing Task', onClose, onSelect }: LinkExistingTaskModalProps) {
   const [query, setQuery] = useState('')
 
-  const autoArchiveSlug = localStorage.getItem('auto-archive-status-slug')
-  const candidates = allTasks.filter((t) => t.id !== currentTaskId && !excludedTaskIds.has(t.id) && t.statusSlug !== autoArchiveSlug)
+  const candidates = selectableTasks(allTasks, { currentTaskId, excludedIds: excludedTaskIds })
   const filtered = candidates.filter((t) => t.name.toLowerCase().includes(query.toLowerCase()))
 
   return (

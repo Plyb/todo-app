@@ -6,15 +6,9 @@ import { StatusEditorModal } from './StatusEditorModal'
 import { StatusModal } from './StatusModal'
 import { EditableListSection } from './EditableListSection'
 import { theme } from './theme'
+import { getAutoArchiveSlug, setAutoArchiveSlug as saveAutoArchiveSetting } from './storage'
 
-const loadAutoArchiveSetting = (): string | null => localStorage.getItem('auto-archive-status-slug')
-const saveAutoArchiveSetting = (slug: string | null): void => {
-  if (slug === null) {
-    localStorage.removeItem('auto-archive-status-slug')
-  } else {
-    localStorage.setItem('auto-archive-status-slug', slug)
-  }
-}
+const loadAutoArchiveSetting = getAutoArchiveSlug
 
 const loadViewSelectorButtonVisibility = (): string | null => localStorage.getItem('view-selector-button-visibility')
 const saveViewSelectorButtonVisibility = (value: string | null): void => {

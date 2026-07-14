@@ -3,7 +3,7 @@ import * as db from './db'
 import type { Task, Status, View } from './types'
 import type { StatusUsage } from './db'
 import { byRank } from './rank-utils'
-import { readCurrentViewSlug, writeCurrentViewSlug, readRecentViewSlugs, writeRecentViewSlugs } from './storage'
+import { readCurrentViewSlug, writeCurrentViewSlug, readRecentViewSlugs, writeRecentViewSlugs, getAutoArchiveSlug } from './storage'
 import { TasksContext, type TasksContextValue } from './tasks-context'
 
 function getTodayDateString(): string {
@@ -25,7 +25,7 @@ export function TasksProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (tasks.length === 0 || archiveRan.current) return
     archiveRan.current = true
-    const slug = localStorage.getItem('auto-archive-status-slug')
+    const slug = getAutoArchiveSlug()
     if (!slug) return
     const lastRun = localStorage.getItem('auto-archive-last-run')
     const today = new Date().toDateString()
