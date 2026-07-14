@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { type Status, type View } from './types'
 import { DraggableList } from './DraggableList'
 import { theme } from './theme'
@@ -17,12 +17,6 @@ type StatusListItem = { id: number; status: Status }
 export function ViewEditorModal({ view, statuses, onSave, onClose }: ViewEditorModalProps) {
   const [name, setName] = useState(view.name)
   const [slugs, setSlugs] = useState<string[]>(view.statusSlugs)
-
-  useEffect(() => {
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => { document.body.style.overflow = prev }
-  }, [])
 
   const selectedStatuses = slugs
     .map((s) => statuses.find((st) => st.slug === s))

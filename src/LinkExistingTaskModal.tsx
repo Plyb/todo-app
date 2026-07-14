@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { Task } from './types'
 import { theme } from './theme'
 import { BottomSheet } from './ui/Modal'
+import { CloseButton } from './ui/CloseButton'
 import { selectableTasks } from './storage'
 
 type LinkExistingTaskModalProps = {
@@ -23,9 +24,7 @@ export function LinkExistingTaskModal({ currentTaskId, allTasks, excludedTaskIds
     <BottomSheet onClose={onClose}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <span style={{ fontWeight: 700, fontSize: theme.fontSizes.xl }}>{title}</span>
-        <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: theme.fontSizes.xxl, cursor: 'pointer' }}>
-          ✕
-        </button>
+        <CloseButton onClick={onClose} />
       </div>
       <input
         autoFocus

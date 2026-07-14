@@ -3,6 +3,7 @@ import type { Task, Status, ScheduledTransition } from './types'
 import { loadScheduledTransitions, addScheduledTransition, deleteScheduledTransition } from './db'
 import { theme } from './theme'
 import { Modal } from './ui/Modal'
+import { CloseButton } from './ui/CloseButton'
 import { PrimaryButton, SecondaryButton } from './ui/Button'
 
 type ScheduleModalProps = {
@@ -48,13 +49,7 @@ export function ScheduleModal({ task, statuses, onClose, onTransitionsChanged }:
     <Modal onClose={onClose} cardStyle={{ padding: 20, minWidth: 280, maxWidth: 360, width: '85%' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
         <span style={{ fontWeight: 600, fontSize: theme.fontSizes.xl }}>Scheduled Transitions</span>
-        <button
-          onClick={onClose}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: theme.fontSizes.xxl, lineHeight: 1, padding: 4 }}
-          aria-label="Close"
-        >
-          ×
-        </button>
+        <CloseButton onClick={onClose} />
       </div>
 
       {transitions.length > 0 && (
