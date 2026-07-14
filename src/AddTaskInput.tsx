@@ -22,6 +22,7 @@ export type FabDragState = {
 export const FAB_BOTTOM = 24
 export const FAB_RIGHT = 24
 export const FAB_SIZE = 56
+const FAB_START_DEAD_ZONE_RADIUS = FAB_SIZE * 1.5
 
 type AddTaskFabProps = {
   listRef: React.RefObject<HTMLDivElement | null>
@@ -46,7 +47,7 @@ export function AddTaskFab({ listRef, onRequestInsert, onDragInsertSlot }: AddTa
     const fabCenterY = vh - FAB_BOTTOM - FAB_SIZE / 2
     const dx = clientX - fabCenterX
     const dy = clientY - fabCenterY
-    return Math.sqrt(dx * dx + dy * dy) < FAB_SIZE * 1.5
+    return Math.sqrt(dx * dx + dy * dy) < FAB_START_DEAD_ZONE_RADIUS
   }
 
   function handleFabPointerDown(e: React.PointerEvent<HTMLButtonElement>) {
