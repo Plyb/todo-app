@@ -1,7 +1,5 @@
 import React, { useRef, useState } from 'react'
 import { isPrimaryButton, findInsertIndex } from './pointer-utils'
-import { rankBetween } from './rank-utils'
-import type { Task } from './types'
 import { theme } from './theme'
 
 export type NewTaskInput = {
@@ -23,12 +21,6 @@ export type FabDragState = {
 export const FAB_BOTTOM = 24
 export const FAB_RIGHT = 24
 export const FAB_SIZE = 56
-
-export function computeInsertRank(tasks: Task[], insertIndex: number): string {
-  const prev = insertIndex > 0 ? tasks[insertIndex - 1] : null
-  const next = insertIndex < tasks.length ? tasks[insertIndex] : null
-  return rankBetween(prev, next)
-}
 
 type AddTaskFabProps = {
   listRef: React.RefObject<HTMLDivElement | null>
