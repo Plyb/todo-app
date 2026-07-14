@@ -9,6 +9,7 @@ import { ViewModal } from './ViewModal'
 import { theme } from './theme'
 import { useOverscrollGesture } from './useOverscrollGesture'
 import { useTasks, useStatuses, useViews } from './tasks-context'
+import { OverscrollIndicator } from './OverscrollIndicator'
 
 const OVERSCROLL_TRIGGER_DISTANCE = 100
 
@@ -363,20 +364,7 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
   // as pullDistance >= threshold without a touch in progress.
   const overscrollArmed = overscrollPct >= 1 && isTouching
   const overscrollIndicator = overscrollPct > 0 && noModalOpen && (
-    <div
-      style={{
-        position: 'fixed',
-        top: 60,
-        left: '50%',
-        transform: 'translateX(-50%)',
-        width: 28,
-        height: 28,
-        borderRadius: '50%',
-        pointerEvents: 'none',
-        color: overscrollArmed ? theme.colors.brand : '#9e9e9e',
-        background: `conic-gradient(currentColor ${overscrollPct * 100}%, transparent ${overscrollPct * 100}%)`,
-      }}
-    />
+    <OverscrollIndicator overscrollPct={overscrollPct} overscrollArmed={overscrollArmed} />
   )
 
   return (
