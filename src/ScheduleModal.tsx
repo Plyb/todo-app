@@ -3,6 +3,7 @@ import type { Task, Status, ScheduledTransition } from './types'
 import { loadScheduledTransitions, addScheduledTransition, deleteScheduledTransition } from './db'
 import { theme } from './theme'
 import { Modal } from './ui/Modal'
+import { PrimaryButton, SecondaryButton } from './ui/Button'
 
 type ScheduleModalProps = {
   task: Task
@@ -75,12 +76,12 @@ export function ScheduleModal({ task, statuses, onClose, onTransitionsChanged }:
             )
           })}
           {!showForm && (
-            <button
+            <PrimaryButton
               onClick={() => setShowForm(true)}
-              style={{ marginTop: 10, padding: '6px 12px', background: theme.colors.brand, color: '#fff', border: 'none', borderRadius: theme.radii.md, cursor: 'pointer', fontSize: theme.fontSizes.md }}
+              style={{ marginTop: 10, padding: '6px 12px', fontSize: theme.fontSizes.md }}
             >
               + Add
-            </button>
+            </PrimaryButton>
           )}
         </div>
       )}
@@ -113,20 +114,20 @@ export function ScheduleModal({ task, statuses, onClose, onTransitionsChanged }:
             </select>
           </div>
           <div style={{ display: 'flex', gap: theme.space.sm }}>
-            <button
+            <PrimaryButton
               onClick={handleAdd}
               disabled={!canSubmit}
-              style={{ padding: '7px 16px', background: theme.colors.brand, color: '#fff', border: 'none', borderRadius: theme.radii.md, cursor: canSubmit ? 'pointer' : 'default', fontSize: theme.fontSizes.md, opacity: canSubmit ? 1 : 0.5 }}
+              style={{ padding: '7px 16px', fontSize: theme.fontSizes.md }}
             >
               Schedule
-            </button>
+            </PrimaryButton>
             {showForm && (
-              <button
+              <SecondaryButton
                 onClick={() => { setShowForm(false); setDate('') }}
-                style={{ padding: '7px 14px', border: `1px solid ${theme.colors.border}`, borderRadius: theme.radii.md, cursor: 'pointer', fontSize: theme.fontSizes.md, background: 'none' }}
+                style={{ padding: '7px 14px', fontSize: theme.fontSizes.md }}
               >
                 Cancel
-              </button>
+              </SecondaryButton>
             )}
           </div>
         </div>

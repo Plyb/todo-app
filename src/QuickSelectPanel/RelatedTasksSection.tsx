@@ -3,6 +3,7 @@ import type { Task, BlockingRelationship } from '../types'
 import { loadBlocks } from '../db'
 import { RelationshipModal, RelationshipGroup } from '../RelationshipModal'
 import { theme } from '../theme'
+import { PrimaryButton } from '../ui/Button'
 
 type RelatedTasksSectionProps = {
   task: Task
@@ -65,21 +66,12 @@ export function RelatedTasksSection({ task, allTasks, onOpenTask, onDoneChange, 
           ))
         )}
 
-        <button
+        <PrimaryButton
           onClick={() => setShowRelationshipModal(true)}
-          style={{
-            marginTop: 4,
-            padding: '8px 16px',
-            backgroundColor: theme.colors.brand,
-            color: '#fff',
-            border: 'none',
-            borderRadius: theme.radii.lg,
-            cursor: 'pointer',
-            fontSize: theme.fontSizes.md,
-          }}
+          style={{ marginTop: 4, borderRadius: theme.radii.lg, fontSize: theme.fontSizes.md }}
         >
           Add Relationship
-        </button>
+        </PrimaryButton>
       </div>
 
       {showRelationshipModal && (
