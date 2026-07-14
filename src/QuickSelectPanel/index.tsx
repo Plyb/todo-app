@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react'
-import type { Task, Status, SubtaskLink, ScheduledTransition } from '../types'
-import { loadSubtaskLinks, loadScheduledTransitions } from '../db'
-import { StatusModal } from '../StatusModal'
-import { ScheduleModal } from '../ScheduleModal'
+import type { Task, Status, SubtaskLink } from '../types'
+import { loadSubtaskLinks } from '../db'
 import { theme } from '../theme'
 import { PanelHeader } from './PanelHeader'
 import { DeleteConfirm } from './DeleteConfirm'
 import { ParentSection } from './ParentSection'
 import { SubtasksSection } from './SubtasksSection'
 import { RelatedTasksSection } from './RelatedTasksSection'
+import { NotesSection } from './NotesSection'
+import { StatusScheduleSection } from './StatusScheduleSection'
 
 type QuickSelectPanelProps = {
   task: Task
@@ -27,12 +27,8 @@ type QuickSelectPanelProps = {
 
 export function QuickSelectPanel({ task, statuses, allTasks, onClose, onRename, onChangeStatus, onDelete, onUpdateNotes, onOpenTask, onDoneChange, onBlockingRelationshipAdded, onSubtaskLinkAdded }: QuickSelectPanelProps) {
   const [backdropReady, setBackdropReady] = useState(false)
-  const [statusModalOpen, setStatusModalOpen] = useState(false)
-  const [scheduleModalOpen, setScheduleModalOpen] = useState(false)
-  const [notes, setNotes] = useState(task.notes)
   const [expanded, setExpanded] = useState(false)
   const [subtaskLinks, setSubtaskLinks] = useState<SubtaskLink[]>([])
-  const [scheduledTransitions, setScheduledTransitions] = useState<ScheduledTransition[]>([])
 
   useEffect(() => {
     const id = requestAnimationFrame(() => setExpanded(true))
@@ -46,20 +42,11 @@ export function QuickSelectPanel({ task, statuses, allTasks, onClose, onRename, 
 
   useEffect(() => {
     loadSubtaskLinks(task.id).then(setSubtaskLinks)
-    loadScheduledTransitions(task.id).then(setScheduledTransitions)
   }, [task.id])
-
-  const currentStatus = statuses.find((s) => s.slug === task.statusSlug)
 
   function handleClose() {
     setExpanded(false)
     setTimeout(onClose, 200)
-  }
-
-  function handleNotesBlur() {
-    if (notes !== task.notes) {
-      onUpdateNotes(task.id, notes)
-    }
   }
 
   return (
@@ -81,57 +68,9 @@ export function QuickSelectPanel({ task, statuses, allTasks, onClose, onRename, 
           maxHeight: expanded ? '1000px' : '0',
           transition: 'max-height 0.2s ease',
         }}>
-          <label style={{ display: 'block', fontSize: theme.fontSizes.md, color: '#555', marginTop: 12, marginBottom: 4 }}>
-            Notes
-          </label>
-          <textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            onBlur={handleNotesBlur}
-            style={{
-              width: '100%',
-              minHeight: 80,
-              boxSizing: 'border-box',
-              fontSize: theme.fontSizes.lg,
-              padding: '8px 10px',
-              border: `1px solid ${theme.colors.border}`,
-              borderRadius: theme.radii.md,
-              resize: 'vertical',
-            }}
-          />
-          <div style={{ display: 'flex', alignItems: 'center', gap: theme.space.sm, marginTop: 12 }}>
-            <span style={{ color: '#666', fontSize: theme.fontSizes.md }}>Status:</span>
-            <button
-              onClick={() => setStatusModalOpen(true)}
-              style={{
-                background: theme.colors.selected,
-                border: 'none',
-                borderRadius: theme.radii.md,
-                padding: '4px 10px',
-                cursor: 'pointer',
-                fontSize: theme.fontSizes.md,
-                color: theme.colors.brand,
-                fontWeight: 500,
-              }}
-            >
-              {currentStatus?.name ?? task.statusSlug}
-            </button>
-            <button
-              onClick={() => setScheduleModalOpen(true)}
-              style={{
-                background: '#f3e8ff',
-                border: 'none',
-                borderRadius: theme.radii.md,
-                padding: '4px 10px',
-                cursor: 'pointer',
-                fontSize: theme.fontSizes.md,
-                color: '#7b1fa2',
-                fontWeight: 500,
-              }}
-            >
-              {scheduledTransitions.length > 0 ? `Schedule (${scheduledTransitions.length})` : 'Schedule'}
-            </button>
-          </div>
+          <NotesSection task={task} onUpdateNotes={onUpdateNotes} />
+
+          <StatusScheduleSection task={task} statuses={statuses} onChangeStatus={onChangeStatus} />
 
           <DeleteConfirm taskId={task.id} onDelete={onDelete} onClose={handleClose} />
 
@@ -162,24 +101,6 @@ export function QuickSelectPanel({ task, statuses, allTasks, onClose, onRename, 
           />
         </div>
       </div>
-
-      {statusModalOpen && (
-        <StatusModal
-          statuses={statuses}
-          currentStatusSlug={task.statusSlug}
-          onSelect={(slug) => onChangeStatus(task.id, slug)}
-          onClose={() => setStatusModalOpen(false)}
-        />
-      )}
-
-      {scheduleModalOpen && (
-        <ScheduleModal
-          task={task}
-          statuses={statuses}
-          onClose={() => setScheduleModalOpen(false)}
-          onTransitionsChanged={() => loadScheduledTransitions(task.id).then(setScheduledTransitions)}
-        />
-      )}
     </>
   )
 }
