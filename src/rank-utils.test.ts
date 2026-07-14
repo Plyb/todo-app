@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { LexoRank } from 'lexorank'
-import { byRank, byStringKey, rankBetween } from './rank-utils'
+import { byRank, byStringKey, rankBetween, rankAtInsertIndex } from './rank-utils'
+import type { Task } from './types'
 
 describe('rankBetween', () => {
   it('returns a rank strictly between prev and next when both are given', () => {
@@ -62,5 +63,61 @@ describe('byRank', () => {
     const rank = LexoRank.middle().toString()
 
     expect(byRank({ rank }, { rank })).toBe(0)
+  })
+})
+
+describe('rankAtInsertIndex', () => {
+  const makeTask = (id: number, rank: string): Task => ({
+    id,
+    name: `Task ${id}`,
+    rank,
+    done: false,
+    statusSlug: 'backlog',
+    notes: '',
+  })
+
+  const tasks = [
+    makeTask(1, LexoRank.middle().toString()),
+    makeTask(2, LexoRank.middle().genNext().toString()),
+    makeTask(3, LexoRank.middle().genNext().genNext().toString()),
+  ]
+
+  it('returns a rank before the first task when insertIndex is 0', () => {
+    const result = rankAtInsertIndex(tasks, 0)
+
+    expect(result < tasks[0].rank).toBe(true)
+  })
+
+  it('returns a rank between two tasks when insertIndex is in the middle', () => {
+    const result = rankAtInsertIndex(tasks, 1)
+
+    expect(result > tasks[0].rank).toBe(true)
+    expect(result < tasks[1].rank).toBe(true)
+  })
+
+  it('returns a rank after the last task when insertIndex equals tasks.length', () => {
+    const result = rankAtInsertIndex(tasks, tasks.length)
+
+    expect(result > tasks[tasks.length - 1].rank).toBe(true)
+  })
+
+  it('returns a middle rank when tasks array is empty', () => {
+    const result = rankAtInsertIndex([], 0)
+
+    expect(result).toBe(LexoRank.middle().toString())
+  })
+
+  it('excludes the specified task when computing neighbors', () => {
+    const result = rankAtInsertIndex(tasks, 1, 1)
+
+    expect(result > tasks[0].rank).toBe(true)
+    expect(result < tasks[2].rank).toBe(true)
+  })
+
+  it('produces the same rank as an equivalent rankBetween call with the same neighbors', () => {
+    const result = rankAtInsertIndex(tasks, 2)
+    const equivalentBetween = rankBetween(tasks[1], tasks[2])
+
+    expect(result).toBe(equivalentBetween)
   })
 })
