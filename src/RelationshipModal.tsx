@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { Task } from './types'
 import { addBlock } from './db'
 import { theme } from './theme'
+import { BottomSheet } from './ui/Modal'
 
 type RelatedTaskEntryProps = { task: Task; onOpen: (id: number) => void; onDoneChange: (id: number, done: boolean) => void }
 
@@ -86,107 +87,85 @@ export function RelationshipModal({ currentTaskId, allTasks, onClose, onBlocking
   )
 
   return (
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        backgroundColor: theme.colors.overlay,
-        zIndex: theme.zIndex.modal,
-        display: 'flex',
-        alignItems: 'flex-end',
-      }}
-      onClick={onClose}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          width: '100%',
-          backgroundColor: '#fff',
-          borderRadius: '12px 12px 0 0',
-          padding: theme.space.md,
-          maxHeight: '80vh',
-          overflowY: 'auto',
-        }}
-      >
-        {state.view === 'search' && (
-          <>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <span style={{ fontWeight: 700, fontSize: theme.fontSizes.xl }}>Add Relationship</span>
-              <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: theme.fontSizes.xxl, cursor: 'pointer' }}>
-                ✕
-              </button>
-            </div>
-            <input
-              autoFocus
-              type="text"
-              placeholder="Search tasks..."
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '8px 10px',
-                fontSize: theme.fontSizes.lg,
-                border: '1px solid #ddd',
-                borderRadius: theme.radii.lg,
-                marginBottom: 12,
-                boxSizing: 'border-box',
-              }}
-            />
-            {filtered.length === 0 ? (
-              <div style={{ color: theme.colors.textDisabled, textAlign: 'center', padding: '16px 0' }}>No tasks found</div>
-            ) : (
-              filtered.map((task) => (
-                <div
-                  key={task.id}
-                  onClick={() => setState({ view: 'choose-type', selectedTask: task })}
-                  style={{
-                    padding: '10px 0',
-                    borderBottom: `1px solid ${theme.colors.divider}`,
-                    cursor: 'pointer',
-                  }}
-                >
-                  {task.name}
-                </div>
-              ))
-            )}
-          </>
-        )}
-
-        {state.view === 'choose-type' && (
-          <>
-            <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12, gap: theme.space.sm }}>
-              <button
-                onClick={() => setState({ view: 'search' })}
-                style={{ background: 'none', border: 'none', fontSize: theme.fontSizes.xxl, cursor: 'pointer', padding: 0 }}
+    <BottomSheet onClose={onClose}>
+      {state.view === 'search' && (
+        <>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <span style={{ fontWeight: 700, fontSize: theme.fontSizes.xl }}>Add Relationship</span>
+            <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: theme.fontSizes.xxl, cursor: 'pointer' }}>
+              ✕
+            </button>
+          </div>
+          <input
+            autoFocus
+            type="text"
+            placeholder="Search tasks..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '8px 10px',
+              fontSize: theme.fontSizes.lg,
+              border: '1px solid #ddd',
+              borderRadius: theme.radii.lg,
+              marginBottom: 12,
+              boxSizing: 'border-box',
+            }}
+          />
+          {filtered.length === 0 ? (
+            <div style={{ color: theme.colors.textDisabled, textAlign: 'center', padding: '16px 0' }}>No tasks found</div>
+          ) : (
+            filtered.map((task) => (
+              <div
+                key={task.id}
+                onClick={() => setState({ view: 'choose-type', selectedTask: task })}
+                style={{
+                  padding: '10px 0',
+                  borderBottom: `1px solid ${theme.colors.divider}`,
+                  cursor: 'pointer',
+                }}
               >
-                ←
-              </button>
-              <span style={{ fontWeight: 700, fontSize: theme.fontSizes.xl }}>Choose relationship type</span>
-            </div>
-            <div style={{ color: theme.colors.textSecondary, fontSize: theme.fontSizes.md, marginBottom: 8 }}>
-              Relating to: <strong>{state.selectedTask.name}</strong>
-            </div>
-            <TypeButton
-              label="Blocks"
-              description={<>this task blocks <strong>{state.selectedTask.name}</strong></>}
-              onClick={async () => {
-                await addBlock(currentTaskId, state.selectedTask.id, 'blocks')
-                onBlockingRelationshipAdded?.()
-                onClose()
-              }}
-            />
-            <TypeButton
-              label="Blocked By"
-              description={<><strong>{state.selectedTask.name}</strong> blocks this task</>}
-              onClick={async () => {
-                await addBlock(state.selectedTask.id, currentTaskId, 'blocks')
-                onBlockingRelationshipAdded?.()
-                onClose()
-              }}
-            />
-          </>
-        )}
-      </div>
-    </div>
+                {task.name}
+              </div>
+            ))
+          )}
+        </>
+      )}
+
+      {state.view === 'choose-type' && (
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12, gap: theme.space.sm }}>
+            <button
+              onClick={() => setState({ view: 'search' })}
+              style={{ background: 'none', border: 'none', fontSize: theme.fontSizes.xxl, cursor: 'pointer', padding: 0 }}
+            >
+              ←
+            </button>
+            <span style={{ fontWeight: 700, fontSize: theme.fontSizes.xl }}>Choose relationship type</span>
+          </div>
+          <div style={{ color: theme.colors.textSecondary, fontSize: theme.fontSizes.md, marginBottom: 8 }}>
+            Relating to: <strong>{state.selectedTask.name}</strong>
+          </div>
+          <TypeButton
+            label="Blocks"
+            description={<>this task blocks <strong>{state.selectedTask.name}</strong></>}
+            onClick={async () => {
+              await addBlock(currentTaskId, state.selectedTask.id, 'blocks')
+              onBlockingRelationshipAdded?.()
+              onClose()
+            }}
+          />
+          <TypeButton
+            label="Blocked By"
+            description={<><strong>{state.selectedTask.name}</strong> blocks this task</>}
+            onClick={async () => {
+              await addBlock(state.selectedTask.id, currentTaskId, 'blocks')
+              onBlockingRelationshipAdded?.()
+              onClose()
+            }}
+          />
+        </>
+      )}
+    </BottomSheet>
   )
 }
