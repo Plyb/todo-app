@@ -5,6 +5,7 @@ import { useTasks } from '../tasks-context'
 import { RelationshipModal, RelationshipGroup } from '../RelationshipModal'
 import { theme } from '../theme'
 import { PrimaryButton } from '../ui/Button'
+import { groupBlockingRelationships } from './derivations'
 
 type RelatedTasksSectionProps = {
   task: Task
@@ -27,26 +28,7 @@ export function RelatedTasksSection({ task, allTasks, onOpenTask, onBlockingRela
     onBlockingRelationshipAdded()
   }
 
-  const blocksGroup = {
-    label: 'Blocks',
-    tasks: blockingRelationships
-      .filter((r) => r.fromTaskId === task.id)
-      .map((r) => allTasks.find((t) => t.id === r.toTaskId))
-      .filter((t): t is Task => t !== undefined),
-  }
-
-  const blockedByGroup = {
-    label: 'Blocked by',
-    tasks: blockingRelationships
-      .filter((r) => r.toTaskId === task.id)
-      .map((r) => allTasks.find((t) => t.id === r.fromTaskId))
-      .filter((t): t is Task => t !== undefined),
-  }
-
-  const relatedGroups: Array<{ label: string; tasks: Task[] }> = [
-    ...(blocksGroup.tasks.length > 0 ? [blocksGroup] : []),
-    ...(blockedByGroup.tasks.length > 0 ? [blockedByGroup] : []),
-  ]
+  const relatedGroups = groupBlockingRelationships(task, allTasks, blockingRelationships)
 
   return (
     <>

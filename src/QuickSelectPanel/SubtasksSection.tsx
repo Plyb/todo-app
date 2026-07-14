@@ -6,6 +6,7 @@ import { LinkExistingTaskModal } from '../LinkExistingTaskModal'
 import { DraggableList } from '../DraggableList'
 import { rankBetween } from '../rank-utils'
 import { theme } from '../theme'
+import { resolveSubtaskItems } from './derivations'
 
 type SubtasksSectionProps = {
   task: Task
@@ -69,12 +70,7 @@ export function SubtasksSection({ task, allTasks, subtaskLinks, setSubtaskLinks,
     setShowLinkExistingModal(false)
   }
 
-  const subtaskItems = subtaskLinks
-    .map((link) => {
-      const childTask = allTasks.find((t) => t.id === link.childTaskId)
-      return childTask ? { id: link.id, link, childTask } : undefined
-    })
-    .filter((item): item is { id: number; link: SubtaskLink; childTask: Task } => item !== undefined)
+  const subtaskItems = resolveSubtaskItems(subtaskLinks, allTasks)
 
   return (
     <>

@@ -4,6 +4,7 @@ import { DraggableList } from './DraggableList'
 import { theme } from './theme'
 import { Modal } from './ui/Modal'
 import { PrimaryButton, SecondaryButton } from './ui/Button'
+import { partitionStatuses } from './modal-derivations'
 
 export type ViewEditorModalProps = {
   view: View
@@ -18,10 +19,7 @@ export function ViewEditorModal({ view, statuses, onSave, onClose }: ViewEditorM
   const [name, setName] = useState(view.name)
   const [slugs, setSlugs] = useState<string[]>(view.statusSlugs)
 
-  const selectedStatuses = slugs
-    .map((s) => statuses.find((st) => st.slug === s))
-    .filter((st): st is Status => st !== undefined)
-  const unselectedStatuses = statuses.filter((st) => !slugs.includes(st.slug))
+  const { selected: selectedStatuses, unselected: unselectedStatuses } = partitionStatuses(statuses, slugs)
 
   function toggle(slug: string) {
     setSlugs((prev) =>
