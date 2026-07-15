@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react'
+import React, { useLayoutEffect, useRef, useState } from 'react'
 import {
   DndContext,
   DragOverlay,
@@ -24,6 +24,7 @@ import { findInsertIndex } from './pointer-utils'
 const MOUSE_DRAG_ACTIVATION_PX = 8
 const TOUCH_DRAG_DELAY_MS = 400
 const TOUCH_DRAG_TOLERANCE_PX = 8
+const SECTION_SHIFT_TRANSITION = 'transform 200ms ease'
 // The very last section's container has no dead space below its own items to
 // register a drop target on (padding/margin are both 0), so there's nowhere
 // to drop "at the end of the list" without landing exactly on the last item.
@@ -228,6 +229,42 @@ function SectionList<T extends { id: number }>({
   )
 }
 
+// A section header (and everything below it) instantly jumps to its new
+// position whenever a PRECEDING section's height changes - e.g. a task
+// crossing between sections during a drag. dnd-kit's transform-based
+// animation only ever applies to the individual sortable `<li>` items it
+// manages, not to arbitrary sibling content like `section.header`, so absent
+// this, headers would snap while the items right below them ease smoothly.
+// This applies the classic FLIP technique to the whole header+items chunk as
+// one unit (not just the header) so they always shift in lockstep - if only
+// the header eased into place, it would visibly detach from its own
+// (instantly-repositioned) items mid-transition.
+function AnimatedSection({ children }: { children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const previousTop = useRef<number | null>(null)
+
+  useLayoutEffect(() => {
+    const node = ref.current
+    if (!node) return
+    const newTop = node.getBoundingClientRect().top
+    const delta = previousTop.current !== null ? previousTop.current - newTop : 0
+    previousTop.current = newTop
+    if (delta === 0) return
+
+    node.style.transition = 'none'
+    node.style.transform = `translateY(${delta}px)`
+    // Force a layout flush so the browser registers the starting transform
+    // above before the next frame animates away from it.
+    node.getBoundingClientRect()
+    requestAnimationFrame(() => {
+      node.style.transition = SECTION_SHIFT_TRANSITION
+      node.style.transform = ''
+    })
+  })
+
+  return <div ref={ref}>{children}</div>
+}
+
 export function DraggableList<T extends { id: number }>({
   sections,
   onReorder,
@@ -327,7 +364,7 @@ export function DraggableList<T extends { id: number }>({
     >
       <div ref={listRef}>
         {renderSections.map((section, sectionIndex) => (
-          <React.Fragment key={sectionIndex}>
+          <AnimatedSection key={sectionIndex}>
             {section.header}
             <SortableContext items={section.items.map((t) => t.id)} strategy={verticalListSortingStrategy}>
               <SectionList
@@ -341,7 +378,7 @@ export function DraggableList<T extends { id: number }>({
                 expandedSlot={expandedSlot}
               />
             </SortableContext>
-          </React.Fragment>
+          </AnimatedSection>
         ))}
       </div>
 
