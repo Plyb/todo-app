@@ -1,10 +1,17 @@
 import { describe, expect, it } from 'vitest'
-import { resolveReorder } from './drag-utils'
+import { moveItemToSection, resolveDrop, resolveReorder, toSectionDropId } from './drag-utils'
 
 function sectionsFixture() {
   return [
     { items: [{ id: 1 }, { id: 2 }, { id: 3 }] },
     { items: [{ id: 4 }, { id: 5 }] },
+  ]
+}
+
+function sectionsFixtureWithEmpty() {
+  return [
+    { items: [{ id: 1 }, { id: 2 }, { id: 3 }] },
+    { items: [] as { id: number }[] },
   ]
 }
 
@@ -25,5 +32,60 @@ describe('resolveReorder', () => {
     const result = resolveReorder(sectionsFixture(), 1, 5)
 
     expect(result).toEqual({ toSectionIndex: 1, insertIndex: 1 })
+  })
+})
+
+describe('resolveDrop', () => {
+  it('delegates to resolveReorder when overId is a real item id', () => {
+    const result = resolveDrop(sectionsFixture(), 1, 5)
+
+    expect(result).toEqual({ toSectionIndex: 1, insertIndex: 1 })
+  })
+
+  it('returns null when hovering the dragged item itself', () => {
+    const result = resolveDrop(sectionsFixture(), 1, 1)
+
+    expect(result).toBeNull()
+  })
+
+  it('resolves a section-container id to the end of an empty section', () => {
+    const result = resolveDrop(sectionsFixtureWithEmpty(), 1, toSectionDropId(1))
+
+    expect(result).toEqual({ toSectionIndex: 1, insertIndex: 0 })
+  })
+
+  it('resolves a section-container id to the end of a populated section', () => {
+    const result = resolveDrop(sectionsFixture(), 1, toSectionDropId(1))
+
+    expect(result).toEqual({ toSectionIndex: 1, insertIndex: 2 })
+  })
+})
+
+describe('moveItemToSection', () => {
+  it('relocates the active item into an empty target section', () => {
+    const result = moveItemToSection(sectionsFixtureWithEmpty(), 1, 1, 0)
+
+    expect(result).toEqual([
+      { items: [{ id: 2 }, { id: 3 }] },
+      { items: [{ id: 1 }] },
+    ])
+  })
+
+  it('relocates the active item into a populated target section at the given index', () => {
+    const result = moveItemToSection(sectionsFixture(), 1, 1, 1)
+
+    expect(result).toEqual([
+      { items: [{ id: 2 }, { id: 3 }] },
+      { items: [{ id: 4 }, { id: 1 }, { id: 5 }] },
+    ])
+  })
+
+  it('repositions within the same section', () => {
+    const result = moveItemToSection(sectionsFixture(), 1, 0, 2)
+
+    expect(result).toEqual([
+      { items: [{ id: 2 }, { id: 3 }, { id: 1 }] },
+      { items: [{ id: 4 }, { id: 5 }] },
+    ])
   })
 })

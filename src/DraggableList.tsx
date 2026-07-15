@@ -4,17 +4,19 @@ import {
   DragOverlay,
   MouseSensor,
   TouchSensor,
+  useDroppable,
   useSensor,
   useSensors,
   closestCenter,
   type DragEndEvent,
+  type DragOverEvent,
   type DragStartEvent,
   type UniqueIdentifier,
 } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { theme } from './theme'
-import { resolveReorder } from './drag-utils'
+import { resolveDrop, moveItemToSection, toSectionDropId } from './drag-utils'
 import { findInsertIndex } from './pointer-utils'
 
 const MOUSE_DRAG_ACTIVATION_PX = 8
@@ -83,6 +85,19 @@ function SortableItem<T extends { id: number }>({
     // their pre-drop position and then transition again once the reordered
     // data arrives, doubling the movement. The drag-preview transform (shown
     // while dragging) is unaffected by this and keeps animating normally.
+    //
+    // Nuance: this only ever suppresses the POST-drop settle animation, not
+    // the live "space opening" shift while hovering during an active drag.
+    // dnd-kit's own getTransition() applies the CSS transition whenever
+    // `isSorting` is true (i.e. any drag is active anywhere in this
+    // DndContext) regardless of what animateLayoutChanges returns — it's
+    // only consulted once a drag ends. So disabling it unconditionally here
+    // doesn't kill the cross-section hover animation; what was actually
+    // missing was getting the dragged item into the target section's
+    // `items` list during hover in the first place (see handleDragOver /
+    // moveItemToSection below), since dnd-kit only computes a shift
+    // transform for items it considers part of the same sortable list as
+    // the active drag.
     animateLayoutChanges: () => false,
   })
 
@@ -113,6 +128,67 @@ function SortableItem<T extends { id: number }>({
   )
 }
 
+function SectionList<T extends { id: number }>({
+  section,
+  sectionIndex,
+  renderItem,
+  itemStyle,
+  onItemClick,
+  insertSlot,
+  expandedSlot,
+}: {
+  section: Section<T>
+  sectionIndex: number
+  renderItem: (item: T) => React.ReactNode
+  itemStyle?: (item: T) => React.CSSProperties
+  onItemClick?: (id: number) => void
+  insertSlot?: DraggableListProps<T>['insertSlot']
+  expandedSlot?: DraggableListProps<T>['expandedSlot']
+}) {
+  // Registers the section's own container as a droppable target (in
+  // addition to its individual items) so dragging into it resolves to a
+  // valid `over` even when the section has no items to register per-item
+  // drop targets of its own.
+  const { setNodeRef } = useDroppable({ id: toSectionDropId(sectionIndex) })
+
+  return (
+    <ul
+      ref={setNodeRef}
+      data-section-index={sectionIndex}
+      style={{ listStyle: 'none', padding: 0, margin: 0, position: 'relative' }}
+    >
+      {section.items.map((item, i) => {
+        const isExpanded = expandedSlot?.afterItemId === item.id
+        return (
+          <React.Fragment key={item.id}>
+            {insertSlot?.sectionIndex === sectionIndex && insertSlot.index === i && (
+              <li data-insert-slot style={{ listStyle: 'none' }}>{insertSlot.content}</li>
+            )}
+            {isExpanded ? (
+              <li
+                style={{ listStyle: 'none', position: 'relative', zIndex: 11 }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {expandedSlot!.content}
+              </li>
+            ) : (
+              <SortableItem
+                item={item}
+                renderItem={renderItem}
+                itemStyle={itemStyle}
+                onItemClick={onItemClick}
+              />
+            )}
+          </React.Fragment>
+        )
+      })}
+      {insertSlot?.sectionIndex === sectionIndex && insertSlot.index === section.items.length && (
+        <li data-insert-slot style={{ listStyle: 'none' }}>{insertSlot.content}</li>
+      )}
+    </ul>
+  )
+}
+
 export function DraggableList<T extends { id: number }>({
   sections,
   onReorder,
@@ -126,6 +202,14 @@ export function DraggableList<T extends { id: number }>({
   onDragEnd,
 }: DraggableListProps<T>) {
   const [activeId, setActiveId] = useState<number | null>(null)
+  // Live preview of `sections` while a cross-section drag is hovering: the
+  // dragged item is optimistically relocated into the hovered section so
+  // dnd-kit recognizes it as part of that section's sortable list and plays
+  // its shift animation for the other items there. Only ever used for
+  // rendering during a drag — the actual commit in handleDragEnd always
+  // resolves against the real `sections` prop.
+  const [dragSections, setDragSections] = useState<Section<T>[] | null>(null)
+  const renderSections = dragSections ?? sections
 
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: MOUSE_DRAG_ACTIVATION_PX } }),
@@ -140,16 +224,30 @@ export function DraggableList<T extends { id: number }>({
     onDragStart?.()
   }
 
+  function handleDragOver({ active, over }: DragOverEvent) {
+    if (!over) return
+    const activeItemId = toItemId(active.id)
+    const workingSections = dragSections ?? sections
+    const target = resolveDrop(workingSections, activeItemId, over.id)
+    if (!target) return
+    setDragSections(moveItemToSection(workingSections, activeItemId, target.toSectionIndex, target.insertIndex))
+  }
+
   function handleDragEnd({ active, over }: DragEndEvent) {
-    if (over && active.id !== over.id) {
-      const { toSectionIndex, insertIndex } = resolveReorder(sections, toItemId(active.id), toItemId(over.id))
-      onReorder(toItemId(active.id), toSectionIndex, insertIndex)
+    if (over) {
+      const activeItemId = toItemId(active.id)
+      const target = resolveDrop(sections, activeItemId, over.id)
+      if (target) {
+        onReorder(activeItemId, target.toSectionIndex, target.insertIndex)
+      }
     }
+    setDragSections(null)
     setActiveId(null)
     onDragEnd?.()
   }
 
   function handleDragCancel() {
+    setDragSections(null)
     setActiveId(null)
     onDragEnd?.()
   }
@@ -159,47 +257,24 @@ export function DraggableList<T extends { id: number }>({
       sensors={sensors}
       collisionDetection={closestCenter}
       onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
     >
       <div ref={listRef}>
-        {sections.map((section, sectionIndex) => (
+        {renderSections.map((section, sectionIndex) => (
           <React.Fragment key={sectionIndex}>
             {section.header}
             <SortableContext items={section.items.map((t) => t.id)} strategy={verticalListSortingStrategy}>
-              <ul
-                data-section-index={sectionIndex}
-                style={{ listStyle: 'none', padding: 0, margin: 0, position: 'relative' }}
-              >
-                {section.items.map((item, i) => {
-                  const isExpanded = expandedSlot?.afterItemId === item.id
-                  return (
-                    <React.Fragment key={item.id}>
-                      {insertSlot?.sectionIndex === sectionIndex && insertSlot.index === i && (
-                        <li data-insert-slot style={{ listStyle: 'none' }}>{insertSlot.content}</li>
-                      )}
-                      {isExpanded ? (
-                        <li
-                          style={{ listStyle: 'none', position: 'relative', zIndex: 11 }}
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {expandedSlot!.content}
-                        </li>
-                      ) : (
-                        <SortableItem
-                          item={item}
-                          renderItem={renderItem}
-                          itemStyle={itemStyle}
-                          onItemClick={onItemClick}
-                        />
-                      )}
-                    </React.Fragment>
-                  )
-                })}
-                {insertSlot?.sectionIndex === sectionIndex && insertSlot.index === section.items.length && (
-                  <li data-insert-slot style={{ listStyle: 'none' }}>{insertSlot.content}</li>
-                )}
-              </ul>
+              <SectionList
+                section={section}
+                sectionIndex={sectionIndex}
+                renderItem={renderItem}
+                itemStyle={itemStyle}
+                onItemClick={onItemClick}
+                insertSlot={insertSlot}
+                expandedSlot={expandedSlot}
+              />
             </SortableContext>
           </React.Fragment>
         ))}
