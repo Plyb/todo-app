@@ -115,6 +115,19 @@ function findTailPaddingIndex<T>(rows: Row<T>[]): number {
 function useRowShiftFlip(nodeRef: React.RefObject<HTMLElement | null>, isDragActive: boolean) {
   const previousTop = useRef<number | null>(null)
   const wasDragActive = useRef(isDragActive)
+  const pendingRaf = useRef<number | null>(null)
+  // The Y-offset this hook currently has applied via node.style.transform (0
+  // when settled). getBoundingClientRect reflects live transforms, so a
+  // measurement taken while a previous snap is still mid-flight has to
+  // subtract this back out to recover the row's TRUE natural position -
+  // otherwise a rapid run of reflows (the FAB moving on every pointermove,
+  // faster than one settle per animation frame) compounds a contaminated
+  // delta on top of an already-wrong one instead of converging. This also
+  // makes a duplicate effect invocation with no real change in between (e.g.
+  // React StrictMode's dev-mode double-invoke of every commit's effects,
+  // not just on mount) a true no-op instead of wiping out the first
+  // invocation's just-applied transform.
+  const appliedOffset = useRef(0)
 
   useLayoutEffect(() => {
     const node = nodeRef.current
@@ -124,24 +137,38 @@ function useRowShiftFlip(nodeRef: React.RefObject<HTMLElement | null>, isDragAct
       // dnd-kit's own live shift-preview owns this row's transform while a
       // drag is active - don't compare against a position that's itself an
       // artifact of that live transform.
+      if (pendingRaf.current !== null) {
+        cancelAnimationFrame(pendingRaf.current)
+        pendingRaf.current = null
+      }
       previousTop.current = null
       wasDragActive.current = true
       return
     }
 
-    const newTop = node.getBoundingClientRect().top
+    const measuredTop = node.getBoundingClientRect().top
+    const trueTop = measuredTop - appliedOffset.current
     const justEndedDrag = wasDragActive.current
     wasDragActive.current = false
-    const delta = !justEndedDrag && previousTop.current !== null ? previousTop.current - newTop : 0
-    previousTop.current = newTop
+    const delta = !justEndedDrag && previousTop.current !== null ? previousTop.current - trueTop : 0
+    previousTop.current = trueTop
+    // No real movement since the last invocation - leave any in-flight
+    // animation exactly as it is (don't cancel its pending rAF either).
     if (delta === 0) return
+
+    if (pendingRaf.current !== null) {
+      cancelAnimationFrame(pendingRaf.current)
+    }
 
     node.style.transition = 'none'
     node.style.transform = `translateY(${delta}px)`
+    appliedOffset.current = delta
     node.getBoundingClientRect() // flush layout so the starting transform above is registered
-    requestAnimationFrame(() => {
+    pendingRaf.current = requestAnimationFrame(() => {
+      pendingRaf.current = null
       node.style.transition = ROW_SHIFT_TRANSITION
       node.style.transform = ''
+      appliedOffset.current = 0
     })
   })
 }
@@ -162,6 +189,13 @@ function SortableRow<T extends { id: number }>({
   isDragActive: boolean
 }) {
   const isTask = row.kind === 'item'
+  // Every OTHER header legitimately needs to shift live as a preceding
+  // section grows/shrinks during the drag (that's the whole point of the
+  // boundary moving to track where the section actually starts) - only the
+  // very first section's header has nothing above it that could ever change,
+  // so it alone should never be displaced by a live drag.
+  const isTopHeader = row.kind === 'header' && row.sectionIndex === 0
+  const shouldLiveShift = isTask || (row.kind === 'header' && !isTopHeader)
   const elementRef = useRef<HTMLLIElement | null>(null)
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: row.id,
@@ -170,14 +204,13 @@ function SortableRow<T extends { id: number }>({
     // instead (see above) - dnd-kit's own layout-change animation proved
     // unreliable for those non-drag cases in practice.
     animateLayoutChanges: () => false,
-    // Only real tasks should be displaced by dnd-kit's own live shift-preview
-    // during an active drag: its naive index-range strategy shifts EVERY row
-    // between activeIndex and overIndex, which would otherwise also drag a
-    // header along for the ride whenever one happens to fall in that range
-    // (e.g. the very first header, or a section boundary header crossed
-    // while dragging) - headers/insert-slot/expanded rows must stay put
-    // during a live drag and only ever move via the settle FLIP afterward.
-    strategy: isTask ? undefined : () => null,
+    // dnd-kit's naive index-range strategy shifts EVERY row between
+    // activeIndex and overIndex - fine for tasks and non-first headers
+    // (which should track a section boundary moving), but wrong for the
+    // very first header (nothing above it can move) and for insert-slot/
+    // expanded rows, which should stay put during a live drag and only ever
+    // move via the settle FLIP afterward.
+    strategy: shouldLiveShift ? undefined : () => null,
     transition: ROW_SHIFT_TRANSITION_CONFIG,
   })
 
