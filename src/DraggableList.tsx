@@ -7,9 +7,6 @@ import {
   useDroppable,
   useSensor,
   useSensors,
-  pointerWithin,
-  rectIntersection,
-  type CollisionDetection,
   type DragEndEvent,
   type DragOverEvent,
   type DragStartEvent,
@@ -18,7 +15,14 @@ import {
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { theme } from './theme'
-import { isBelowMidpoint, locateItem, resolveDrop, moveItemToSection, toSectionDropId } from './drag-utils'
+import {
+  collisionDetection,
+  isBelowMidpoint,
+  moveItemToSection,
+  resolveCommit,
+  resolveDrop,
+  toSectionDropId,
+} from './drag-utils'
 import { findInsertIndex } from './pointer-utils'
 
 const MOUSE_DRAG_ACTIVATION_PX = 8
@@ -34,29 +38,6 @@ const LAST_SECTION_DROP_TAIL_HEIGHT = 96
 
 function toItemId(id: UniqueIdentifier): number {
   return typeof id === 'number' ? id : Number(id)
-}
-
-// Every section's own container is registered as a droppable alongside its
-// items (see SectionList), so a single item can simultaneously sit "within"
-// both its item-level droppable and the enclosing section's much larger
-// container droppable. `closestCenter` picks whichever droppable's CENTER is
-// nearest the dragged item's center — since a section container spans every
-// item in it, its center is the section's overall midpoint, which can end up
-// closer than the specific hovered item's own (much smaller) center,
-// especially mid-section. That made the empty-section/"section index"
-// branch fire even while hovering a real item, unpredictably depending on
-// section length and hover position.
-// `pointerWithin` instead only considers droppables whose rect the pointer
-// coordinate literally falls inside, then breaks ties by distance to that
-// rect's corners. An item rect is much smaller/tighter around the pointer
-// than its enclosing section rect, so its corner-distance is naturally
-// smaller too — items win over their own container whenever the pointer is
-// actually over one. Falls back to `rectIntersection` (dnd-kit's own
-// default) for the rare case for gaps pointerWithin misses entirely (e.g.
-// margins between sections).
-const collisionDetection: CollisionDetection = (args) => {
-  const pointerCollisions = pointerWithin(args)
-  return pointerCollisions.length > 0 ? pointerCollisions : rectIntersection(args)
 }
 
 export function getInsertSlotAt(container: HTMLElement, clientY: number): { sectionIndex: number; index: number } {
@@ -113,23 +94,10 @@ function SortableItem<T extends { id: number }>({
     isDragging,
   } = useSortable({
     id: item.id,
-    // dnd-kit's default layout-change animation causes items to snap back to
-    // their pre-drop position and then transition again once the reordered
-    // data arrives, doubling the movement. The drag-preview transform (shown
-    // while dragging) is unaffected by this and keeps animating normally.
-    //
-    // Nuance: this only ever suppresses the POST-drop settle animation, not
-    // the live "space opening" shift while hovering during an active drag.
-    // dnd-kit's own getTransition() applies the CSS transition whenever
-    // `isSorting` is true (i.e. any drag is active anywhere in this
-    // DndContext) regardless of what animateLayoutChanges returns — it's
-    // only consulted once a drag ends. So disabling it unconditionally here
-    // doesn't kill the cross-section hover animation; what was actually
-    // missing was getting the dragged item into the target section's
-    // `items` list during hover in the first place (see handleDragOver /
-    // moveItemToSection below), since dnd-kit only computes a shift
-    // transform for items it considers part of the same sortable list as
-    // the active drag.
+    // Suppresses only the POST-drop settle animation (which otherwise snaps
+    // items back then re-transitions, doubling the movement) - dnd-kit's own
+    // transition still plays during an active drag regardless of this, so it
+    // doesn't affect the live "space opening" shift (see handleDragOver).
     animateLayoutChanges: () => false,
   })
 
@@ -229,25 +197,14 @@ function SectionList<T extends { id: number }>({
   )
 }
 
-// A section header instantly jumps to its new position whenever a PRECEDING
-// section's height changes - e.g. a task crossing between sections during a
-// drag. dnd-kit's transform-based animation only ever applies to the
-// individual sortable `<li>` items it manages, not to arbitrary sibling
-// content like `section.header`, so absent this, headers would snap while
-// the items right below them ease smoothly.
-//
-// This wraps ONLY the header, not its section's `<SortableContext>`/items:
-// wrapping the items too (an earlier attempt) put an animated CSS transform
-// on an ancestor of every sortable item and droppable dnd-kit tracks in that
-// section, and dnd-kit measures those via getBoundingClientRect() (which
-// reflects live transforms) both for its own item-shift math and for our
-// collision detection - so mid-animation, dnd-kit was measuring items at
-// whatever offset this wrapper's transform happened to be at that instant,
-// corrupting both the shift animation and collision resolution for that
-// section. The `<ul>`'s own items already reach their correct rest position
-// immediately (dnd-kit's own animation handles their internal "open a gap"
-// shift on its own, untouched by this) - only the header needs to visibly
-// catch up to them.
+// FLIPs a section's header to its new position when a PRECEDING section's
+// height change shifts it (dnd-kit only animates the sortable items it
+// manages, not arbitrary sibling content like `section.header`). Wraps ONLY
+// the header, not the section's items/SortableContext: dnd-kit measures
+// those via getBoundingClientRect() (which reflects live transforms) for
+// both its own shift animation and collision detection, so an animated
+// transform on an ancestor of theirs would corrupt both - the items already
+// reach their correct rest position immediately on their own.
 function AnimatedHeader({ children }: { children: React.ReactNode }) {
   const ref = useRef<HTMLDivElement>(null)
   const previousTop = useRef<number | null>(null)
@@ -287,30 +244,22 @@ export function DraggableList<T extends { id: number }>({
   onDragEnd,
 }: DraggableListProps<T>) {
   const [activeId, setActiveId] = useState<number | null>(null)
-  // Live preview of `sections` while a cross-section drag is hovering: only
-  // set once the dragged item crosses INTO a section it isn't already a
-  // member of, so dnd-kit recognizes it as part of that section's sortable
-  // list and plays its shift animation for the other items there. Reordering
-  // WITHIN whatever section the item is currently a member of (its original
-  // section, or a section it already crossed into earlier this same drag)
-  // is deliberately left untouched here — @dnd-kit/sortable's own engine
-  // animates that purely from its stable `items` array plus the live
-  // over/active ids, via its own context, independently of whether this
-  // component re-renders. Setting `dragSections` on every such index change
-  // used to feed it a fresh (but data-equivalent) `items` array reference on
-  // nearly every pointer-move tick; @dnd-kit/sortable treats a changed
-  // `items` reference as "a real external reorder just landed" and briefly
-  // disables its shift transition to avoid double-animating that case, so
-  // constantly-fresh arrays tripped that suppression almost every render —
-  // that's what made the live animation snap/bounce instead of easing.
+  // Live preview of `sections`, set only when the dragged item crosses INTO
+  // a section it isn't already a member of, so dnd-kit recognizes it as part
+  // of that section's sortable list and plays its shift animation there.
+  // Reordering WITHIN the item's current section is left untouched -
+  // @dnd-kit/sortable already animates that on its own from a stable `items`
+  // array; feeding it a fresh array on every such change instead (an earlier
+  // attempt) tripped its "a real reorder just landed" transition-suppression
+  // heuristic on nearly every render, causing the live animation to
+  // snap/bounce instead of easing.
   const [dragSections, setDragSections] = useState<Section<T>[] | null>(null)
   const renderSections = dragSections ?? sections
-  // The most recently resolved drop target, tracked independently of
-  // `dragSections` so the final commit in handleDragEnd doesn't depend on
-  // `over.id` at the exact moment of drop — which is frequently the active
-  // item's own id once it's already sitting where the pointer is (see
-  // resolveDrop) — nor on `dragSections`, which (per above) intentionally
-  // stays stale/unset during same-section reordering.
+  // The most recently resolved drop target. Tracked separately from
+  // `dragSections` (which, per above, intentionally stays stale/unset during
+  // same-section reordering) so the final commit in handleDragEnd doesn't
+  // depend on `over.id` at the exact moment of drop - which is frequently the
+  // active item's own id once it's already sitting where the pointer is.
   const dragTargetRef = useRef<{ toSectionIndex: number; insertIndex: number } | null>(null)
 
   const sensors = useSensors(
@@ -331,33 +280,26 @@ export function DraggableList<T extends { id: number }>({
     if (!over) return
     const activeItemId = toItemId(active.id)
     const workingSections = dragSections ?? sections
-    // For a cross-section drop, resolveReorder has no prior position within
-    // the target section to infer a direction from (unlike same-section
-    // dragging), so it needs this instead: is the dragged item's current
-    // (live) center below the hovered item's own center? Without it, it
-    // always inserted before whatever item the pointer first lands on when
-    // crossing into a section - so re-entering a section anywhere on its
-    // last item would insert before that item (shifting it down with no
-    // prior state to animate from - a jarring snap), only to immediately
-    // re-resolve to "append at the end" as the pointer continued past it.
+    // insertAfter: is the dragged item's current (live) center below the
+    // hovered item's own center? A cross-section drop has no prior position
+    // within the target section to infer a direction from (unlike
+    // same-section dragging), so without this it always inserted before
+    // whatever item the pointer first landed on when crossing into a
+    // section - see resolveReorder for the snap/re-resolve glitch that caused.
     const insertAfter = isBelowMidpoint(active.rect.current.translated, over.rect)
     const target = resolveDrop(workingSections, activeItemId, over.id, insertAfter)
     if (!target) return
     dragTargetRef.current = target
 
-    const { sectionIndex: currentSectionIndex } = locateItem(workingSections, activeItemId)
-    if (target.toSectionIndex === currentSectionIndex) return
+    if (target.toSectionIndex === target.fromSectionIndex) return
     setDragSections(moveItemToSection(workingSections, activeItemId, target.toSectionIndex, target.insertIndex))
   }
 
   function handleDragEnd({ active }: DragEndEvent) {
     const activeItemId = toItemId(active.id)
-    const target = dragTargetRef.current
-    if (target) {
-      const { sectionIndex: fromSectionIndex, itemIndex: fromIndex } = locateItem(sections, activeItemId)
-      if (target.toSectionIndex !== fromSectionIndex || target.insertIndex !== fromIndex) {
-        onReorder(activeItemId, target.toSectionIndex, target.insertIndex)
-      }
+    const commit = resolveCommit(sections, activeItemId, dragTargetRef.current)
+    if (commit) {
+      onReorder(activeItemId, commit.toSectionIndex, commit.insertIndex)
     }
     dragTargetRef.current = null
     setDragSections(null)
