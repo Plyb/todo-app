@@ -1,4 +1,4 @@
-function locateItem<T extends { id: number }>(
+export function locateItem<T extends { id: number }>(
   sections: { items: T[] }[],
   id: number
 ): { sectionIndex: number; itemIndex: number } {

@@ -16,7 +16,7 @@ import {
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { theme } from './theme'
-import { resolveDrop, moveItemToSection, toSectionDropId } from './drag-utils'
+import { locateItem, resolveDrop, moveItemToSection, toSectionDropId } from './drag-utils'
 import { findInsertIndex } from './pointer-utils'
 
 const MOUSE_DRAG_ACTIVATION_PX = 8
@@ -235,10 +235,19 @@ export function DraggableList<T extends { id: number }>({
 
   function handleDragEnd({ active, over }: DragEndEvent) {
     if (over) {
+      // Resolve the final placement from `dragSections` (the live hover
+      // preview) rather than recomputing from `over.id` against the pristine
+      // `sections`: by the time the drag settles, the preview has usually
+      // already relocated the active item to sit exactly under the pointer,
+      // so `over.id` is frequently the active item's own id — that's a
+      // meaningful "no-op" mid-hover (see resolveDrop), but treating it the
+      // same way here would silently discard the vast majority of real drops.
       const activeItemId = toItemId(active.id)
-      const target = resolveDrop(sections, activeItemId, over.id)
-      if (target) {
-        onReorder(activeItemId, target.toSectionIndex, target.insertIndex)
+      const workingSections = dragSections ?? sections
+      const { sectionIndex: toSectionIndex, itemIndex: insertIndex } = locateItem(workingSections, activeItemId)
+      const { sectionIndex: fromSectionIndex, itemIndex: fromIndex } = locateItem(sections, activeItemId)
+      if (toSectionIndex !== fromSectionIndex || insertIndex !== fromIndex) {
+        onReorder(activeItemId, toSectionIndex, insertIndex)
       }
     }
     setDragSections(null)
