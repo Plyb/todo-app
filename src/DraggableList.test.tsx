@@ -162,7 +162,15 @@ describe('non-drag reflow animation (hand-rolled FLIP)', () => {
     expect(rafCallback).toBeNull()
   })
 
-  it('also animates an item row shifting down when the FAB inserts a slot above it', () => {
+  it('does NOT animate rows while insertSlot is FAB-driven - they snap instantly instead', () => {
+    // A live FAB drag resolves a new insertSlot position on every pointermove
+    // - far more often than an ease can ever settle between changes.
+    // Animating each one both looks chaotic and (more importantly) breaks
+    // getInsertSlotAt's own getBoundingClientRect reads, which would
+    // otherwise see a mid-flight transformed position instead of the row's
+    // true one and feed an incorrect result back into the FAB's own
+    // placement decision - so this row must snap, not ease, the whole time
+    // insertSlot is present.
     const topByNode = new WeakMap<Element, number>()
     mockTop(topByNode)
 
@@ -180,12 +188,51 @@ describe('non-drag reflow animation (hand-rolled FLIP)', () => {
       />
     )
 
-    expect(item2Row.style.transform).toBe('translateY(-60px)')
-
-    rafCallback?.(0)
-
     expect(item2Row.style.transform).toBe('')
-    expect(item2Row.style.transition).toBe('transform 200ms ease')
+    expect(rafCallback).toBeNull()
+  })
+
+  it('resumes animating once the FAB drag ends (insertSlot goes back to undefined)', () => {
+    const topByNode = new WeakMap<Element, number>()
+    mockTop(topByNode)
+
+    const { rerender } = renderList([{ header: <h2>Section A</h2>, items: [{ id: 1 }, { id: 2 }] }])
+
+    rerender(
+      <DraggableList
+        sections={[{ header: <h2>Section A</h2>, items: [{ id: 1 }, { id: 2 }] }]}
+        onReorder={() => {}}
+        renderItem={(item: Item) => <span>Item {item.id}</span>}
+        insertSlot={{ sectionIndex: 0, index: 1, content: <div>Slot</div> }}
+      />
+    )
+
+    const item2Row = screen.getByText('Item 2').closest('li')!
+    topByNode.set(item2Row, 60)
+
+    rerender(
+      <DraggableList
+        sections={[{ header: <h2>Section A</h2>, items: [{ id: 1 }, { id: 2 }] }]}
+        onReorder={() => {}}
+        renderItem={(item: Item) => <span>Item {item.id}</span>}
+      />
+    )
+
+    // The FAB drag just ended - no catch-up animation for whatever happened
+    // while suppressed, but a genuinely NEW reflow after that should still
+    // animate normally.
+    expect(item2Row.style.transform).toBe('')
+
+    topByNode.set(item2Row, 100)
+    rerender(
+      <DraggableList
+        sections={[{ header: <h2>Section A</h2>, items: [{ id: 3 }, { id: 1 }, { id: 2 }] }]}
+        onReorder={() => {}}
+        renderItem={(item: Item) => <span>Item {item.id}</span>}
+      />
+    )
+
+    expect(item2Row.style.transform).toBe('translateY(-40px)')
   })
 })
 

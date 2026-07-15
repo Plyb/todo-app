@@ -100,21 +100,28 @@ function findTailPaddingIndex<T>(rows: Row<T>[]): number {
 }
 
 // FLIP-animates a row to its new position whenever its own measured top
-// changes between renders, for any reason OTHER than a live drag (dnd-kit's
-// own shift-preview owns the row's transform then - see SortableRow). This
-// is what animates the FAB's insert-slot appearing/moving, a header settling
-// after a drop, and the expanded panel opening/closing: dnd-kit's built-in
-// layout-change animation only fires around an actual drag session, so it
-// can't cover reflows caused by anything else - confirmed empirically, not
-// just in theory, so this hand-rolled path is deliberate, not a fallback.
+// changes between renders, for any reason OTHER than a real drag (dnd-kit's
+// own shift-preview owns the row's transform then - see SortableRow) or a
+// live FAB insert-slot drag (`skip`, gated off entirely - see DraggableList
+// for why: that's a continuous, high-frequency stream of position changes,
+// and animating each one both looks chaotic, since a new change constantly
+// interrupts the previous ease before it settles, and breaks the FAB's own
+// getInsertSlotAt, which reads getBoundingClientRect to decide the NEXT
+// position - a mid-flight transform makes that read the wrong (transformed)
+// location, feeding back an incorrect result). This is what animates a
+// header settling after a drop and the expanded panel opening/closing:
+// dnd-kit's built-in layout-change animation only fires around an actual
+// drag session, so it can't cover reflows caused by anything else -
+// confirmed empirically, not just in theory, so this hand-rolled path is
+// deliberate, not a fallback.
 //
 // Mutates the DOM node directly (not React state) - the same technique the
 // old AnimatedHeader used - so React's own style prop never has to fight an
 // in-flight imperative transform, and so this can run unconditionally on
 // every commit without risking a setState-driven update loop.
-function useRowShiftFlip(nodeRef: React.RefObject<HTMLElement | null>, isDragActive: boolean) {
+function useRowShiftFlip(nodeRef: React.RefObject<HTMLElement | null>, skip: boolean) {
   const previousTop = useRef<number | null>(null)
-  const wasDragActive = useRef(isDragActive)
+  const wasSkipped = useRef(skip)
   const pendingRaf = useRef<number | null>(null)
   // The Y-offset this hook currently has applied via node.style.transform (0
   // when settled). getBoundingClientRect reflects live transforms, so a
@@ -133,24 +140,26 @@ function useRowShiftFlip(nodeRef: React.RefObject<HTMLElement | null>, isDragAct
     const node = nodeRef.current
     if (!node) return
 
-    if (isDragActive) {
-      // dnd-kit's own live shift-preview owns this row's transform while a
-      // drag is active - don't compare against a position that's itself an
-      // artifact of that live transform.
+    if (skip) {
+      // Either dnd-kit's own live shift-preview owns this row's transform (a
+      // real drag), or the FAB is actively resolving positions and we're
+      // deliberately not animating at all - either way, don't compare
+      // against a position that could be an artifact of an in-flight
+      // transform, or of the high-frequency phase we're skipping.
       if (pendingRaf.current !== null) {
         cancelAnimationFrame(pendingRaf.current)
         pendingRaf.current = null
       }
       previousTop.current = null
-      wasDragActive.current = true
+      wasSkipped.current = true
       return
     }
 
     const measuredTop = node.getBoundingClientRect().top
     const trueTop = measuredTop - appliedOffset.current
-    const justEndedDrag = wasDragActive.current
-    wasDragActive.current = false
-    const delta = !justEndedDrag && previousTop.current !== null ? previousTop.current - trueTop : 0
+    const justStoppedSkipping = wasSkipped.current
+    wasSkipped.current = false
+    const delta = !justStoppedSkipping && previousTop.current !== null ? previousTop.current - trueTop : 0
     previousTop.current = trueTop
     // No real movement since the last invocation - leave any in-flight
     // animation exactly as it is (don't cancel its pending rAF either).
@@ -179,14 +188,16 @@ function SortableRow<T extends { id: number }>({
   itemStyle,
   onItemClick,
   extraPaddingBottom,
-  isDragActive,
+  isRealDragActive,
+  suppressFlip,
 }: {
   row: Row<T>
   renderItem: (item: T) => React.ReactNode
   itemStyle?: (item: T) => React.CSSProperties
   onItemClick?: (id: number) => void
   extraPaddingBottom: number
-  isDragActive: boolean
+  isRealDragActive: boolean
+  suppressFlip: boolean
 }) {
   const isTask = row.kind === 'item'
   // Every OTHER header legitimately needs to shift live as a preceding
@@ -219,12 +230,12 @@ function SortableRow<T extends { id: number }>({
     elementRef.current = node
   }
 
-  useRowShiftFlip(elementRef, isDragActive)
-  // Only ever declare transform/transition here while a real drag is active
+  useRowShiftFlip(elementRef, suppressFlip)
+  // Only ever declare transform/transition here while a REAL drag is active
   // (dnd-kit's own live values) - omitting the keys entirely the rest of the
   // time leaves them under the FLIP effect's exclusive imperative control,
   // instead of React resetting them out from under it on the next render.
-  const dragStyle = isDragActive ? { transform: CSS.Transform.toString(transform), transition } : undefined
+  const dragStyle = isRealDragActive ? { transform: CSS.Transform.toString(transform), transition } : undefined
 
   switch (row.kind) {
     case 'header':
@@ -317,7 +328,16 @@ export function DraggableList<T extends { id: number }>({
   const rows = useMemo(() => buildRows(sections, insertSlot, expandedSlot), [sections, insertSlot, expandedSlot])
   const rowIds = useMemo(() => rows.map((r) => r.id), [rows])
   const tailPaddingIndex = findTailPaddingIndex(rows)
-  const isDragActive = activeId !== null
+  const isRealDragActive = activeId !== null
+  // A live FAB drag resolves a new insertSlot position on every pointermove -
+  // far more often than an easing animation can ever settle between changes.
+  // Animating every one of those reflows both looks chaotic (each new
+  // position interrupts the previous ease before it finishes) and breaks
+  // getInsertSlotAt's own measurements (a mid-flight transform makes
+  // getBoundingClientRect report the wrong, transformed position, feeding an
+  // incorrect result back into the FAB's own placement decision) - so rows
+  // snap instantly for the whole time insertSlot is FAB-driven.
+  const suppressFlip = isRealDragActive || insertSlot !== undefined
 
   const allItems = sections.flatMap((s) => s.items)
   const activeItem = activeId !== null ? allItems.find((t) => t.id === activeId) ?? null : null
@@ -359,7 +379,8 @@ export function DraggableList<T extends { id: number }>({
                 itemStyle={itemStyle}
                 onItemClick={onItemClick}
                 extraPaddingBottom={i === tailPaddingIndex ? LAST_SECTION_DROP_TAIL_HEIGHT : 0}
-                isDragActive={isDragActive}
+                isRealDragActive={isRealDragActive}
+                suppressFlip={suppressFlip}
               />
             ))}
           </ul>
