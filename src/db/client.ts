@@ -20,7 +20,7 @@ export function withDefault<T>(schema: z.ZodType<T>, fallback: () => T): z.ZodTy
 }
 
 export const DB_NAME = 'todo-app'
-export const DB_VERSION = 8
+export const DB_VERSION = 9
 export const TASKS_STORE = 'tasks'
 export const STATUSES_STORE = 'statuses'
 export const VIEWS_STORE = 'views'
@@ -38,9 +38,9 @@ const DEFAULT_STATUSES: Status[] = [
 const DEMO_TASKS: StoredTask[] = (() => {
   const middle = LexoRank.middle()
   return [
-    { name: 'Buy groceries', done: false, rank: middle.toString(), statusSlug: 'today', notes: '' },
-    { name: 'Walk the dog', done: false, rank: middle.genNext().toString(), statusSlug: 'today', notes: '' },
-    { name: 'Write weekly update', done: false, rank: middle.genNext().genNext().toString(), statusSlug: 'backlog', notes: '' },
+    { name: 'Buy groceries', completedAt: null, rank: middle.toString(), statusSlug: 'today', notes: '' },
+    { name: 'Walk the dog', completedAt: null, rank: middle.genNext().toString(), statusSlug: 'today', notes: '' },
+    { name: 'Write weekly update', completedAt: null, rank: middle.genNext().genNext().toString(), statusSlug: 'backlog', notes: '' },
   ]
 })()
 
@@ -123,20 +123,20 @@ function seedDefaultStatuses(transaction: IDBTransaction): void {
 // fields in one read-modify-update per record avoids the multi-version race
 // (issue #127): separate per-field passes each read the ORIGINAL record before
 // the others' cursor.update() committed, so each write spread a stale snapshot
-// and clobbered the previously-backfilled field.
+// and clobbered the previously-backfilled field. The `done` -> `completedAt`
+// conversion (issue #167) is folded into this same pass for the same reason:
+// it must run for every oldVersion below 9, which overlaps every other
+// field's gate, so a separate cursor pass would reintroduce the race.
 async function migrateTaskFields(transaction: IDBTransaction, oldVersion: number): Promise<void> {
   const store = transaction.objectStore(TASKS_STORE)
   let rankGen = LexoRank.middle()
+  const todayDateString = new Date().toISOString().slice(0, 10)
 
   await iterateCursor(store, (cursor) => {
-    const record = cursor.value as Partial<StoredTask>
-    const updated: Partial<StoredTask> = { ...record }
+    const record = cursor.value as Partial<StoredTask> & { done?: boolean }
+    const updated: Partial<StoredTask> & { done?: boolean } = { ...record }
     let changed = false
 
-    if (oldVersion < 2 && record.done === undefined) {
-      updated.done = false
-      changed = true
-    }
     if (oldVersion < 3 && !record.rank) {
       updated.rank = rankGen.toString()
       rankGen = rankGen.genNext()
@@ -148,6 +148,15 @@ async function migrateTaskFields(transaction: IDBTransaction, oldVersion: number
     }
     if (oldVersion < 5 && record.notes === undefined) {
       updated.notes = ''
+      changed = true
+    }
+    if (record.completedAt === undefined) {
+      // `true` becomes today's date rather than some earlier date, so records
+      // completed under the old schema still get one full day of grace before
+      // auto-archiving, matching completedAt semantics for a task completed
+      // today under the new schema.
+      updated.completedAt = record.done ? todayDateString : null
+      delete updated.done
       changed = true
     }
 
@@ -192,14 +201,6 @@ const MIGRATION_STEPS: MigrationStep[] = [
     },
   },
   {
-    // Backfill done (v2), rank (v3), statusSlug (v4) and notes (v5) in one
-    // cursor pass. Gated at version 5 so it runs whenever any of those fields
-    // could be missing; the per-field oldVersion + presence guards inside pick
-    // exactly the ones this user still lacks.
-    version: 5,
-    migrate: (_db, transaction, oldVersion) => migrateTaskFields(transaction, oldVersion),
-  },
-  {
     version: 6,
     migrate: (db, transaction) => {
       if (!db.objectStoreNames.contains(VIEWS_STORE)) {
@@ -231,6 +232,15 @@ const MIGRATION_STEPS: MigrationStep[] = [
       subtaskLinksStore.createIndex('by_parent', 'parentTaskId', { unique: false })
       subtaskLinksStore.createIndex('by_child', 'childTaskId', { unique: true })
     },
+  },
+  {
+    // Backfill rank (v3), statusSlug (v4) and notes (v5), and convert done ->
+    // completedAt (v9, issue #167), in one cursor pass. Gated at version 9 so
+    // it runs whenever any of those fields could be missing or done still
+    // needs converting; the per-field oldVersion + presence guards inside pick
+    // exactly the ones this user still lacks.
+    version: 9,
+    migrate: (_db, transaction, oldVersion) => migrateTaskFields(transaction, oldVersion),
   },
 ]
 

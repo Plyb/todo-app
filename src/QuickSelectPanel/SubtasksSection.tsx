@@ -85,10 +85,10 @@ export function SubtasksSection({ task, allTasks, subtaskLinks, setSubtaskLinks,
               <>
                 <input
                   type="checkbox"
-                  checked={childTask.done}
+                  checked={childTask.completedAt !== null}
                   onChange={(e) => setDone(childTask.id, e.target.checked)}
                 />
-                <span onClick={() => onOpenTask(childTask.id)} style={{ marginLeft: 8, cursor: 'pointer', color: childTask.done ? theme.colors.textDisabled : undefined }}>
+                <span onClick={() => onOpenTask(childTask.id)} style={{ marginLeft: 8, cursor: 'pointer', color: childTask.completedAt !== null ? theme.colors.textDisabled : undefined }}>
                   {childTask.name}
                 </span>
               </>

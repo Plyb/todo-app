@@ -6,7 +6,7 @@ export type Status = {
 export type Task = {
   id: number
   name: string
-  done: boolean
+  completedAt: string | null  // ISO date string 'YYYY-MM-DD' the task was marked done, or null if not done
   rank: string
   statusSlug: string
   notes: string

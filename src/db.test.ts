@@ -86,7 +86,7 @@ describe('loadTasks (multi-request read: getAll + getAllKeys zip)', () => {
 
     const tasks = await db.loadTasks()
     expect(tasks.map((t) => t.name)).toEqual(['Buy groceries', 'Walk the dog', 'Write weekly update', 'New task'])
-    expect(tasks[3]).toMatchObject({ id: 4, name: 'New task', done: false, statusSlug: 'today', notes: '' })
+    expect(tasks[3]).toMatchObject({ id: 4, name: 'New task', completedAt: null, statusSlug: 'today', notes: '' })
   })
 })
 
@@ -136,12 +136,12 @@ describe('deleteTask (atomic cascade)', () => {
   })
 })
 
-describe('updateTaskDone (guard against missing records)', () => {
+describe('updateTaskCompletedAt (guard against missing records)', () => {
   it('is a no-op when the task id does not exist, rather than creating a corrupted record', async () => {
     const db = await import('./db')
     const seeded = await db.loadTasks()
 
-    await db.updateTaskDone(999, true)
+    await db.updateTaskCompletedAt(999, '2026-07-14')
 
     const tasks = await db.loadTasks()
     expect(tasks).toHaveLength(seeded.length)
@@ -173,9 +173,9 @@ describe('runner abort-on-error (rolls back a partial multi-store write)', () =>
 })
 
 describe('migration replay', () => {
-  it('upgrades a v1 database (tasks store only, no done/rank/statusSlug/notes) to v8', async () => {
+  it('upgrades a v1 database (tasks store only, no completedAt/rank/statusSlug/notes) to v9', async () => {
     // Simulate a database left behind by the very first shipped schema: only
-    // the tasks store exists, and records predate the done/rank/statusSlug/notes fields.
+    // the tasks store exists, and records predate the completedAt/rank/statusSlug/notes fields.
     await new Promise<void>((resolve, reject) => {
       const request = indexedDB.open(DB_NAME, 1)
       request.onupgradeneeded = () => {
@@ -199,7 +199,7 @@ describe('migration replay', () => {
 
     const tasks = await db.loadTasks()
     const legacy = tasks.find((t) => t.name === 'Legacy task')
-    expect(legacy).toMatchObject({ done: false, statusSlug: 'backlog', notes: '' })
+    expect(legacy).toMatchObject({ completedAt: null, statusSlug: 'backlog', notes: '' })
     expect(typeof legacy?.rank).toBe('string')
     expect(legacy?.rank.length).toBeGreaterThan(0)
 
@@ -209,12 +209,12 @@ describe('migration replay', () => {
     const views = await db.loadViews()
     expect(views.map((v) => v.slug).sort()).toEqual(['archived', 'backlog', 'today', 'today-extra'])
 
-    // Confirm the upgrade chain actually landed on version 8 and won't fire another upgrade.
+    // Confirm the upgrade chain actually landed on version 9 and won't fire another upgrade.
     await new Promise<void>((resolve, reject) => {
       const verifyRequest = indexedDB.open(DB_NAME)
-      verifyRequest.onupgradeneeded = () => reject(new Error('unexpected upgrade needed; migration did not reach version 8'))
+      verifyRequest.onupgradeneeded = () => reject(new Error('unexpected upgrade needed; migration did not reach version 9'))
       verifyRequest.onsuccess = () => {
-        expect(verifyRequest.result.version).toBe(8)
+        expect(verifyRequest.result.version).toBe(9)
         verifyRequest.result.close()
         resolve()
       }
@@ -224,9 +224,9 @@ describe('migration replay', () => {
 })
 
 describe('migration integrity (raw store, issue #127)', () => {
-  it('persists done/rank/statusSlug into the raw store after a multi-version v1 -> v8 upgrade', async () => {
+  it('persists completedAt/rank/statusSlug into the raw store after a multi-version v1 -> v9 upgrade', async () => {
     // Seed a v1 database whose sole task record predates the
-    // done/rank/statusSlug/notes fields entirely.
+    // completedAt/rank/statusSlug/notes fields entirely.
     await new Promise<void>((resolve, reject) => {
       const request = indexedDB.open(DB_NAME, 1)
       request.onupgradeneeded = () => {
@@ -245,15 +245,15 @@ describe('migration integrity (raw store, issue #127)', () => {
       request.onerror = () => reject(request.error)
     })
 
-    // Trigger the full v1 -> v8 upgrade through db.ts.
+    // Trigger the full v1 -> v9 upgrade through db.ts.
     vi.resetModules()
     const db = await import('./db')
     await db.loadTasks()
 
     // Read the raw object store directly (NOT loadTasks) so we assert what the
     // migration actually PERSISTED, not what loadTasks defaults at read time.
-    // If the concurrent-cursor race is present, done/rank/statusSlug are absent
-    // from storage and only notes survives.
+    // If the concurrent-cursor race is present, completedAt/rank/statusSlug are
+    // absent from storage and only notes survives.
     const rawRecord = await new Promise<Record<string, unknown>>((resolve, reject) => {
       const request = indexedDB.open(DB_NAME)
       request.onupgradeneeded = () => reject(new Error('unexpected upgrade needed; migration did not reach version 8'))
@@ -276,7 +276,7 @@ describe('migration integrity (raw store, issue #127)', () => {
       request.onerror = () => reject(request.error)
     })
 
-    expect(rawRecord.done).toBe(false)
+    expect(rawRecord.completedAt).toBe(null)
     expect(typeof rawRecord.rank).toBe('string')
     expect((rawRecord.rank as string).length).toBeGreaterThan(0)
     expect(rawRecord.statusSlug).toBe('backlog')
@@ -285,15 +285,15 @@ describe('migration integrity (raw store, issue #127)', () => {
 })
 
 describe('readTasks validation (Zod schema at the read boundary)', () => {
-  it('defaults done/rank/statusSlug/notes when a record at DB_VERSION 8 is still missing them', async () => {
+  it('defaults completedAt/rank/statusSlug/notes when a record at DB_VERSION 9 is still missing them', async () => {
     const db = await import('./db')
-    await db.loadTasks() // opens the db at DB_VERSION 8 and seeds demo tasks
+    await db.loadTasks() // opens the db at DB_VERSION 9 and seeds demo tasks
 
     await putRaw('tasks', { name: 'Stuck on old backfill' })
 
     const tasks = await db.loadTasks()
     const legacy = tasks.find((t) => t.name === 'Stuck on old backfill')
-    expect(legacy).toMatchObject({ done: false, statusSlug: 'backlog', notes: '' })
+    expect(legacy).toMatchObject({ completedAt: null, statusSlug: 'backlog', notes: '' })
     expect(typeof legacy?.rank).toBe('string')
     expect(legacy?.rank.length).toBeGreaterThan(0)
   })
@@ -302,9 +302,47 @@ describe('readTasks validation (Zod schema at the read boundary)', () => {
     const db = await import('./db')
     await db.loadTasks()
 
-    await putRaw('tasks', { name: 'Bad task', done: 'not-a-boolean', rank: 'a', statusSlug: 'backlog', notes: '' })
+    await putRaw('tasks', { name: 'Bad task', completedAt: 42, rank: 'a', statusSlug: 'backlog', notes: '' })
 
     await expect(db.loadTasks()).rejects.toThrow()
+  })
+})
+
+describe('migrating done to completedAt (issue #167)', () => {
+  it('converts a legacy done:true record to a completedAt of today, giving it a day of grace before archiving', async () => {
+    // Seed a v8 database (pre-#167) with a raw `done` boolean, no completedAt.
+    await new Promise<void>((resolve, reject) => {
+      const request = indexedDB.open(DB_NAME, 8)
+      request.onupgradeneeded = () => {
+        const upgradeDb = request.result
+        upgradeDb.createObjectStore('tasks', { autoIncrement: true })
+        upgradeDb.createObjectStore('statuses', { keyPath: 'slug' })
+        upgradeDb.createObjectStore('views', { keyPath: 'slug' })
+        upgradeDb.createObjectStore('scheduledTransitions', { autoIncrement: true })
+        upgradeDb.createObjectStore('relationships', { autoIncrement: true })
+        upgradeDb.createObjectStore('subtasks', { keyPath: 'id', autoIncrement: true })
+      }
+      request.onsuccess = () => {
+        const legacyDb = request.result
+        const tx = legacyDb.transaction('tasks', 'readwrite')
+        tx.objectStore('tasks').add({ name: 'Done task', done: true, rank: 'a', statusSlug: 'backlog', notes: '' })
+        tx.objectStore('tasks').add({ name: 'Not done task', done: false, rank: 'b', statusSlug: 'backlog', notes: '' })
+        tx.oncomplete = () => {
+          legacyDb.close()
+          resolve()
+        }
+        tx.onerror = () => reject(tx.error)
+      }
+      request.onerror = () => reject(request.error)
+    })
+
+    vi.resetModules()
+    const db = await import('./db')
+    const tasks = await db.loadTasks()
+
+    const today = new Date().toISOString().slice(0, 10)
+    expect(tasks.find((t) => t.name === 'Done task')?.completedAt).toBe(today)
+    expect(tasks.find((t) => t.name === 'Not done task')?.completedAt).toBe(null)
   })
 })
 
