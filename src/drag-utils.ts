@@ -10,7 +10,11 @@ export function locateItem<T extends { id: number }>(
 export function resolveReorder<T extends { id: number }>(
   sections: { items: T[] }[],
   activeId: number,
-  overId: number
+  overId: number,
+  // Only consulted for the cross-section branch (see below) - the
+  // same-section branch already has its own, already-correct directional
+  // logic based on which way the drag is coming from.
+  insertAfter = false
 ): { toSectionIndex: number; insertIndex: number } {
   const { sectionIndex: toSectionIndex, itemIndex: overIndex } = locateItem(sections, overId)
   const toSection = sections[toSectionIndex]
@@ -23,11 +27,29 @@ export function resolveReorder<T extends { id: number }>(
     // dragging down → insert after over; dragging up → insert before over
     insertIndex = oldIndex < overIndex ? othersOverIndex + 1 : othersOverIndex
   } else {
-    // cross-section: dragged item is not in target section, insert before the over item
-    insertIndex = overIndex
+    // cross-section: the dragged item isn't in the target section (yet), so
+    // there's no "which way did the drag come from within this section" to
+    // compare against - insertAfter (a midpoint comparison against the
+    // hovered item, computed by the caller) decides before vs after instead.
+    insertIndex = insertAfter ? overIndex + 1 : overIndex
   }
 
   return { toSectionIndex, insertIndex }
+}
+
+type Rect = { top: number; height: number }
+
+// Whether the dragged item's current (live-translated) center sits below the
+// hovered item's own center - used to decide "insert before" vs "insert
+// after" for a cross-section drop, where (unlike same-section dragging)
+// there's no prior position within the target section to compare direction
+// against. Mirrors the plain midpoint comparison findInsertIndex already
+// uses for the FAB's own drag system (pointer-utils.ts).
+export function isBelowMidpoint(activeRect: Rect | null, overRect: Rect): boolean {
+  if (!activeRect) return false
+  const activeCenter = activeRect.top + activeRect.height / 2
+  const overCenter = overRect.top + overRect.height / 2
+  return activeCenter > overCenter
 }
 
 const SECTION_DROP_ID_PREFIX = 'section-drop-'
@@ -55,7 +77,8 @@ function parseSectionDropId(id: number | string): number | null {
 export function resolveDrop<T extends { id: number }>(
   sections: { items: T[] }[],
   activeId: number,
-  overId: number | string
+  overId: number | string,
+  insertAfter = false
 ): { toSectionIndex: number; insertIndex: number } | null {
   const sectionIndex = parseSectionDropId(overId)
   if (sectionIndex !== null) {
@@ -65,7 +88,7 @@ export function resolveDrop<T extends { id: number }>(
   const overItemId = typeof overId === 'number' ? overId : Number(overId)
   if (overItemId === activeId) return null
 
-  return resolveReorder(sections, activeId, overItemId)
+  return resolveReorder(sections, activeId, overItemId, insertAfter)
 }
 
 // Produces a new sections array with `activeId` relocated to

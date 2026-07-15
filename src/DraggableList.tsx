@@ -18,7 +18,7 @@ import {
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { theme } from './theme'
-import { locateItem, resolveDrop, moveItemToSection, toSectionDropId } from './drag-utils'
+import { isBelowMidpoint, locateItem, resolveDrop, moveItemToSection, toSectionDropId } from './drag-utils'
 import { findInsertIndex } from './pointer-utils'
 
 const MOUSE_DRAG_ACTIVATION_PX = 8
@@ -331,7 +331,17 @@ export function DraggableList<T extends { id: number }>({
     if (!over) return
     const activeItemId = toItemId(active.id)
     const workingSections = dragSections ?? sections
-    const target = resolveDrop(workingSections, activeItemId, over.id)
+    // For a cross-section drop, resolveReorder has no prior position within
+    // the target section to infer a direction from (unlike same-section
+    // dragging), so it needs this instead: is the dragged item's current
+    // (live) center below the hovered item's own center? Without it, it
+    // always inserted before whatever item the pointer first lands on when
+    // crossing into a section - so re-entering a section anywhere on its
+    // last item would insert before that item (shifting it down with no
+    // prior state to animate from - a jarring snap), only to immediately
+    // re-resolve to "append at the end" as the pointer continued past it.
+    const insertAfter = isBelowMidpoint(active.rect.current.translated, over.rect)
+    const target = resolveDrop(workingSections, activeItemId, over.id, insertAfter)
     if (!target) return
     dragTargetRef.current = target
 

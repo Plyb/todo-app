@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { moveItemToSection, resolveDrop, resolveReorder, toSectionDropId } from './drag-utils'
+import { isBelowMidpoint, moveItemToSection, resolveDrop, resolveReorder, toSectionDropId } from './drag-utils'
 
 function sectionsFixture() {
   return [
@@ -28,10 +28,30 @@ describe('resolveReorder', () => {
     expect(result).toEqual({ toSectionIndex: 0, insertIndex: 0 })
   })
 
-  it('cross-section drag: inserts at the over item index in the target section', () => {
+  it('cross-section drag: inserts before the over item by default', () => {
     const result = resolveReorder(sectionsFixture(), 1, 5)
 
     expect(result).toEqual({ toSectionIndex: 1, insertIndex: 1 })
+  })
+
+  it('cross-section drag: inserts after the over item when insertAfter is true', () => {
+    const result = resolveReorder(sectionsFixture(), 1, 5, true)
+
+    expect(result).toEqual({ toSectionIndex: 1, insertIndex: 2 })
+  })
+})
+
+describe('isBelowMidpoint', () => {
+  it('is false when there is no active rect yet', () => {
+    expect(isBelowMidpoint(null, { top: 0, height: 40 })).toBe(false)
+  })
+
+  it('is false when the active item center sits above the over item center', () => {
+    expect(isBelowMidpoint({ top: 0, height: 40 }, { top: 100, height: 40 })).toBe(false)
+  })
+
+  it('is true when the active item center sits below the over item center', () => {
+    expect(isBelowMidpoint({ top: 200, height: 40 }, { top: 100, height: 40 })).toBe(true)
   })
 })
 
