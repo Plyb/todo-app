@@ -229,17 +229,26 @@ function SectionList<T extends { id: number }>({
   )
 }
 
-// A section header (and everything below it) instantly jumps to its new
-// position whenever a PRECEDING section's height changes - e.g. a task
-// crossing between sections during a drag. dnd-kit's transform-based
-// animation only ever applies to the individual sortable `<li>` items it
-// manages, not to arbitrary sibling content like `section.header`, so absent
-// this, headers would snap while the items right below them ease smoothly.
-// This applies the classic FLIP technique to the whole header+items chunk as
-// one unit (not just the header) so they always shift in lockstep - if only
-// the header eased into place, it would visibly detach from its own
-// (instantly-repositioned) items mid-transition.
-function AnimatedSection({ children }: { children: React.ReactNode }) {
+// A section header instantly jumps to its new position whenever a PRECEDING
+// section's height changes - e.g. a task crossing between sections during a
+// drag. dnd-kit's transform-based animation only ever applies to the
+// individual sortable `<li>` items it manages, not to arbitrary sibling
+// content like `section.header`, so absent this, headers would snap while
+// the items right below them ease smoothly.
+//
+// This wraps ONLY the header, not its section's `<SortableContext>`/items:
+// wrapping the items too (an earlier attempt) put an animated CSS transform
+// on an ancestor of every sortable item and droppable dnd-kit tracks in that
+// section, and dnd-kit measures those via getBoundingClientRect() (which
+// reflects live transforms) both for its own item-shift math and for our
+// collision detection - so mid-animation, dnd-kit was measuring items at
+// whatever offset this wrapper's transform happened to be at that instant,
+// corrupting both the shift animation and collision resolution for that
+// section. The `<ul>`'s own items already reach their correct rest position
+// immediately (dnd-kit's own animation handles their internal "open a gap"
+// shift on its own, untouched by this) - only the header needs to visibly
+// catch up to them.
+function AnimatedHeader({ children }: { children: React.ReactNode }) {
   const ref = useRef<HTMLDivElement>(null)
   const previousTop = useRef<number | null>(null)
 
@@ -364,8 +373,8 @@ export function DraggableList<T extends { id: number }>({
     >
       <div ref={listRef}>
         {renderSections.map((section, sectionIndex) => (
-          <AnimatedSection key={sectionIndex}>
-            {section.header}
+          <React.Fragment key={sectionIndex}>
+            {section.header && <AnimatedHeader>{section.header}</AnimatedHeader>}
             <SortableContext items={section.items.map((t) => t.id)} strategy={verticalListSortingStrategy}>
               <SectionList
                 section={section}
@@ -378,7 +387,7 @@ export function DraggableList<T extends { id: number }>({
                 expandedSlot={expandedSlot}
               />
             </SortableContext>
-          </AnimatedSection>
+          </React.Fragment>
         ))}
       </div>
 
