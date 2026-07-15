@@ -1,150 +1,143 @@
-import { pointerWithin, rectIntersection, type CollisionDetection } from '@dnd-kit/core'
+import type { UniqueIdentifier } from '@dnd-kit/core'
+import { arrayMove } from '@dnd-kit/sortable'
+import type { ReactNode } from 'react'
 
-export function locateItem<T extends { id: number }>(
-  sections: { items: T[] }[],
+// A single flat list of rows is what dnd-kit actually sorts. Section
+// membership is derived from position (each row carries the sectionIndex it
+// currently sits under) rather than from separate per-section arrays/contexts
+// - this is what lets headers, the FAB's insert-placeholder, and the expanded
+// task panel all shift out of the way of a real drag the same way tasks do,
+// using dnd-kit's own index-based animation machinery instead of hand-rolled
+// FLIP code.
+
+type HeaderRow = {
+  kind: 'header'
+  id: `header:${number}`
+  sectionIndex: number
+  content: ReactNode
+}
+
+type ItemRow<T> = {
+  kind: 'item'
   id: number
-): { sectionIndex: number; itemIndex: number } {
-  const sectionIndex = sections.findIndex((s) => s.items.some((t) => t.id === id))
-  if (sectionIndex === -1) {
-    throw new Error(`locateItem: id ${id} not found in any section`)
-  }
-  const itemIndex = sections[sectionIndex].items.findIndex((t) => t.id === id)
-  return { sectionIndex, itemIndex }
+  sectionIndex: number
+  item: T
 }
 
-export function resolveReorder<T extends { id: number }>(
-  sections: { items: T[] }[],
-  activeId: number,
-  overId: number,
-  // Only consulted for the cross-section branch (see below) - the
-  // same-section branch already has its own, already-correct directional
-  // logic based on which way the drag is coming from.
-  insertAfter = false
-): { toSectionIndex: number; insertIndex: number; fromSectionIndex: number } {
-  const { sectionIndex: toSectionIndex, itemIndex: overIndex } = locateItem(sections, overId)
-  const toSection = sections[toSectionIndex]
-  const { sectionIndex: fromSectionIndex, itemIndex: oldIndex } = locateItem(sections, activeId)
-
-  let insertIndex: number
-  if (fromSectionIndex === toSectionIndex) {
-    const others = toSection.items.filter((t) => t.id !== activeId)
-    const othersOverIndex = others.findIndex((t) => t.id === overId)
-    // dragging down → insert after over; dragging up → insert before over
-    insertIndex = oldIndex < overIndex ? othersOverIndex + 1 : othersOverIndex
-  } else {
-    // cross-section: the dragged item isn't in the target section (yet), so
-    // there's no "which way did the drag come from within this section" to
-    // compare against - insertAfter (a midpoint comparison against the
-    // hovered item, computed by the caller) decides before vs after instead.
-    insertIndex = insertAfter ? overIndex + 1 : overIndex
-  }
-
-  return { toSectionIndex, insertIndex, fromSectionIndex }
+type InsertSlotRow = {
+  kind: 'insert-slot'
+  id: 'insert-slot'
+  sectionIndex: number
+  content: ReactNode
 }
 
-type Rect = { top: number; height: number }
-
-// Whether the dragged item's current (live-translated) center sits below the
-// hovered item's own center - used to decide "insert before" vs "insert
-// after" for a cross-section drop, where (unlike same-section dragging)
-// there's no prior position within the target section to compare direction
-// against. Mirrors the plain midpoint comparison findInsertIndex already
-// uses for the FAB's own drag system (pointer-utils.ts).
-export function isBelowMidpoint(activeRect: Rect | null, overRect: Rect): boolean {
-  if (!activeRect) return false
-  const activeCenter = activeRect.top + activeRect.height / 2
-  const overCenter = overRect.top + overRect.height / 2
-  return activeCenter > overCenter
+// Replaces the ItemRow for the expanded item at the same array position -
+// it IS that item, just rendered as its panel instead of its normal row.
+type ExpandedRow = {
+  kind: 'expanded'
+  id: number
+  sectionIndex: number
+  content: ReactNode
 }
 
-const SECTION_DROP_ID_PREFIX = 'section-drop-'
+export type Row<T> = HeaderRow | ItemRow<T> | InsertSlotRow | ExpandedRow
 
-// Each section's container is registered as its own droppable (see
-// DraggableList's use of useDroppable) so that dragging into a section plays
-// nice even when there's nothing inside it for dnd-kit to register a
-// per-item drop target on.
-export function toSectionDropId(sectionIndex: number): string {
-  return `${SECTION_DROP_ID_PREFIX}${sectionIndex}`
-}
+export function buildRows<T extends { id: number }>(
+  sections: { header?: ReactNode; items: T[] }[],
+  insertSlot?: { sectionIndex: number; index: number; content: ReactNode },
+  expandedSlot?: { afterItemId: number; content: ReactNode }
+): Row<T>[] {
+  const rows: Row<T>[] = []
 
-function parseSectionDropId(id: number | string): number | null {
-  if (typeof id !== 'string' || !id.startsWith(SECTION_DROP_ID_PREFIX)) return null
-  const sectionIndex = Number(id.slice(SECTION_DROP_ID_PREFIX.length))
-  return Number.isInteger(sectionIndex) ? sectionIndex : null
-}
+  sections.forEach((section, sectionIndex) => {
+    if (section.header) {
+      rows.push({ kind: 'header', id: `header:${sectionIndex}`, sectionIndex, content: section.header })
+    }
 
-// Resolves a dnd-kit `over.id` (from onDragOver/onDragEnd) into a target
-// section + insert index. `overId` is either a real item id (the normal
-// case, delegated to resolveReorder) or a section-container id produced by
-// toSectionDropId (hovering/dropping on a section's empty space), which
-// always means "place at the end of that section". Returns null when there
-// is no meaningful drop (e.g. hovering the dragged item itself).
-export function resolveDrop<T extends { id: number }>(
-  sections: { items: T[] }[],
-  activeId: number,
-  overId: number | string,
-  insertAfter = false
-): { toSectionIndex: number; insertIndex: number; fromSectionIndex: number } | null {
-  const sectionIndex = parseSectionDropId(overId)
-  if (sectionIndex !== null) {
-    const { sectionIndex: fromSectionIndex } = locateItem(sections, activeId)
-    return { toSectionIndex: sectionIndex, insertIndex: sections[sectionIndex].items.length, fromSectionIndex }
-  }
+    section.items.forEach((item, i) => {
+      if (insertSlot?.sectionIndex === sectionIndex && insertSlot.index === i) {
+        rows.push({ kind: 'insert-slot', id: 'insert-slot', sectionIndex, content: insertSlot.content })
+      }
+      if (expandedSlot?.afterItemId === item.id) {
+        rows.push({ kind: 'expanded', id: item.id, sectionIndex, content: expandedSlot.content })
+      } else {
+        rows.push({ kind: 'item', id: item.id, sectionIndex, item })
+      }
+    })
 
-  const overItemId = typeof overId === 'number' ? overId : Number(overId)
-  if (overItemId === activeId) return null
-
-  return resolveReorder(sections, activeId, overItemId, insertAfter)
-}
-
-// The final commit decision for handleDragEnd: given the pristine (drag-start)
-// sections and the last hover target that was resolved, decide whether
-// anything actually needs to move, and to where. Kept separate from
-// `dragTargetRef`'s bookkeeping (which one caller updates during the drag)
-// so this decision is a pure, directly testable function.
-export function resolveCommit<T extends { id: number }>(
-  sections: { items: T[] }[],
-  activeId: number,
-  target: { toSectionIndex: number; insertIndex: number } | null
-): { toSectionIndex: number; insertIndex: number } | null {
-  if (!target) return null
-  const { sectionIndex: fromSectionIndex, itemIndex: fromIndex } = locateItem(sections, activeId)
-  if (target.toSectionIndex === fromSectionIndex && target.insertIndex === fromIndex) return null
-  return { toSectionIndex: target.toSectionIndex, insertIndex: target.insertIndex }
-}
-
-// Produces a new sections array with `activeId` relocated to
-// (toSectionIndex, insertIndex). Used to build a live preview of where the
-// dragged item would land while hovering, since dnd-kit only plays its
-// "space opening" shift animation for items it considers part of the same
-// sortable list as the active drag — so the item actually has to be present
-// in the target section's rendered items during the hover, not just at drop.
-export function moveItemToSection<T extends { id: number }, S extends { items: T[] }>(
-  sections: S[],
-  activeId: number,
-  toSectionIndex: number,
-  insertIndex: number
-): S[] {
-  const { sectionIndex: fromSectionIndex, itemIndex } = locateItem(sections, activeId)
-  const activeItem = sections[fromSectionIndex].items[itemIndex]
-
-  return sections.map((section, i) => {
-    const items = section.items.filter((t) => t.id !== activeId)
-    if (i === toSectionIndex) items.splice(insertIndex, 0, activeItem)
-    return { ...section, items }
+    if (insertSlot?.sectionIndex === sectionIndex && insertSlot.index === section.items.length) {
+      rows.push({ kind: 'insert-slot', id: 'insert-slot', sectionIndex, content: insertSlot.content })
+    }
   })
+
+  return rows
 }
 
-// closestCenter (dnd-kit's simplest strategy) picks whichever droppable's
-// CENTER is nearest the dragged item, but a section's own container
-// droppable spans every item in it - its center can beat the actual hovered
-// item's much smaller center, especially mid-section. pointerWithin instead
-// only considers droppables the pointer is literally inside, tie-broken by
-// corner distance, which naturally favors a tight item rect over its own
-// much larger enclosing container. Falls back to rectIntersection (dnd-kit's
-// own default) for the rare case of gaps pointerWithin misses entirely (e.g.
-// margins between sections).
-export const collisionDetection: CollisionDetection = (args) => {
-  const pointerCollisions = pointerWithin(args)
-  return pointerCollisions.length > 0 ? pointerCollisions : rectIntersection(args)
+export function locateRow<T>(rows: Row<T>[], id: UniqueIdentifier): number {
+  const index = rows.findIndex((r) => r.id === id)
+  if (index === -1) {
+    throw new Error(`locateRow: id ${String(id)} not found`)
+  }
+  return index
+}
+
+function insertIndexInSection<T>(rows: Row<T>[], uptoIndex: number, sectionIndex: number): number {
+  let count = 0
+  for (let i = 0; i < uptoIndex; i++) {
+    const row = rows[i]
+    if ((row.kind === 'item' || row.kind === 'expanded') && row.sectionIndex === sectionIndex) count++
+  }
+  return count
+}
+
+// Headers never move (they're never draggable), so a header row's own
+// sectionIndex field is always accurate - unlike an item/expanded row's,
+// which goes stale for whichever row was just relocated by arrayMove. So
+// section membership at any array position is derived by scanning backward
+// for the nearest header, never by reading a (possibly-just-moved) row's own
+// field directly.
+function sectionIndexAtPosition<T>(rows: Row<T>[], position: number): number {
+  for (let i = position - 1; i >= 0; i--) {
+    if (rows[i].kind === 'header') return rows[i].sectionIndex
+  }
+  return 0
+}
+
+// Resolves a drop into a target section + insert index, given the flat row
+// array as it was BEFORE the drop (the live in-drag preview is handled
+// entirely by dnd-kit's own shift animation - this only runs once, at
+// handleDragEnd). Hovering a header means "top of that section", not
+// "end of the previous one" - the one deliberate special case, since a
+// header is the only non-task row still eligible to be `over` (insert-slot
+// and expanded rows are fully droppable-disabled).
+export function resolveCommit<T extends { id: number }>(
+  rows: Row<T>[],
+  activeId: UniqueIdentifier,
+  overId: UniqueIdentifier
+): { toSectionIndex: number; insertIndex: number } | null {
+  if (activeId === overId) return null
+
+  const activeIndex = locateRow(rows, activeId)
+  const overIndex = locateRow(rows, overId)
+  // arrayMove(rows, activeIndex, overIndex) already lands the active row
+  // exactly at the header's own slot (pushing the header and everything
+  // after it forward by one) when arriving from ABOVE the header - which
+  // already means "right after the header". Arriving from BELOW needs a +1
+  // nudge, or the active row lands just before the header (into the
+  // previous section) instead of after it. Plain item targets need no such
+  // adjustment in either direction - this is a header-only asymmetry of
+  // splice-based array moves.
+  const targetIndex = rows[overIndex].kind === 'header' && activeIndex > overIndex ? overIndex + 1 : overIndex
+  if (targetIndex === activeIndex) return null
+
+  const reordered = arrayMove(rows, activeIndex, targetIndex)
+  const newIndex = reordered.findIndex((r) => r.id === activeId)
+  const toSectionIndex = sectionIndexAtPosition(reordered, newIndex)
+  const insertIndex = insertIndexInSection(reordered, newIndex, toSectionIndex)
+
+  const fromSectionIndex = sectionIndexAtPosition(rows, activeIndex)
+  const fromInsertIndex = insertIndexInSection(rows, activeIndex, fromSectionIndex)
+  if (toSectionIndex === fromSectionIndex && insertIndex === fromInsertIndex) return null
+
+  return { toSectionIndex, insertIndex }
 }
