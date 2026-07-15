@@ -216,9 +216,13 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     return db.getStatusUsage(slug)
   }
 
-  function openView(slug: string): void {
+  function setActiveViewSlug(slug: string): void {
     setCurrentViewSlug(slug)
     writeCurrentViewSlug(slug)
+  }
+
+  function openView(slug: string): void {
+    setActiveViewSlug(slug)
     setRecentViewSlugs((prev) => {
       const next = [slug, ...prev.filter((s) => s !== slug)]
       writeRecentViewSlugs(next)
@@ -235,7 +239,17 @@ export function TasksProvider({ children }: { children: ReactNode }) {
 
   async function deleteView(slug: string): Promise<void> {
     await db.deleteView(slug)
-    setViews(prev => prev.filter(v => v.slug !== slug))
+
+    const remainingViews = views.filter(v => v.slug !== slug)
+    setViews(remainingViews)
+
+    const prunedRecent = recentViewSlugs.filter((s) => s !== slug && remainingViews.some((v) => v.slug === s))
+    writeRecentViewSlugs(prunedRecent)
+    setRecentViewSlugs(prunedRecent)
+
+    if (slug === currentViewSlug) {
+      setActiveViewSlug(prunedRecent[0] ?? remainingViews[0].slug)
+    }
   }
 
   const value: TasksContextValue = {
