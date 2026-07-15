@@ -24,6 +24,12 @@ import { findInsertIndex } from './pointer-utils'
 const MOUSE_DRAG_ACTIVATION_PX = 8
 const TOUCH_DRAG_DELAY_MS = 400
 const TOUCH_DRAG_TOLERANCE_PX = 8
+// The very last section's container has no dead space below its own items to
+// register a drop target on (padding/margin are both 0), so there's nowhere
+// to drop "at the end of the list" without landing exactly on the last item.
+// This reserves some of that space as part of the last section's own
+// droppable rect instead.
+const LAST_SECTION_DROP_TAIL_HEIGHT = 96
 
 function toItemId(id: UniqueIdentifier): number {
   return typeof id === 'number' ? id : Number(id)
@@ -156,6 +162,7 @@ function SortableItem<T extends { id: number }>({
 function SectionList<T extends { id: number }>({
   section,
   sectionIndex,
+  isLastSection,
   renderItem,
   itemStyle,
   onItemClick,
@@ -164,6 +171,7 @@ function SectionList<T extends { id: number }>({
 }: {
   section: Section<T>
   sectionIndex: number
+  isLastSection: boolean
   renderItem: (item: T) => React.ReactNode
   itemStyle?: (item: T) => React.CSSProperties
   onItemClick?: (id: number) => void
@@ -180,7 +188,13 @@ function SectionList<T extends { id: number }>({
     <ul
       ref={setNodeRef}
       data-section-index={sectionIndex}
-      style={{ listStyle: 'none', padding: 0, margin: 0, position: 'relative' }}
+      style={{
+        listStyle: 'none',
+        padding: 0,
+        margin: 0,
+        paddingBottom: isLastSection ? LAST_SECTION_DROP_TAIL_HEIGHT : 0,
+        position: 'relative',
+      }}
     >
       {section.items.map((item, i) => {
         const isExpanded = expandedSlot?.afterItemId === item.id
@@ -255,6 +269,19 @@ export function DraggableList<T extends { id: number }>({
     const workingSections = dragSections ?? sections
     const target = resolveDrop(workingSections, activeItemId, over.id)
     if (!target) return
+    // dnd-kit fires onDragOver on nearly every pointer-move tick, but the
+    // resolved target is usually unchanged from the last tick (the pointer
+    // hasn't crossed to a new section/index yet). Bailing out here avoids
+    // rebuilding `dragSections` - and therefore the per-section id arrays
+    // handed to <SortableContext> - on every one of those redundant ticks.
+    // @dnd-kit/sortable treats a changed `items` array reference as a
+    // signal that a genuine external reorder just landed, and briefly
+    // disables its shift transition to avoid double-animating that
+    // transition; constantly feeding it fresh-but-unchanged arrays was
+    // tripping that same suppression on nearly every render, which is why
+    // the live hover animation was snapping/bouncing instead of easing.
+    const current = locateItem(workingSections, activeItemId)
+    if (target.toSectionIndex === current.sectionIndex && target.insertIndex === current.itemIndex) return
     setDragSections(moveItemToSection(workingSections, activeItemId, target.toSectionIndex, target.insertIndex))
   }
 
@@ -303,6 +330,7 @@ export function DraggableList<T extends { id: number }>({
               <SectionList
                 section={section}
                 sectionIndex={sectionIndex}
+                isLastSection={sectionIndex === renderSections.length - 1}
                 renderItem={renderItem}
                 itemStyle={itemStyle}
                 onItemClick={onItemClick}
