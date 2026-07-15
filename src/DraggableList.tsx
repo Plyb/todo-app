@@ -7,7 +7,9 @@ import {
   useDroppable,
   useSensor,
   useSensors,
-  closestCenter,
+  pointerWithin,
+  rectIntersection,
+  type CollisionDetection,
   type DragEndEvent,
   type DragOverEvent,
   type DragStartEvent,
@@ -25,6 +27,29 @@ const TOUCH_DRAG_TOLERANCE_PX = 8
 
 function toItemId(id: UniqueIdentifier): number {
   return typeof id === 'number' ? id : Number(id)
+}
+
+// Every section's own container is registered as a droppable alongside its
+// items (see SectionList), so a single item can simultaneously sit "within"
+// both its item-level droppable and the enclosing section's much larger
+// container droppable. `closestCenter` picks whichever droppable's CENTER is
+// nearest the dragged item's center — since a section container spans every
+// item in it, its center is the section's overall midpoint, which can end up
+// closer than the specific hovered item's own (much smaller) center,
+// especially mid-section. That made the empty-section/"section index"
+// branch fire even while hovering a real item, unpredictably depending on
+// section length and hover position.
+// `pointerWithin` instead only considers droppables whose rect the pointer
+// coordinate literally falls inside, then breaks ties by distance to that
+// rect's corners. An item rect is much smaller/tighter around the pointer
+// than its enclosing section rect, so its corner-distance is naturally
+// smaller too — items win over their own container whenever the pointer is
+// actually over one. Falls back to `rectIntersection` (dnd-kit's own
+// default) for the rare case for gaps pointerWithin misses entirely (e.g.
+// margins between sections).
+const collisionDetection: CollisionDetection = (args) => {
+  const pointerCollisions = pointerWithin(args)
+  return pointerCollisions.length > 0 ? pointerCollisions : rectIntersection(args)
 }
 
 export function getInsertSlotAt(container: HTMLElement, clientY: number): { sectionIndex: number; index: number } {
@@ -264,7 +289,7 @@ export function DraggableList<T extends { id: number }>({
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCenter}
+      collisionDetection={collisionDetection}
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
