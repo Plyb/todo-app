@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useRef, useState } from 'react'
 import {
   DndContext,
   DragOverlay,
@@ -241,14 +241,31 @@ export function DraggableList<T extends { id: number }>({
   onDragEnd,
 }: DraggableListProps<T>) {
   const [activeId, setActiveId] = useState<number | null>(null)
-  // Live preview of `sections` while a cross-section drag is hovering: the
-  // dragged item is optimistically relocated into the hovered section so
-  // dnd-kit recognizes it as part of that section's sortable list and plays
-  // its shift animation for the other items there. Only ever used for
-  // rendering during a drag — the actual commit in handleDragEnd always
-  // resolves against the real `sections` prop.
+  // Live preview of `sections` while a cross-section drag is hovering: only
+  // set once the dragged item crosses INTO a section it isn't already a
+  // member of, so dnd-kit recognizes it as part of that section's sortable
+  // list and plays its shift animation for the other items there. Reordering
+  // WITHIN whatever section the item is currently a member of (its original
+  // section, or a section it already crossed into earlier this same drag)
+  // is deliberately left untouched here — @dnd-kit/sortable's own engine
+  // animates that purely from its stable `items` array plus the live
+  // over/active ids, via its own context, independently of whether this
+  // component re-renders. Setting `dragSections` on every such index change
+  // used to feed it a fresh (but data-equivalent) `items` array reference on
+  // nearly every pointer-move tick; @dnd-kit/sortable treats a changed
+  // `items` reference as "a real external reorder just landed" and briefly
+  // disables its shift transition to avoid double-animating that case, so
+  // constantly-fresh arrays tripped that suppression almost every render —
+  // that's what made the live animation snap/bounce instead of easing.
   const [dragSections, setDragSections] = useState<Section<T>[] | null>(null)
   const renderSections = dragSections ?? sections
+  // The most recently resolved drop target, tracked independently of
+  // `dragSections` so the final commit in handleDragEnd doesn't depend on
+  // `over.id` at the exact moment of drop — which is frequently the active
+  // item's own id once it's already sitting where the pointer is (see
+  // resolveDrop) — nor on `dragSections`, which (per above) intentionally
+  // stays stale/unset during same-section reordering.
+  const dragTargetRef = useRef<{ toSectionIndex: number; insertIndex: number } | null>(null)
 
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: MOUSE_DRAG_ACTIVATION_PX } }),
@@ -260,6 +277,7 @@ export function DraggableList<T extends { id: number }>({
 
   function handleDragStart({ active }: DragStartEvent) {
     setActiveId(toItemId(active.id))
+    dragTargetRef.current = null
     onDragStart?.()
   }
 
@@ -269,45 +287,30 @@ export function DraggableList<T extends { id: number }>({
     const workingSections = dragSections ?? sections
     const target = resolveDrop(workingSections, activeItemId, over.id)
     if (!target) return
-    // dnd-kit fires onDragOver on nearly every pointer-move tick, but the
-    // resolved target is usually unchanged from the last tick (the pointer
-    // hasn't crossed to a new section/index yet). Bailing out here avoids
-    // rebuilding `dragSections` - and therefore the per-section id arrays
-    // handed to <SortableContext> - on every one of those redundant ticks.
-    // @dnd-kit/sortable treats a changed `items` array reference as a
-    // signal that a genuine external reorder just landed, and briefly
-    // disables its shift transition to avoid double-animating that
-    // transition; constantly feeding it fresh-but-unchanged arrays was
-    // tripping that same suppression on nearly every render, which is why
-    // the live hover animation was snapping/bouncing instead of easing.
-    const current = locateItem(workingSections, activeItemId)
-    if (target.toSectionIndex === current.sectionIndex && target.insertIndex === current.itemIndex) return
+    dragTargetRef.current = target
+
+    const { sectionIndex: currentSectionIndex } = locateItem(workingSections, activeItemId)
+    if (target.toSectionIndex === currentSectionIndex) return
     setDragSections(moveItemToSection(workingSections, activeItemId, target.toSectionIndex, target.insertIndex))
   }
 
-  function handleDragEnd({ active, over }: DragEndEvent) {
-    if (over) {
-      // Resolve the final placement from `dragSections` (the live hover
-      // preview) rather than recomputing from `over.id` against the pristine
-      // `sections`: by the time the drag settles, the preview has usually
-      // already relocated the active item to sit exactly under the pointer,
-      // so `over.id` is frequently the active item's own id — that's a
-      // meaningful "no-op" mid-hover (see resolveDrop), but treating it the
-      // same way here would silently discard the vast majority of real drops.
-      const activeItemId = toItemId(active.id)
-      const workingSections = dragSections ?? sections
-      const { sectionIndex: toSectionIndex, itemIndex: insertIndex } = locateItem(workingSections, activeItemId)
+  function handleDragEnd({ active }: DragEndEvent) {
+    const activeItemId = toItemId(active.id)
+    const target = dragTargetRef.current
+    if (target) {
       const { sectionIndex: fromSectionIndex, itemIndex: fromIndex } = locateItem(sections, activeItemId)
-      if (toSectionIndex !== fromSectionIndex || insertIndex !== fromIndex) {
-        onReorder(activeItemId, toSectionIndex, insertIndex)
+      if (target.toSectionIndex !== fromSectionIndex || target.insertIndex !== fromIndex) {
+        onReorder(activeItemId, target.toSectionIndex, target.insertIndex)
       }
     }
+    dragTargetRef.current = null
     setDragSections(null)
     setActiveId(null)
     onDragEnd?.()
   }
 
   function handleDragCancel() {
+    dragTargetRef.current = null
     setDragSections(null)
     setActiveId(null)
     onDragEnd?.()
