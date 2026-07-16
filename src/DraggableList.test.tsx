@@ -2,7 +2,7 @@ import '@testing-library/jest-dom/vitest'
 import React from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
-import { DraggableList, getInsertSlotAt } from './DraggableList'
+import { DraggableList } from './DraggableList'
 
 // Not wired up project-wide (vitest.config.ts has no `globals: true`, so
 // testing-library's own auto-cleanup can't find a global afterEach to hook
@@ -162,15 +162,11 @@ describe('non-drag reflow animation (hand-rolled FLIP)', () => {
     expect(rafCallback).toBeNull()
   })
 
-  it('does NOT animate rows while insertSlot is FAB-driven - they snap instantly instead', () => {
-    // A live FAB drag resolves a new insertSlot position on every pointermove
-    // - far more often than an ease can ever settle between changes.
-    // Animating each one both looks chaotic and (more importantly) breaks
-    // getInsertSlotAt's own getBoundingClientRect reads, which would
-    // otherwise see a mid-flight transformed position instead of the row's
-    // true one and feed an incorrect result back into the FAB's own
-    // placement decision - so this row must snap, not ease, the whole time
-    // insertSlot is present.
+  it('animates a row shifting down when a NewTaskInputField is inserted above it', () => {
+    // insertSlot is now only ever driven by a discrete, one-time state change
+    // (opening the new-task text field) - not a rapid-fire stream of FAB
+    // pointermove updates like before the FAB was folded into dnd-kit's own
+    // drag system - so there's no reason to suppress the animation here.
     const topByNode = new WeakMap<Element, number>()
     mockTop(topByNode)
 
@@ -188,103 +184,56 @@ describe('non-drag reflow animation (hand-rolled FLIP)', () => {
       />
     )
 
+    expect(item2Row.style.transform).toBe('translateY(-60px)')
+
+    rafCallback?.(0)
+
     expect(item2Row.style.transform).toBe('')
-    expect(rafCallback).toBeNull()
-  })
-
-  it('resumes animating once the FAB drag ends (insertSlot goes back to undefined)', () => {
-    const topByNode = new WeakMap<Element, number>()
-    mockTop(topByNode)
-
-    const { rerender } = renderList([{ header: <h2>Section A</h2>, items: [{ id: 1 }, { id: 2 }] }])
-
-    rerender(
-      <DraggableList
-        sections={[{ header: <h2>Section A</h2>, items: [{ id: 1 }, { id: 2 }] }]}
-        onReorder={() => {}}
-        renderItem={(item: Item) => <span>Item {item.id}</span>}
-        insertSlot={{ sectionIndex: 0, index: 1, content: <div>Slot</div> }}
-      />
-    )
-
-    const item2Row = screen.getByText('Item 2').closest('li')!
-    topByNode.set(item2Row, 60)
-
-    rerender(
-      <DraggableList
-        sections={[{ header: <h2>Section A</h2>, items: [{ id: 1 }, { id: 2 }] }]}
-        onReorder={() => {}}
-        renderItem={(item: Item) => <span>Item {item.id}</span>}
-      />
-    )
-
-    // The FAB drag just ended - no catch-up animation for whatever happened
-    // while suppressed, but a genuinely NEW reflow after that should still
-    // animate normally.
-    expect(item2Row.style.transform).toBe('')
-
-    topByNode.set(item2Row, 100)
-    rerender(
-      <DraggableList
-        sections={[{ header: <h2>Section A</h2>, items: [{ id: 3 }, { id: 1 }, { id: 2 }] }]}
-        onReorder={() => {}}
-        renderItem={(item: Item) => <span>Item {item.id}</span>}
-      />
-    )
-
-    expect(item2Row.style.transform).toBe('translateY(-40px)')
+    expect(item2Row.style.transition).toBe('transform 200ms ease')
   })
 })
 
-describe('getInsertSlotAt', () => {
-  afterEach(() => {
-    vi.restoreAllMocks()
-  })
-
-  function mockRects(rectByText: Record<string, { top: number; height: number }>) {
-    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
-      const r = rectByText[this.textContent ?? ''] ?? { top: 0, height: 0 }
-      return {
-        top: r.top,
-        bottom: r.top + r.height,
-        height: r.height,
-        left: 0,
-        right: 0,
-        width: 0,
-        x: 0,
-        y: r.top,
-        toJSON: () => ({}),
-      } as DOMRect
-    })
+describe('insert button', () => {
+  function renderWithInsertButton(sections: TestSection[]) {
+    return render(
+      <DraggableList
+        sections={sections}
+        onReorder={() => {}}
+        renderItem={(item: Item) => <span>Item {item.id}</span>}
+        insertButton={{ onRequestInsert: () => {} }}
+      />
+    )
   }
 
-  it('resolves clientY to the section whose group extends past it, and the nearest item midpoint within it', () => {
-    const { container } = renderList([
+  it('is opt-in - omitted entirely when the insertButton prop is not supplied', () => {
+    const { container } = renderList([{ header: <h2>Section A</h2>, items: [{ id: 1 }] }])
+
+    expect(container.querySelector('[aria-label="Add task"]')).toBeNull()
+  })
+
+  it('renders as a 0-height row hosting the fixed-corner button while idle', () => {
+    const { container } = renderWithInsertButton([{ header: <h2>Section A</h2>, items: [{ id: 1 }] }])
+
+    const rows = Array.from(container.querySelectorAll('li'))
+    const buttonRow = rows[rows.length - 1]
+    expect(buttonRow.style.height).toBe('0px')
+
+    const button = buttonRow.querySelector('button[aria-label="Add task"]')!
+    expect(button).not.toBeNull()
+    expect((button as HTMLElement).style.position).toBe('fixed')
+  })
+
+  it('does not carry the tail-drop-zone padding itself - it lands on the true last item/header instead', () => {
+    const { container } = renderWithInsertButton([
       { header: <h2>Section A</h2>, items: [{ id: 1 }, { id: 2 }] },
-      { header: <h2>Section B</h2>, items: [{ id: 3 }] },
     ])
-    mockRects({
-      'Section A': { top: 0, height: 20 },
-      'Item 1': { top: 20, height: 40 }, // midpoint 40
-      'Item 2': { top: 60, height: 40 }, // midpoint 80, section A group ends at 100
-      'Section B': { top: 100, height: 40 },
-      'Item 3': { top: 140, height: 40 }, // midpoint 160, section B group ends at 180
-    })
 
-    expect(getInsertSlotAt(container, 50)).toEqual({ sectionIndex: 0, index: 1 })
-    expect(getInsertSlotAt(container, 110)).toEqual({ sectionIndex: 1, index: 0 })
-  })
+    const rows = Array.from(container.querySelectorAll('li'))
+    const buttonRow = rows[rows.length - 1]
+    const lastItemRow = rows[rows.length - 2]
 
-  it('defaults to the start of an empty section', () => {
-    const { container } = renderList([{ header: <h2>Section A</h2>, items: [] }])
-    mockRects({ 'Section A': { top: 0, height: 20 } })
-
-    expect(getInsertSlotAt(container, 15)).toEqual({ sectionIndex: 0, index: 0 })
-  })
-
-  it('returns the top-left default when there are no sections at all', () => {
-    const { container } = renderList([])
-
-    expect(getInsertSlotAt(container, 100)).toEqual({ sectionIndex: 0, index: 0 })
+    expect(buttonRow.querySelector('button')).not.toBeNull() // confirms this IS the button row
+    expect(['', '0px']).toContain(buttonRow.style.paddingBottom)
+    expect(lastItemRow.style.paddingBottom).toBe('96px')
   })
 })

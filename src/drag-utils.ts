@@ -40,12 +40,25 @@ type ExpandedRow = {
   content: ReactNode
 }
 
-export type Row<T> = HeaderRow | ItemRow<T> | InsertSlotRow | ExpandedRow
+export const INSERT_BUTTON_ID = 'insert-button' as const
+
+// The FAB, folded into the same flat sortable list as a genuine draggable -
+// always the array's last row. Unlike insert-slot/expanded, it DOES
+// participate in the normal live-shift strategy (see DraggableList's
+// shouldLiveShift) - dragging it toward the top of the list should open a
+// gap through the intervening rows exactly like dragging a real task does.
+type InsertButtonRow = {
+  kind: 'insert-button'
+  id: typeof INSERT_BUTTON_ID
+}
+
+export type Row<T> = HeaderRow | ItemRow<T> | InsertSlotRow | ExpandedRow | InsertButtonRow
 
 export function buildRows<T extends { id: number }>(
   sections: { header?: ReactNode; items: T[] }[],
   insertSlot?: { sectionIndex: number; index: number; content: ReactNode },
-  expandedSlot?: { afterItemId: number; content: ReactNode }
+  expandedSlot?: { afterItemId: number; content: ReactNode },
+  hasInsertButton?: boolean
 ): Row<T>[] {
   const rows: Row<T>[] = []
 
@@ -69,6 +82,10 @@ export function buildRows<T extends { id: number }>(
       rows.push({ kind: 'insert-slot', id: 'insert-slot', sectionIndex, content: insertSlot.content })
     }
   })
+
+  if (hasInsertButton) {
+    rows.push({ kind: 'insert-button', id: INSERT_BUTTON_ID })
+  }
 
   return rows
 }
@@ -98,7 +115,8 @@ function insertIndexInSection<T>(rows: Row<T>[], uptoIndex: number, sectionIndex
 // field directly.
 function sectionIndexAtPosition<T>(rows: Row<T>[], position: number): number {
   for (let i = position - 1; i >= 0; i--) {
-    if (rows[i].kind === 'header') return rows[i].sectionIndex
+    const row = rows[i]
+    if (row.kind === 'header') return row.sectionIndex
   }
   return 0
 }
@@ -140,4 +158,22 @@ export function resolveCommit<T extends { id: number }>(
   if (toSectionIndex === fromSectionIndex && insertIndex === fromInsertIndex) return null
 
   return { toSectionIndex, insertIndex }
+}
+
+// Resolves where a brand-new task should be inserted, given the insert
+// button's `over` at drop time. Deliberately distinct from resolveCommit:
+// there's no "from" position to diff against (the button's own array
+// position is arbitrary bookkeeping, not a real placement), so no
+// arrayMove/no-op-guard step - and no direction sensitivity, since there's
+// no prior position to approach from. Hovering a header means "top of that
+// section", same as resolveCommit.
+export function resolveInsertTarget<T extends { id: number }>(
+  rows: Row<T>[],
+  overId: UniqueIdentifier
+): { sectionIndex: number; insertIndex: number } {
+  const overIndex = locateRow(rows, overId)
+  const overRow = rows[overIndex]
+  if (overRow.kind === 'header') return { sectionIndex: overRow.sectionIndex, insertIndex: 0 }
+  const sectionIndex = sectionIndexAtPosition(rows, overIndex)
+  return { sectionIndex, insertIndex: insertIndexInSection(rows, overIndex, sectionIndex) }
 }

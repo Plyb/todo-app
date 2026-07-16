@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { loadAllBlocks, loadAllSubtaskLinks } from './db'
 import type { BlockingRelationship, SubtaskLink, Task, ViewSelectorVisibility } from './types'
 import { DraggableList } from './DraggableList'
-import { AddTaskFab, type NewTaskInput, type InsertSlotTarget } from './AddTaskFab'
 import { NewTaskInputField } from './NewTaskInputField'
 import { rankAtInsertIndex } from './rank-utils'
 import { QuickSelectPanel } from './QuickSelectPanel'
@@ -28,6 +27,11 @@ function shouldShowViewSelectorButton(): boolean {
 
 type MainPageProps = {
   onNavigateToSettings: () => void
+}
+
+type NewTaskInput = {
+  sectionIndex: number
+  insertIndex: number
 }
 
 function SettingsButton({ onClick }: { onClick: () => void }) {
@@ -99,7 +103,6 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
   const { statuses } = useStatuses()
   const { views, currentViewSlug, recentViewSlugs, openView } = useViews()
   const [newTaskInput, setNewTaskInput] = useState<NewTaskInput | null>(null)
-  const [fabDragSlot, setFabDragSlot] = useState<InsertSlotTarget | null>(null)
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null)
   const [modalTaskId, setModalTaskId] = useState<number | null>(null)
   const [viewModalOpen, setViewModalOpen] = useState(false)
@@ -111,7 +114,6 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
     loadAllSubtaskLinks().then(setSubtaskLinks)
   }, [])
 
-  const listRef = useRef<HTMLDivElement>(null)
   const inputKeyRef = useRef(0)
 
   const noModalOpen = selectedTaskId === null && !viewModalOpen && modalTaskId === null
@@ -308,21 +310,6 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
           />
         ),
       }
-    : fabDragSlot !== null
-    ? {
-        index: fabDragSlot.index,
-        sectionIndex: fabDragSlot.sectionIndex,
-        content: (
-          <div style={{
-            height: 44,
-            background: 'rgba(26,115,232,0.08)',
-            borderRadius: theme.radii.md,
-            border: `2px dashed ${theme.colors.brand}`,
-            margin: '4px 0',
-            transition: 'all 0.15s ease',
-          }} />
-        ),
-      }
     : undefined
 
   const expandedSlot = quickSelectPanelProps
@@ -390,20 +377,14 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
             parentTaskName={parentTaskNameByChildId.get(task.id)}
           />
         )}
-        listRef={listRef}
         insertSlot={insertSlot}
         onItemClick={selectedTaskId === null ? handleTaskClick : undefined}
         itemStyle={itemStyleFn}
         expandedSlot={expandedSlot}
+        insertButton={{ onRequestInsert: openInput }}
       />
 
       <SettingsButton onClick={onNavigateToSettings} />
-
-      <AddTaskFab
-        listRef={listRef}
-        onRequestInsert={openInput}
-        onDragInsertSlot={setFabDragSlot}
-      />
 
       {overscrollIndicator}
       {viewModal}

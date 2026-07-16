@@ -13,8 +13,8 @@ import {
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { theme } from './theme'
-import { buildRows, resolveCommit, type Row } from './drag-utils'
-import { findInsertIndex } from './pointer-utils'
+import { buildRows, resolveCommit, resolveInsertTarget, INSERT_BUTTON_ID, type Row } from './drag-utils'
+import { DraggableInsertButton, FabDragPreview } from './DraggableInsertButton'
 
 const MOUSE_DRAG_ACTIVATION_PX = 8
 const TOUCH_DRAG_DELAY_MS = 400
@@ -38,35 +38,6 @@ function toItemId(id: UniqueIdentifier): number {
   return typeof id === 'number' ? id : Number(id)
 }
 
-// Adapted for the flat row DOM structure: rows carry `data-section-index`
-// (headers and items) so contiguous runs of it delimit a section, and
-// `data-item-row` marks the subset findInsertIndex should measure against
-// (excluding the header itself and any insert-slot/expanded row, neither of
-// which carries data-section-index at all).
-export function getInsertSlotAt(container: HTMLElement, clientY: number): { sectionIndex: number; index: number } {
-  const rowEls = Array.from(container.querySelectorAll<HTMLElement>('[data-section-index]'))
-  if (rowEls.length === 0) return { sectionIndex: 0, index: 0 }
-
-  const groups: { sectionIndex: number; els: HTMLElement[] }[] = []
-  for (const el of rowEls) {
-    const sectionIndex = Number(el.dataset.sectionIndex)
-    const last = groups[groups.length - 1]
-    if (last?.sectionIndex === sectionIndex) last.els.push(el)
-    else groups.push({ sectionIndex, els: [el] })
-  }
-
-  let target = groups[groups.length - 1]
-  for (const group of groups) {
-    if (clientY < group.els[group.els.length - 1].getBoundingClientRect().bottom) {
-      target = group
-      break
-    }
-  }
-
-  const itemEls = target.els.filter((el) => el.dataset.itemRow !== undefined)
-  return { sectionIndex: target.sectionIndex, index: findInsertIndex(itemEls, clientY) }
-}
-
 type Section<T> = {
   header?: React.ReactNode
   items: T[]
@@ -80,40 +51,36 @@ type DraggableListProps<T extends { id: number }> = {
   onItemClick?: (id: number) => void
   insertSlot?: { index: number; sectionIndex: number; content: React.ReactNode }
   expandedSlot?: { afterItemId: number; content: React.ReactNode }
-  listRef?: React.RefObject<HTMLDivElement | null>
+  insertButton?: { onRequestInsert: (sectionIndex: number, insertIndex: number) => void }
   onDragStart?: () => void
   onDragEnd?: () => void
 }
 
 // The tail drop-zone only ever belongs to the array's OWN final row, and
-// only when that row is a real item/header (droppable-eligible). If the
-// final row is currently an insert-slot or expanded panel (both fully
-// droppable-disabled - see SortableRow), redirecting the padding onto an
-// earlier row instead would open a phantom gap between that row and the
-// insert-slot/panel, visibly displacing it downward. Accepting no tail drop
-// zone in that narrow, transient state is better than that.
+// only when that row is a real item/header (droppable-eligible). An
+// insert-button row is always the array's last row when present, but is
+// fully droppable-disabled - skip past it rather than treating its presence
+// as disqualifying the tail-drop-zone entirely. An insert-slot/expanded row
+// being last (rarer, transient) still disqualifies it - redirecting the
+// padding onto an earlier row would open a phantom gap and visibly displace
+// it downward instead.
 function findTailPaddingIndex<T>(rows: Row<T>[]): number {
-  const lastIndex = rows.length - 1
-  if (lastIndex < 0) return -1
-  const lastRow = rows[lastIndex]
-  return lastRow.kind === 'item' || lastRow.kind === 'header' ? lastIndex : -1
+  for (let i = rows.length - 1; i >= 0; i--) {
+    if (rows[i].kind === 'item' || rows[i].kind === 'header') return i
+    if (rows[i].kind !== 'insert-button') return -1
+  }
+  return -1
 }
 
 // FLIP-animates a row to its new position whenever its own measured top
 // changes between renders, for any reason OTHER than a real drag (dnd-kit's
-// own shift-preview owns the row's transform then - see SortableRow) or a
-// live FAB insert-slot drag (`skip`, gated off entirely - see DraggableList
-// for why: that's a continuous, high-frequency stream of position changes,
-// and animating each one both looks chaotic, since a new change constantly
-// interrupts the previous ease before it settles, and breaks the FAB's own
-// getInsertSlotAt, which reads getBoundingClientRect to decide the NEXT
-// position - a mid-flight transform makes that read the wrong (transformed)
-// location, feeding back an incorrect result). This is what animates a
-// header settling after a drop and the expanded panel opening/closing:
-// dnd-kit's built-in layout-change animation only fires around an actual
-// drag session, so it can't cover reflows caused by anything else -
-// confirmed empirically, not just in theory, so this hand-rolled path is
-// deliberate, not a fallback.
+// own shift-preview owns the row's transform then - see SortableRow and
+// DraggableList's `suppressFlip`). This is what animates a header settling
+// after a drop, the expanded panel opening/closing, and a NewTaskInputField
+// row being spliced in: dnd-kit's built-in layout-change animation only
+// fires around an actual drag session, so it can't cover reflows caused by
+// anything else - confirmed empirically, not just in theory, so this
+// hand-rolled path is deliberate, not a fallback.
 //
 // Mutates the DOM node directly (not React state) - the same technique the
 // old AnimatedHeader used - so React's own style prop never has to fight an
@@ -200,29 +167,49 @@ function SortableRow<T extends { id: number }>({
   suppressFlip: boolean
 }) {
   const isTask = row.kind === 'item'
+  const isInsertButton = row.kind === 'insert-button'
   // Every OTHER header legitimately needs to shift live as a preceding
   // section grows/shrinks during the drag (that's the whole point of the
   // boundary moving to track where the section actually starts) - only the
   // very first section's header has nothing above it that could ever change,
   // so it alone should never be displaced by a live drag.
   const isTopHeader = row.kind === 'header' && row.sectionIndex === 0
-  const shouldLiveShift = isTask || (row.kind === 'header' && !isTopHeader)
+  // The insert button DOES live-shift normally, like a task - dragging it
+  // toward the top of the list should open a gap through the intervening
+  // rows exactly like a real task reorder preview does.
+  const shouldLiveShift = isTask || isInsertButton || (row.kind === 'header' && !isTopHeader)
   const elementRef = useRef<HTMLLIElement | null>(null)
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+    over,
+  } = useSortable({
     id: row.id,
-    disabled: isTask ? undefined : { draggable: true, droppable: row.kind !== 'header' },
+    disabled: isTask
+      ? undefined
+      : isInsertButton
+        ? { draggable: false, droppable: true }
+        : { draggable: true, droppable: row.kind !== 'header' },
     // Every reflow OTHER than a live drag is handled by useRowShiftFlip
     // instead (see above) - dnd-kit's own layout-change animation proved
     // unreliable for those non-drag cases in practice.
     animateLayoutChanges: () => false,
     // dnd-kit's naive index-range strategy shifts EVERY row between
-    // activeIndex and overIndex - fine for tasks and non-first headers
-    // (which should track a section boundary moving), but wrong for the
-    // very first header (nothing above it can move) and for insert-slot/
-    // expanded rows, which should stay put during a live drag and only ever
-    // move via the settle FLIP afterward.
+    // activeIndex and overIndex - fine for tasks, the insert button, and
+    // non-first headers (which should track a section boundary moving), but
+    // wrong for the very first header (nothing above it can move) and for
+    // insert-slot/expanded rows, which should stay put during a live drag
+    // and only ever move via the settle FLIP afterward.
     strategy: shouldLiveShift ? undefined : () => null,
     transition: ROW_SHIFT_TRANSITION_CONFIG,
+    // Read by the sensors' bypassActivationConstraint (see DraggableList) to
+    // give this one draggable instant activation, matching the old FAB's feel.
+    data: isInsertButton ? { instantActivate: true } : undefined,
   })
 
   const setRefs = (node: HTMLLIElement | null) => {
@@ -303,6 +290,18 @@ function SortableRow<T extends { id: number }>({
           </div>
         </li>
       )
+    case 'insert-button':
+      return (
+        <DraggableInsertButton
+          setNodeRef={setRefs}
+          setActivatorNodeRef={setActivatorNodeRef}
+          attributes={attributes}
+          listeners={listeners}
+          isDragging={isDragging}
+          hasTarget={over != null}
+          dragStyle={dragStyle}
+        />
+      )
   }
 }
 
@@ -314,41 +313,52 @@ export function DraggableList<T extends { id: number }>({
   onItemClick,
   insertSlot,
   expandedSlot,
-  listRef,
+  insertButton,
   onDragStart,
   onDragEnd,
 }: DraggableListProps<T>) {
-  const [activeId, setActiveId] = useState<number | null>(null)
+  const [activeId, setActiveId] = useState<UniqueIdentifier | null>(null)
 
   const sensors = useSensors(
-    useSensor(MouseSensor, { activationConstraint: { distance: MOUSE_DRAG_ACTIVATION_PX } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: TOUCH_DRAG_DELAY_MS, tolerance: TOUCH_DRAG_TOLERANCE_PX } }),
+    useSensor(MouseSensor, {
+      activationConstraint: { distance: MOUSE_DRAG_ACTIVATION_PX },
+      // The insert button wants the same instant pointer-capture feel the
+      // old hand-rolled FAB had - no perceptible delay before it starts
+      // following the pointer - while regular tasks keep the normal
+      // distance threshold for tap-vs-drag disambiguation.
+      bypassActivationConstraint: ({ activeNode }) => activeNode.data.current?.instantActivate === true,
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: TOUCH_DRAG_DELAY_MS, tolerance: TOUCH_DRAG_TOLERANCE_PX },
+      bypassActivationConstraint: ({ activeNode }) => activeNode.data.current?.instantActivate === true,
+    }),
   )
 
-  const rows = useMemo(() => buildRows(sections, insertSlot, expandedSlot), [sections, insertSlot, expandedSlot])
+  const rows = useMemo(
+    () => buildRows(sections, insertSlot, expandedSlot, insertButton !== undefined),
+    [sections, insertSlot, expandedSlot, insertButton]
+  )
   const rowIds = useMemo(() => rows.map((r) => r.id), [rows])
   const tailPaddingIndex = findTailPaddingIndex(rows)
   const isRealDragActive = activeId !== null
-  // A live FAB drag resolves a new insertSlot position on every pointermove -
-  // far more often than an easing animation can ever settle between changes.
-  // Animating every one of those reflows both looks chaotic (each new
-  // position interrupts the previous ease before it finishes) and breaks
-  // getInsertSlotAt's own measurements (a mid-flight transform makes
-  // getBoundingClientRect report the wrong, transformed position, feeding an
-  // incorrect result back into the FAB's own placement decision) - so rows
-  // snap instantly for the whole time insertSlot is FAB-driven.
-  const suppressFlip = isRealDragActive || insertSlot !== undefined
+  // dnd-kit's own live shift-preview owns every row's transform during a
+  // real drag (including the insert button's own) - the hand-rolled FLIP
+  // must stay out of its way entirely then.
+  const suppressFlip = isRealDragActive
 
   const allItems = sections.flatMap((s) => s.items)
-  const activeItem = activeId !== null ? allItems.find((t) => t.id === activeId) ?? null : null
+  const activeItem = typeof activeId === 'number' ? allItems.find((t) => t.id === activeId) ?? null : null
 
   function handleDragStart({ active }: DragStartEvent) {
-    setActiveId(toItemId(active.id))
+    setActiveId(active.id)
     onDragStart?.()
   }
 
   function handleDragEnd({ active, over }: DragEndEvent) {
-    if (over) {
+    if (active.id === INSERT_BUTTON_ID) {
+      const target = over ? resolveInsertTarget(rows, over.id) : null
+      insertButton?.onRequestInsert(target?.sectionIndex ?? 0, target?.insertIndex ?? 0)
+    } else if (over) {
       const commit = resolveCommit(rows, active.id, over.id)
       if (commit) onReorder(toItemId(active.id), commit.toSectionIndex, commit.insertIndex)
     }
@@ -368,27 +378,27 @@ export function DraggableList<T extends { id: number }>({
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
     >
-      <div ref={listRef}>
-        <SortableContext items={rowIds} strategy={verticalListSortingStrategy}>
-          <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-            {rows.map((row, i) => (
-              <SortableRow
-                key={String(row.id)}
-                row={row}
-                renderItem={renderItem}
-                itemStyle={itemStyle}
-                onItemClick={onItemClick}
-                extraPaddingBottom={i === tailPaddingIndex ? LAST_SECTION_DROP_TAIL_HEIGHT : 0}
-                isRealDragActive={isRealDragActive}
-                suppressFlip={suppressFlip}
-              />
-            ))}
-          </ul>
-        </SortableContext>
-      </div>
+      <SortableContext items={rowIds} strategy={verticalListSortingStrategy}>
+        <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+          {rows.map((row, i) => (
+            <SortableRow
+              key={String(row.id)}
+              row={row}
+              renderItem={renderItem}
+              itemStyle={itemStyle}
+              onItemClick={onItemClick}
+              extraPaddingBottom={i === tailPaddingIndex ? LAST_SECTION_DROP_TAIL_HEIGHT : 0}
+              isRealDragActive={isRealDragActive}
+              suppressFlip={suppressFlip}
+            />
+          ))}
+        </ul>
+      </SortableContext>
 
       <DragOverlay>
-        {activeItem && (
+        {activeId === INSERT_BUTTON_ID ? (
+          <FabDragPreview />
+        ) : activeItem ? (
           <div
             style={{
               padding: '12px 16px',
@@ -403,7 +413,7 @@ export function DraggableList<T extends { id: number }>({
           >
             {renderItem(activeItem)}
           </div>
-        )}
+        ) : null}
       </DragOverlay>
     </DndContext>
   )

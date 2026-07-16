@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildRows, locateRow, resolveCommit, type Row } from './drag-utils'
+import { buildRows, locateRow, resolveCommit, resolveInsertTarget, INSERT_BUTTON_ID, type Row } from './drag-utils'
 
 type Item = { id: number }
 
@@ -80,6 +80,18 @@ describe('buildRows', () => {
       ['item', 5],
     ])
   })
+
+  it('appends one insert-button row as the array\'s last row when requested', () => {
+    const rows = buildRows(sections(), undefined, undefined, true)
+
+    expect(rows[rows.length - 1]).toEqual({ kind: 'insert-button', id: INSERT_BUTTON_ID })
+  })
+
+  it('omits the insert-button row by default', () => {
+    const rows = buildRows(sections())
+
+    expect(rows.some((r) => r.kind === 'insert-button')).toBe(false)
+  })
 })
 
 describe('locateRow', () => {
@@ -138,5 +150,40 @@ describe('resolveCommit', () => {
     ]
 
     expect(resolveCommit(flat, 1, 3)).toEqual({ toSectionIndex: 0, insertIndex: 2 })
+  })
+})
+
+describe('resolveInsertTarget', () => {
+  function rows(): Row<Item>[] {
+    return [
+      { kind: 'header', id: 'header:0', sectionIndex: 0, content: null },
+      { kind: 'item', id: 1, sectionIndex: 0, item: { id: 1 } },
+      { kind: 'item', id: 2, sectionIndex: 0, item: { id: 2 } },
+      { kind: 'header', id: 'header:1', sectionIndex: 1, content: null },
+      { kind: 'item', id: 3, sectionIndex: 1, item: { id: 3 } },
+      { kind: 'insert-button', id: INSERT_BUTTON_ID },
+    ]
+  }
+
+  it('hovering an item inserts before it, in its section', () => {
+    expect(resolveInsertTarget(rows(), 2)).toEqual({ sectionIndex: 0, insertIndex: 1 })
+  })
+
+  it('hovering a header inserts at the top of that section', () => {
+    expect(resolveInsertTarget(rows(), 'header:1')).toEqual({ sectionIndex: 1, insertIndex: 0 })
+  })
+
+  it('has no direction sensitivity - unlike resolveCommit, there is no prior position to approach from', () => {
+    expect(resolveInsertTarget(rows(), 1)).toEqual({ sectionIndex: 0, insertIndex: 0 })
+  })
+
+  it('resolves to section 0 for a list with no header rows at all', () => {
+    const flat: Row<Item>[] = [
+      { kind: 'item', id: 1, sectionIndex: 0, item: { id: 1 } },
+      { kind: 'item', id: 2, sectionIndex: 0, item: { id: 2 } },
+      { kind: 'insert-button', id: INSERT_BUTTON_ID },
+    ]
+
+    expect(resolveInsertTarget(flat, 2)).toEqual({ sectionIndex: 0, insertIndex: 1 })
   })
 })
