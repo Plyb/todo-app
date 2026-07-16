@@ -89,6 +89,7 @@ export function DraggableInsertButton({
             justifyContent: 'center',
             touchAction: 'none',
             cursor: 'pointer',
+            zIndex: theme.zIndex.fab,
           }}
         >
           <FabGlyph />

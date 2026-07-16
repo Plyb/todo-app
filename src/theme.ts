@@ -36,6 +36,7 @@ export const shadows = {
 } as const
 
 export const zIndex = {
+  fab: 5,
   panel: 10,
   panelBackdrop: 11,
   modal: 200,
