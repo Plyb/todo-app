@@ -1,5 +1,3 @@
-import React from 'react'
-import type { DraggableAttributes, DraggableSyntheticListeners } from '@dnd-kit/core'
 import { theme } from './theme'
 
 export const FAB_BOTTOM = 24
@@ -10,17 +8,25 @@ export function FabGlyph() {
   return <span style={{ fontSize: 28, lineHeight: 1 }}>+</span>
 }
 
-// The DragOverlay clone - mirrors the resting button's circular styling
-// (matching the original raised/"grabbing" look) since DragOverlay renders
-// independently of the resting button, which is hidden while dragging.
-export function FabDragPreview() {
+// A circular clone that follows the pointer while the FAB is dragged.
+//
+// Unlike task rows, the FAB's sortable source element is a 0-height list row
+// pinned nowhere near the pointer, so dnd-kit's <DragOverlay> (which anchors
+// to the source element's rect) can't position a FAB preview correctly - it
+// lands top-left. Instead the parent tracks the live drag position (via
+// DragDropProvider's onDragMove - dnd-kit swallows window pointer events once
+// a drag is active, so a plain listener can't) and passes it here so the
+// circle sits centered under the cursor, matching the old FAB's feel.
+export function FabDragPreview({ x, y }: { x: number; y: number }) {
   return (
-      <div
+    <div
       style={{
         position: 'fixed',
-        right: FAB_RIGHT,
+        left: x,
+        top: y,
         width: FAB_SIZE,
         height: FAB_SIZE,
+        transform: 'translate(-50%, -50%) scale(1.1)',
         borderRadius: '50%',
         background: theme.colors.brand,
         color: '#fff',
@@ -28,7 +34,8 @@ export function FabDragPreview() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        transform: 'scale(1.1)',
+        pointerEvents: 'none',
+        zIndex: theme.zIndex.fab + 1,
       }}
     >
       <FabGlyph />
@@ -37,82 +44,75 @@ export function FabDragPreview() {
 }
 
 type DraggableInsertButtonProps = {
-  setNodeRef: (element: HTMLLIElement | null) => void
-  setActivatorNodeRef: (element: HTMLElement | null) => void
-  attributes: DraggableAttributes
-  listeners: DraggableSyntheticListeners
+  setNodeRef: (element: Element | null) => void
+  setActivatorNodeRef: (element: Element | null) => void
   isDragging: boolean
-  hasTarget: boolean
-  dragStyle?: React.CSSProperties
+  onTap?: () => void
 }
 
-// The FAB, folded into the same DndContext as task drags. Three states,
-// driven entirely by isDragging/hasTarget (no dead-zone radius or pointer
-// tracking of our own - "no target resolved yet" from dnd-kit's own
-// collision detection already covers "pointer still near the FAB's own
-// corner, or over blank space"):
+// The FAB, folded into the same DragDropProvider as task drags as a real
+// sortable row. Two states, driven entirely by isDragging:
 // - idle: 0-height list row, hosts the fixed-corner button (the drag handle)
-// - dragging, no target: stays invisible - DragOverlay's floating clone is
-//   the only visible feedback
-// - dragging, target resolved: the dashed placeholder, positioned by
-//   dnd-kit's own live-shift transform exactly like a task mid-reorder
+// - dragging: the dashed placeholder, live-positioned by dnd-kit's own
+//   optimistic sorting exactly like a task mid-reorder. The floating clone in
+//   the DragOverlay is what follows the pointer.
 export function DraggableInsertButton({
   setNodeRef,
   setActivatorNodeRef,
-  attributes,
-  listeners,
   isDragging,
-  hasTarget,
-  dragStyle,
+  onTap,
 }: DraggableInsertButtonProps) {
-  if (!isDragging) {
-    return (
-      <li ref={setNodeRef} style={{ height: 0, overflow: 'visible', listStyle: 'none' }}>
-        <button
-          ref={setActivatorNodeRef}
-          {...attributes}
-          {...listeners}
-          aria-label="Add task"
-          style={{
-            position: 'fixed',
-            bottom: FAB_BOTTOM,
-            right: FAB_RIGHT,
-            width: FAB_SIZE,
-            height: FAB_SIZE,
-            borderRadius: '50%',
-            background: theme.colors.brand,
-            color: '#fff',
-            border: 'none',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            touchAction: 'none',
-            cursor: 'pointer',
-            zIndex: theme.zIndex.fab,
-          }}
-        >
-          <FabGlyph />
-        </button>
-      </li>
-    )
-  }
-
-  if (!hasTarget) {
-    return <li ref={setNodeRef} style={{ height: 0, listStyle: 'none' }} />
-  }
-
+  // The <li> (the sortable source/row) and the fixed-corner button are ALWAYS
+  // rendered so the button never unmounts - unmounting it on drag start made
+  // it blink out of existence for a frame around the drop. While dragging, the
+  // row expands into the dashed placeholder and the button is just hidden (the
+  // pointer-following FabDragPreview is the visible feedback instead).
   return (
-    <li ref={setNodeRef} style={{ listStyle: 'none', ...dragStyle }}>
-      <div
+    <li
+      ref={setNodeRef}
+      style={{ height: isDragging ? undefined : 0, overflow: 'visible', listStyle: 'none' }}
+    >
+      {isDragging ? (
+        <div
+          style={{
+            height: 44,
+            background: 'rgba(26,115,232,0.08)',
+            borderRadius: theme.radii.md,
+            border: `2px dashed ${theme.colors.brand}`,
+            margin: '4px 0',
+          }}
+        />
+      ) : null}
+      <button
+        ref={setActivatorNodeRef}
+        aria-label="Add task"
+        // A tap doesn't move far enough to activate a drag (see the FAB's 8px
+        // distance sensor), so the native click fires - insert at the start.
+        onClick={onTap}
         style={{
-          height: 44,
-          background: 'rgba(26,115,232,0.08)',
-          borderRadius: theme.radii.md,
-          border: `2px dashed ${theme.colors.brand}`,
-          margin: '4px 0',
+          position: 'fixed',
+          bottom: FAB_BOTTOM,
+          right: FAB_RIGHT,
+          width: FAB_SIZE,
+          height: FAB_SIZE,
+          borderRadius: '50%',
+          background: theme.colors.brand,
+          color: '#fff',
+          border: 'none',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          touchAction: 'none',
+          cursor: 'pointer',
+          zIndex: theme.zIndex.fab,
+          // Hidden (but still mounted) during the drag - the floating preview
+          // is what the user sees following the pointer.
+          visibility: isDragging ? 'hidden' : 'visible',
         }}
-      />
+      >
+        <FabGlyph />
+      </button>
     </li>
   )
 }

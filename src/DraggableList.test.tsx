@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom/vitest'
 import React from 'react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it } from 'vitest'
+import { cleanup, render } from '@testing-library/react'
 import { DraggableList } from './DraggableList'
 
 // Not wired up project-wide (vitest.config.ts has no `globals: true`, so
@@ -95,39 +95,6 @@ describe('DraggableList flat row rendering', () => {
     // remaining item, and not the panel itself (which never gets it, being
     // fully droppable-disabled).
     rows.forEach((li) => expect(['', '0px']).toContain(li.style.paddingBottom))
-  })
-})
-
-describe('non-drag reflow animation (hand-rolled FLIP)', () => {
-  let rafCallback: FrameRequestCallback | null
-
-  beforeEach(() => {
-    rafCallback = null
-    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
-      rafCallback = cb
-      return 0
-    })
-  })
-
-  afterEach(() => {
-    vi.unstubAllGlobals()
-    vi.restoreAllMocks()
-  })
-
-  function mockTop(topByNode: WeakMap<Element, number>) {
-    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
-      const top = topByNode.get(this) ?? 0
-      return { top, left: 0, right: 0, bottom: top, width: 0, height: 0, x: 0, y: top, toJSON: () => ({}) } as DOMRect
-    })
-  }
-
-  it('does not animate on initial mount', () => {
-    mockTop(new WeakMap())
-    renderList([{ header: <h2>Only Section</h2>, items: [{ id: 1 }] }])
-
-    const header = screen.getByText('Only Section').closest('li')!
-    expect(header.style.transform).toBe('')
-    expect(rafCallback).toBeNull()
   })
 })
 

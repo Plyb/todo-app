@@ -1,5 +1,5 @@
-import type { UniqueIdentifier } from '@dnd-kit/core'
-import { arrayMove } from '@dnd-kit/sortable'
+import type { UniqueIdentifier } from '@dnd-kit/abstract'
+import { arrayMove } from '@dnd-kit/helpers'
 import type { ReactNode } from 'react'
 
 // A single flat list of rows is what dnd-kit actually sorts. Section
@@ -105,6 +105,55 @@ function insertIndexInSection<T>(rows: Row<T>[], uptoIndex: number, sectionIndex
   return count
 }
 
+// Which rows dnd-kit sorts. Items and the insert-button (FAB) are always
+// sortable. Headers are sortable too - they need to be drop targets so a drag
+// crossing a section boundary registers over them, and they animate/shift as
+// items move above them - EXCEPT the very first header, which stays pinned to
+// the top of the list and must never move. The insert-slot and expanded panel
+// are never sortable (they stay put and only settle via re-render).
+//
+// The `index` handed to each sortable row's useSortable() is its position
+// within THIS subsequence, matching dnd-kit's optimistic-sorting index space.
+export function isFirstHeaderIndex<T>(rows: Row<T>[], rowIndex: number): boolean {
+  if (rows[rowIndex].kind !== 'header') return false
+  return rows.findIndex((r) => r.kind === 'header') === rowIndex
+}
+
+export function isSortableRow<T>(rows: Row<T>[], rowIndex: number): boolean {
+  const row = rows[rowIndex]
+  if (row.kind === 'item' || row.kind === 'insert-button') return true
+  if (row.kind === 'header') return !isFirstHeaderIndex(rows, rowIndex)
+  return false
+}
+
+// The 0-based index dnd-kit should be given for a sortable row - its position
+// among only the sortable rows. Non-sortable rows return -1.
+export function sortableIndexOf<T>(rows: Row<T>[], rowIndex: number): number {
+  let count = 0
+  for (let i = 0; i < rowIndex; i++) {
+    if (isSortableRow(rows, i)) count++
+  }
+  return isSortableRow(rows, rowIndex) ? count : -1
+}
+
+// Rebuilds the flat row order after the active sortable row has moved from
+// `fromSortableIndex` to `toSortableIndex` WITHIN the sortable subsequence,
+// while every non-sortable row (first header / insert-slot / expanded) keeps
+// its absolute slot. dnd-kit reports drag results purely as indices into the
+// sortable subsequence (source.initialIndex -> source.index); this maps that
+// back onto the full row model so section membership can be derived exactly
+// as before.
+function reorderBySortableIndex<T>(
+  rows: Row<T>[],
+  fromSortableIndex: number,
+  toSortableIndex: number
+): Row<T>[] {
+  const sortable = rows.filter((_, i) => isSortableRow(rows, i))
+  const movedSortable = arrayMove(sortable, fromSortableIndex, toSortableIndex)
+  let cursor = 0
+  return rows.map((row, i) => (isSortableRow(rows, i) ? movedSortable[cursor++] : row))
+}
+
 // Headers never move (they're never draggable), so a header row's own
 // sectionIndex field is always accurate - unlike an item/expanded row's,
 // which goes stale for whichever row was just relocated by arrayMove. So
@@ -120,33 +169,23 @@ function sectionIndexAtPosition<T>(rows: Row<T>[], position: number): number {
 }
 
 // Resolves a drop into a target section + insert index, given the flat row
-// array as it was BEFORE the drop (the live in-drag preview is handled
-// entirely by dnd-kit's own shift animation - this only runs once, at
-// handleDragEnd). Hovering a header means "top of that section", not
-// "end of the previous one" - the one deliberate special case, since a
-// header is the only non-task row still eligible to be `over` (insert-slot
-// and expanded rows are fully droppable-disabled).
+// array as it was BEFORE the drop plus the active row's final position in
+// dnd-kit's sortable index space (from source.index at drag end). The live
+// in-drag preview is handled entirely by dnd-kit's own optimistic sorting -
+// this only runs once, at drag end, to translate the settled index back into
+// the section/insert coordinates the app stores. Returns null for a no-op
+// (dropped back where it started).
 export function resolveCommit<T extends { id: number }>(
   rows: Row<T>[],
   activeId: UniqueIdentifier,
-  overId: UniqueIdentifier
+  toSortableIndex: number
 ): { toSectionIndex: number; insertIndex: number } | null {
-  if (activeId === overId) return null
-
   const activeIndex = locateRow(rows, activeId)
-  const overIndex = locateRow(rows, overId)
-  // arrayMove(rows, activeIndex, overIndex) already lands the active row
-  // exactly at the header's own slot (pushing the header and everything
-  // after it forward by one) when arriving from ABOVE the header - which
-  // already means "right after the header". Arriving from BELOW needs a +1
-  // nudge, or the active row lands just before the header (into the
-  // previous section) instead of after it. Plain item targets need no such
-  // adjustment in either direction - this is a header-only asymmetry of
-  // splice-based array moves.
-  const targetIndex = rows[overIndex].kind === 'header' && activeIndex > overIndex ? overIndex + 1 : overIndex
-  if (targetIndex === activeIndex) return null
+  const fromSortableIndex = sortableIndexOf(rows, activeIndex)
+  if (fromSortableIndex === -1) return null
+  if (toSortableIndex === fromSortableIndex) return null
 
-  const reordered = arrayMove(rows, activeIndex, targetIndex)
+  const reordered = reorderBySortableIndex(rows, fromSortableIndex, toSortableIndex)
   const newIndex = reordered.findIndex((r) => r.id === activeId)
   const toSectionIndex = sectionIndexAtPosition(reordered, newIndex)
   const insertIndex = insertIndexInSection(reordered, newIndex, toSectionIndex)
@@ -159,19 +198,22 @@ export function resolveCommit<T extends { id: number }>(
 }
 
 // Resolves where a brand-new task should be inserted, given the insert
-// button's `over` at drop time. Deliberately distinct from resolveCommit:
-// there's no "from" position to diff against (the button's own array
-// position is arbitrary bookkeeping, not a real placement), so no
-// arrayMove/no-op-guard step - and no direction sensitivity, since there's
-// no prior position to approach from. Hovering a header means "top of that
-// section", same as resolveCommit.
+// button's final position in dnd-kit's sortable index space at drop time.
+// Deliberately distinct from resolveCommit: the button isn't a real placement
+// being diffed against a prior one, so there's no no-op guard - wherever it
+// settled is the requested insert point. The button row is itself sortable,
+// so we reconstruct the row order with it moved to its settled index, then
+// read off the section + insert index at its new slot.
 export function resolveInsertTarget<T extends { id: number }>(
   rows: Row<T>[],
-  overId: UniqueIdentifier
+  buttonId: UniqueIdentifier,
+  toSortableIndex: number
 ): { sectionIndex: number; insertIndex: number } {
-  const overIndex = locateRow(rows, overId)
-  const overRow = rows[overIndex]
-  if (overRow.kind === 'header') return { sectionIndex: overRow.sectionIndex, insertIndex: 0 }
-  const sectionIndex = sectionIndexAtPosition(rows, overIndex)
-  return { sectionIndex, insertIndex: insertIndexInSection(rows, overIndex, sectionIndex) }
+  const buttonIndex = locateRow(rows, buttonId)
+  const fromSortableIndex = sortableIndexOf(rows, buttonIndex)
+  const reordered =
+    fromSortableIndex === -1 ? rows : reorderBySortableIndex(rows, fromSortableIndex, toSortableIndex)
+  const newIndex = reordered.findIndex((r) => r.id === buttonId)
+  const sectionIndex = sectionIndexAtPosition(reordered, newIndex)
+  return { sectionIndex, insertIndex: insertIndexInSection(reordered, newIndex, sectionIndex) }
 }

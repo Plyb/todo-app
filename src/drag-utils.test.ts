@@ -114,32 +114,34 @@ describe('resolveCommit', () => {
     ]
   }
 
-  it('returns null when hovering the dragged item itself', () => {
-    expect(resolveCommit(rows(), 1, 1)).toBeNull()
+  // The third arg is the dragged row's SETTLED position in dnd-kit's sortable
+  // index space (source.index at drag end), i.e. its index among the sortable
+  // rows. That space includes non-first headers (they're drop targets) but
+  // NOT the first header (pinned). For rows() it is: item1=0, item2=1,
+  // item3=2, header:1=3, item4=4, item5=5.
+
+  it('returns null when the item settled back at its own sortable index', () => {
+    expect(resolveCommit(rows(), 1, 0)).toBeNull()
   })
 
-  it('same-section drag down: lands after the hovered item', () => {
-    expect(resolveCommit(rows(), 1, 3)).toEqual({ toSectionIndex: 0, insertIndex: 2 })
+  it('same-section move down: item1 (0) settling at index 2 lands 3rd in section 0', () => {
+    expect(resolveCommit(rows(), 1, 2)).toEqual({ toSectionIndex: 0, insertIndex: 2 })
   })
 
-  it('same-section drag up: lands before the hovered item', () => {
-    expect(resolveCommit(rows(), 3, 1)).toEqual({ toSectionIndex: 0, insertIndex: 0 })
+  it('same-section move up: item3 (2) settling at index 0 lands 1st in section 0', () => {
+    expect(resolveCommit(rows(), 3, 0)).toEqual({ toSectionIndex: 0, insertIndex: 0 })
   })
 
-  it('cross-section drag down: lands at the hovered item, in its (new) section', () => {
+  it('cross-section move onto the header slot (3) lands at the top of section 1', () => {
+    expect(resolveCommit(rows(), 1, 3)).toEqual({ toSectionIndex: 1, insertIndex: 0 })
+  })
+
+  it('cross-section move past the header (index 4) lands in section 1 after item4', () => {
     expect(resolveCommit(rows(), 1, 4)).toEqual({ toSectionIndex: 1, insertIndex: 1 })
   })
 
-  it('hovering a header from above: lands at the top of that section', () => {
-    expect(resolveCommit(rows(), 1, 'header:1')).toEqual({ toSectionIndex: 1, insertIndex: 0 })
-  })
-
-  it('hovering a header from below: lands at the top of that section (not the previous one)', () => {
-    expect(resolveCommit(rows(), 5, 'header:0')).toEqual({ toSectionIndex: 0, insertIndex: 0 })
-  })
-
-  it('returns null when hovering your own section header while already first in it', () => {
-    expect(resolveCommit(rows(), 1, 'header:0')).toBeNull()
+  it('cross-section move up: item5 (5) settling at index 0 lands at the top of section 0', () => {
+    expect(resolveCommit(rows(), 5, 0)).toEqual({ toSectionIndex: 0, insertIndex: 0 })
   })
 
   it('resolves to section 0 for a list with no header rows at all', () => {
@@ -149,7 +151,7 @@ describe('resolveCommit', () => {
       { kind: 'item', id: 3, sectionIndex: 0, item: { id: 3 } },
     ]
 
-    expect(resolveCommit(flat, 1, 3)).toEqual({ toSectionIndex: 0, insertIndex: 2 })
+    expect(resolveCommit(flat, 1, 2)).toEqual({ toSectionIndex: 0, insertIndex: 2 })
   })
 })
 
@@ -165,16 +167,20 @@ describe('resolveInsertTarget', () => {
     ]
   }
 
-  it('hovering an item inserts before it, in its section', () => {
-    expect(resolveInsertTarget(rows(), 2)).toEqual({ sectionIndex: 0, insertIndex: 1 })
+  // The FAB is itself a sortable row; the second arg is where it settled in
+  // dnd-kit's sortable index space, which includes the non-first header. For
+  // rows() that space is: item1=0, item2=1, header:1=2, item3=3, FAB=4.
+
+  it('settling between the first two items inserts after the first, in section 0', () => {
+    expect(resolveInsertTarget(rows(), INSERT_BUTTON_ID, 1)).toEqual({ sectionIndex: 0, insertIndex: 1 })
   })
 
-  it('hovering a header inserts at the top of that section', () => {
-    expect(resolveInsertTarget(rows(), 'header:1')).toEqual({ sectionIndex: 1, insertIndex: 0 })
+  it('settling just past the header (index 3) inserts at the top of section 1', () => {
+    expect(resolveInsertTarget(rows(), INSERT_BUTTON_ID, 3)).toEqual({ sectionIndex: 1, insertIndex: 0 })
   })
 
-  it('has no direction sensitivity - unlike resolveCommit, there is no prior position to approach from', () => {
-    expect(resolveInsertTarget(rows(), 1)).toEqual({ sectionIndex: 0, insertIndex: 0 })
+  it('settling at the very top inserts at the top of section 0', () => {
+    expect(resolveInsertTarget(rows(), INSERT_BUTTON_ID, 0)).toEqual({ sectionIndex: 0, insertIndex: 0 })
   })
 
   it('resolves to section 0 for a list with no header rows at all', () => {
@@ -184,6 +190,6 @@ describe('resolveInsertTarget', () => {
       { kind: 'insert-button', id: INSERT_BUTTON_ID },
     ]
 
-    expect(resolveInsertTarget(flat, 2)).toEqual({ sectionIndex: 0, insertIndex: 1 })
+    expect(resolveInsertTarget(flat, INSERT_BUTTON_ID, 1)).toEqual({ sectionIndex: 0, insertIndex: 1 })
   })
 })
