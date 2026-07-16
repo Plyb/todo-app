@@ -6,9 +6,7 @@ import type { ReactNode } from 'react'
 // membership is derived from position (each row carries the sectionIndex it
 // currently sits under) rather than from separate per-section arrays/contexts
 // - this is what lets headers, the FAB's insert-placeholder, and the expanded
-// task panel all shift out of the way of a real drag the same way tasks do,
-// using dnd-kit's own index-based animation machinery instead of hand-rolled
-// FLIP code.
+// task panel all shift out of the way of a real drag the same way tasks do
 
 type HeaderRow = {
   kind: 'header'

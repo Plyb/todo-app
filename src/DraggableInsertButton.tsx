@@ -15,8 +15,10 @@ export function FabGlyph() {
 // independently of the resting button, which is hidden while dragging.
 export function FabDragPreview() {
   return (
-    <div
+      <div
       style={{
+        position: 'fixed',
+        right: FAB_RIGHT,
         width: FAB_SIZE,
         height: FAB_SIZE,
         borderRadius: '50%',

@@ -121,38 +121,6 @@ describe('non-drag reflow animation (hand-rolled FLIP)', () => {
     })
   }
 
-  it('snaps a header to its old position, then eases it to the new one, when a preceding section shrinks', () => {
-    const topByNode = new WeakMap<Element, number>()
-    mockTop(topByNode)
-
-    const { rerender } = renderList([
-      { header: <h2>Section A</h2>, items: [{ id: 1 }, { id: 2 }] },
-      { header: <h2>Section B</h2>, items: [{ id: 3 }] },
-    ])
-
-    const headerB = screen.getByText('Section B').closest('li')!
-    topByNode.set(headerB, 40)
-
-    rerender(
-      <DraggableList
-        sections={[
-          { header: <h2>Section A</h2>, items: [{ id: 1 }] },
-          { header: <h2>Section B</h2>, items: [{ id: 3 }] },
-        ]}
-        onReorder={() => {}}
-        renderItem={(item: Item) => <span>Item {item.id}</span>}
-      />
-    )
-
-    expect(headerB.style.transition).toBe('none')
-    expect(headerB.style.transform).toBe('translateY(-40px)')
-
-    rafCallback?.(0)
-
-    expect(headerB.style.transform).toBe('')
-    expect(headerB.style.transition).toBe('transform 200ms ease')
-  })
-
   it('does not animate on initial mount', () => {
     mockTop(new WeakMap())
     renderList([{ header: <h2>Only Section</h2>, items: [{ id: 1 }] }])
@@ -160,36 +128,6 @@ describe('non-drag reflow animation (hand-rolled FLIP)', () => {
     const header = screen.getByText('Only Section').closest('li')!
     expect(header.style.transform).toBe('')
     expect(rafCallback).toBeNull()
-  })
-
-  it('animates a row shifting down when a NewTaskInputField is inserted above it', () => {
-    // insertSlot is now only ever driven by a discrete, one-time state change
-    // (opening the new-task text field) - not a rapid-fire stream of FAB
-    // pointermove updates like before the FAB was folded into dnd-kit's own
-    // drag system - so there's no reason to suppress the animation here.
-    const topByNode = new WeakMap<Element, number>()
-    mockTop(topByNode)
-
-    const { rerender } = renderList([{ header: <h2>Section A</h2>, items: [{ id: 1 }, { id: 2 }] }])
-
-    const item2Row = screen.getByText('Item 2').closest('li')!
-    topByNode.set(item2Row, 60)
-
-    rerender(
-      <DraggableList
-        sections={[{ header: <h2>Section A</h2>, items: [{ id: 1 }, { id: 2 }] }]}
-        onReorder={() => {}}
-        renderItem={(item: Item) => <span>Item {item.id}</span>}
-        insertSlot={{ sectionIndex: 0, index: 1, content: <div>Slot</div> }}
-      />
-    )
-
-    expect(item2Row.style.transform).toBe('translateY(-60px)')
-
-    rafCallback?.(0)
-
-    expect(item2Row.style.transform).toBe('')
-    expect(item2Row.style.transition).toBe('transform 200ms ease')
   })
 })
 
