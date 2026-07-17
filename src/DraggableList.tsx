@@ -202,7 +202,7 @@ function SortableRow<T extends { id: number }>({
         padding: '12px 16px',
         borderBottom: `1px solid ${theme.colors.divider}`,
         zIndex: isDragging ? 0 : 1,
-        touchAction: 'none',
+        touchAction: 'pan-y`',
         ...itemStyle?.(row.item),
         // Applied AFTER itemStyle so a dragging row is always fully hidden -
         // the DragOverlay clone is the only visible copy. (itemStyle may set

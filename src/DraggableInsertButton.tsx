@@ -109,7 +109,7 @@ export function DraggableInsertButton({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          touchAction: 'none',
+          touchAction: 'pan-y',
           cursor: 'pointer',
           zIndex: theme.zIndex.fab,
           // Hidden (but still mounted) during the drag - the floating preview
