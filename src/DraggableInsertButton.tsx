@@ -47,19 +47,25 @@ type DraggableInsertButtonProps = {
   setNodeRef: (element: Element | null) => void
   setActivatorNodeRef: (element: Element | null) => void
   isDragging: boolean
+  // Whether to show the dashed insertion placeholder. Driven entirely by the
+  // parent (isFabDragging && past the dead zone) rather than the child's own
+  // isDragging, so it can't desync from the dead-zone state on drop - which
+  // caused a one-frame placeholder flash when releasing inside the dead zone.
+  showPlaceholder?: boolean
   onTap?: () => void
 }
 
 // The FAB, folded into the same DragDropProvider as task drags as a real
-// sortable row. Two states, driven entirely by isDragging:
+// sortable row. States:
 // - idle: 0-height list row, hosts the fixed-corner button (the drag handle)
-// - dragging: the dashed placeholder, live-positioned by dnd-kit's own
-//   optimistic sorting exactly like a task mid-reorder. The floating clone in
-//   the DragOverlay is what follows the pointer.
+// - dragging in dead zone: still collapsed, no placeholder (drag uncommitted)
+// - dragging past dead zone: the dashed placeholder, live-positioned by
+//   dnd-kit's optimistic sorting. The DragOverlay clone follows the pointer.
 export function DraggableInsertButton({
   setNodeRef,
   setActivatorNodeRef,
   isDragging,
+  showPlaceholder,
   onTap,
 }: DraggableInsertButtonProps) {
   // The <li> (the sortable source/row) and the fixed-corner button are ALWAYS
@@ -70,9 +76,9 @@ export function DraggableInsertButton({
   return (
     <li
       ref={setNodeRef}
-      style={{ height: isDragging ? undefined : 0, overflow: 'visible', listStyle: 'none' }}
+      style={{ height: showPlaceholder ? undefined : 0, overflow: 'visible', listStyle: 'none' }}
     >
-      {isDragging ? (
+      {showPlaceholder ? (
         <div
           style={{
             height: 44,

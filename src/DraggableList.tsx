@@ -1,19 +1,21 @@
-import React, { useMemo, useRef, useState } from 'react'
-import { DragDropProvider, DragOverlay } from '@dnd-kit/react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { DragDropProvider, DragOverlay, useDroppable, useDragDropManager } from '@dnd-kit/react'
 import { useSortable, isSortable } from '@dnd-kit/react/sortable'
-import { PointerSensor, PointerActivationConstraints, Feedback } from '@dnd-kit/dom'
+import { PointerSensor, PointerActivationConstraints, Feedback, AutoScroller } from '@dnd-kit/dom'
 import type { UniqueIdentifier } from '@dnd-kit/abstract'
 import { theme } from './theme'
 import {
   buildRows,
   resolveCommit,
   resolveInsertTarget,
+  resolveTailDrop,
+  tailSectionIndex,
   isSortableRow,
   sortableIndexOf,
   INSERT_BUTTON_ID,
   type Row,
 } from './drag-utils'
-import { DraggableInsertButton, FabDragPreview } from './DraggableInsertButton'
+import { DraggableInsertButton, FabDragPreview, FAB_SIZE } from './DraggableInsertButton'
 
 const MOUSE_DRAG_ACTIVATION_PX = 8
 const TOUCH_DRAG_DELAY_MS = 400
@@ -22,16 +24,20 @@ const TOUCH_DRAG_TOLERANCE_PX = 8
 // press is a tap (insert at the start). A single threshold both disambiguates
 // tap-vs-drag and prevents the placeholder from flashing on a plain tap.
 const FAB_DRAG_ACTIVATION_PX = 8
+// While the FAB stays within this distance of where the drag began, the drag
+// is treated as "not yet committed": no insertion placeholder is shown and a
+// release cancels instead of inserting. 1.5x the FAB's own radius gives a
+// comfortable dead zone around its resting corner.
+const FAB_DEAD_ZONE_PX = (FAB_SIZE / 2) * 1.5
 // A press on a task that moves less than this counts as a tap (open the task),
 // not a drag. dnd-kit swallows the native click for any press it started
 // tracking - even sub-threshold jitter - so item taps are detected here from
 // pointerdown/up coordinates instead of relying on the click event.
 const TASK_TAP_TOLERANCE_PX = 8
-// The very last droppable row has no dead space below it to register a drop
-// target on (its own padding is whatever its content needs), so there's
-// nowhere to drop "at the end of the list" without landing exactly on that
-// row. This reserves some of that space as part of its own droppable rect.
-const LAST_SECTION_DROP_TAIL_HEIGHT = 96
+// Height of a section's trailing drop zone (the empty droppable row after its
+// items). Non-final sections use this fixed height; the final section's tail
+// flexes to fill the rest of the viewport (see SECTION_TAIL_MIN_FILL usage).
+const SECTION_TAIL_HEIGHT = 24
 
 function toItemId(id: UniqueIdentifier): number {
   return typeof id === 'number' ? id : Number(id)
@@ -104,25 +110,9 @@ type DraggableListProps<T extends { id: number }> = {
   onDragEnd?: () => void
 }
 
-// The tail drop-zone only ever belongs to the array's OWN final row, and
-// only when that row is a real item/header (droppable-eligible). An
-// insert-button row is always the array's last row when present, but is
-// fully droppable-disabled - skip past it rather than treating its presence
-// as disqualifying the tail-drop-zone entirely. An insert-slot/expanded row
-// being last (rarer, transient) still disqualifies it - redirecting the
-// padding onto an earlier row would open a phantom gap and visibly displace
-// it downward instead.
-function findTailPaddingIndex<T>(rows: Row<T>[]): number {
-  for (let i = rows.length - 1; i >= 0; i--) {
-    if (rows[i].kind === 'item' || rows[i].kind === 'header') return i
-    if (rows[i].kind !== 'insert-button') return -1
-  }
-  return -1
-}
-
-// A row that dnd-kit sorts: an item or the FAB. `index` is its position among
-// the sortable rows only (headers/insert-slot/expanded are excluded), which
-// is the index space dnd-kit's optimistic sorting operates in.
+// A row that dnd-kit sorts: an item, a section tail, a non-first header, or
+// the FAB. `index` is its position among the sortable rows only, which is the
+// index space dnd-kit's optimistic sorting operates in.
 function SortableRow<T extends { id: number }>({
   row,
   index,
@@ -130,7 +120,7 @@ function SortableRow<T extends { id: number }>({
   itemStyle,
   onItemClick,
   onTapInsert,
-  extraPaddingBottom,
+  fabShowPlaceholder,
 }: {
   row: Row<T>
   index: number
@@ -138,20 +128,21 @@ function SortableRow<T extends { id: number }>({
   itemStyle?: (item: T) => React.CSSProperties
   onItemClick?: (id: number) => void
   onTapInsert?: () => void
-  extraPaddingBottom: number
+  fabShowPlaceholder?: boolean
 }) {
   const isInsertButton = row.kind === 'insert-button'
-  const isHeader = row.kind === 'header'
+  // Headers and section-tails are drop targets but never dragged.
+  const isDropOnly = row.kind === 'header' || row.kind === 'section-tail'
   // Pointer-down coords for tap detection on item rows (see the <li> below).
   const tapOrigin = useRef<{ x: number; y: number } | null>(null)
   const { ref, handleRef, isDragging } = useSortable({
     id: row.id,
     index,
-    // Headers are drop targets (so a cross-section drag registers over them
-    // and they animate as items shift past) but never draggable themselves.
-    // The FAB can be dragged but should never itself be a drop target; items
-    // are freely draggable and droppable.
-    disabled: isHeader ? { draggable: true } : isInsertButton ? { droppable: true } : undefined,
+    // Headers/section-tails are drop targets (so a cross-section or
+    // end-of-section drag registers over them and they animate as items shift)
+    // but never draggable. The FAB can be dragged but is never a drop target;
+    // items are freely draggable and droppable.
+    disabled: isDropOnly ? { draggable: true } : isInsertButton ? { droppable: true } : undefined,
     // Apply the tuned pointer sensor per-draggable so the activation threshold
     // is guaranteed (relying on the provider-level sensor let items fall back
     // to dnd-kit's 5px default, which made tap-jitter start unwanted drags and
@@ -167,6 +158,7 @@ function SortableRow<T extends { id: number }>({
         setNodeRef={ref}
         setActivatorNodeRef={handleRef}
         isDragging={isDragging}
+        showPlaceholder={fabShowPlaceholder}
         onTap={onTapInsert}
       />
     )
@@ -174,7 +166,7 @@ function SortableRow<T extends { id: number }>({
 
   if (row.kind === 'header') {
     return (
-      <li ref={ref} data-section-index={row.sectionIndex} style={{ listStyle: 'none', paddingBottom: extraPaddingBottom }}>
+      <li ref={ref} data-section-index={row.sectionIndex} style={{ listStyle: 'none' }}>
         {row.content}
       </li>
     )
@@ -207,27 +199,18 @@ function SortableRow<T extends { id: number }>({
         cursor: isDragging ? 'grabbing' : 'grab',
         boxSizing: 'border-box',
         position: 'relative',
-        paddingBottom: extraPaddingBottom,
-        opacity: isDragging ? 0 : undefined,
+        padding: '12px 16px',
+        borderBottom: `1px solid ${theme.colors.divider}`,
         zIndex: isDragging ? 0 : 1,
         touchAction: 'none',
+        ...itemStyle?.(row.item),
+        // Applied AFTER itemStyle so a dragging row is always fully hidden -
+        // the DragOverlay clone is the only visible copy. (itemStyle may set
+        // its own opacity for selection fading, which must not win here.)
+        ...(isDragging ? { opacity: 0 } : null),
       }}
     >
-      {/* A separate inner box carries the visible padding/divider, so the
-          outer li's extraPaddingBottom (tail drop-zone dead space) only
-          extends its droppable hit area - it never drags the divider
-          line down with it. */}
-      <div
-        style={{
-          padding: '12px 16px',
-          borderBottom: `1px solid ${theme.colors.divider}`,
-          boxSizing: 'border-box',
-          position: 'relative',
-          ...itemStyle?.(row.item),
-        }}
-      >
-        {renderItem(row.item)}
-      </div>
+      {renderItem(row.item)}
     </li>
   )
 }
@@ -236,17 +219,11 @@ function SortableRow<T extends { id: number }>({
 // expanded panel. These stay put during a drag (never draggable, never a drop
 // target), which is exactly what keeps the first header pinned and every
 // header immovable.
-function StaticRow<T extends { id: number }>({
-  row,
-  extraPaddingBottom,
-}: {
-  row: Row<T>
-  extraPaddingBottom: number
-}) {
+function StaticRow<T extends { id: number }>({ row }: { row: Row<T> }) {
   switch (row.kind) {
     case 'header':
       return (
-        <li data-section-index={row.sectionIndex} style={{ listStyle: 'none', paddingBottom: extraPaddingBottom }}>
+        <li data-section-index={row.sectionIndex} style={{ listStyle: 'none' }}>
           {row.content}
         </li>
       )
@@ -270,6 +247,35 @@ function StaticRow<T extends { id: number }>({
   }
 }
 
+// The trailing drop zone of the last section. It's a plain droppable (NOT a
+// sortable) pinned at the bottom, filling the remaining viewport, so a task or
+// the FAB can be dropped past the last row and land at the end - without ever
+// being able to settle *after* it (which a sortable tail allowed).
+function SectionTail({ id, sectionIndex }: { id: UniqueIdentifier; sectionIndex: number }) {
+  const { ref } = useDroppable({ id })
+  return (
+    <li
+      ref={ref}
+      data-section-tail={sectionIndex}
+      style={{ listStyle: 'none', flex: '1 0 auto', minHeight: SECTION_TAIL_HEIGHT }}
+    />
+  )
+}
+
+// Suppresses dnd-kit's auto-scroll while `paused` is true. Used to stop the
+// page from scrolling down when the FAB is merely hovering its own dead zone
+// near the bottom-right corner (dragging past the dead zone re-enables it, so
+// dropping at the true bottom still scrolls). Must live inside the provider.
+function AutoScrollControl({ paused }: { paused: boolean }) {
+  const manager = useDragDropManager()
+  useEffect(() => {
+    const plugins = manager?.plugins as Array<{ disabled: boolean }> | undefined
+    const scroller = plugins?.find((p) => p instanceof AutoScroller)
+    if (scroller) scroller.disabled = paused
+  }, [manager, paused])
+  return null
+}
+
 export function DraggableList<T extends { id: number }>({
   sections,
   onReorder,
@@ -287,6 +293,9 @@ export function DraggableList<T extends { id: number }>({
   // (a plain window listener can't see moves - dnd-kit captures them once a
   // drag activates). Only used to position the FAB's pointer-following clone.
   const [fabDragPos, setFabDragPos] = useState<{ x: number; y: number } | null>(null)
+  // Where the FAB drag began, used to measure the dead zone (see below). Held
+  // in a ref since it's only read inside event handlers, never rendered.
+  const fabDragStart = useRef<{ x: number; y: number } | null>(null)
   // Bumped on every drag end to remount the FAB's sortable row. The FAB always
   // belongs at the very end of the list, but dnd-kit retains the optimistic
   // position from the previous drag, so without a fresh mount the next drag's
@@ -298,11 +307,24 @@ export function DraggableList<T extends { id: number }>({
     () => buildRows(sections, insertSlot, expandedSlot, insertButton !== undefined),
     [sections, insertSlot, expandedSlot, insertButton]
   )
-  const tailPaddingIndex = findTailPaddingIndex(rows)
 
   const allItems = sections.flatMap((s) => s.items)
   const activeItem = typeof activeId === 'number' ? allItems.find((t) => t.id === activeId) ?? null : null
   const isFabDragging = activeId === INSERT_BUTTON_ID
+  // True while the FAB is being dragged but hasn't left its dead zone yet:
+  // the preview still follows the pointer, but no placeholder is shown and a
+  // release won't insert.
+  const fabInDeadZone =
+    isFabDragging &&
+    fabDragPos != null &&
+    fabDragStart.current != null &&
+    Math.hypot(fabDragPos.x - fabDragStart.current.x, fabDragPos.y - fabDragStart.current.y) < FAB_DEAD_ZONE_PX
+
+  const fabInOrAboveDeadZone =
+    isFabDragging &&
+    fabDragPos !== null &&
+    fabDragStart.current !== null &&
+    Math.abs(fabDragPos.x - fabDragStart.current.x) < FAB_DEAD_ZONE_PX
 
   return (
     <DragDropProvider
@@ -320,7 +342,10 @@ export function DraggableList<T extends { id: number }>({
         // positioning the preview, which reads as a flash right after the
         // drag threshold is crossed.
         const p = operation.position?.current
-        if (p) setFabDragPos({ x: p.x, y: p.y })
+        if (p) {
+          setFabDragPos({ x: p.x, y: p.y })
+          fabDragStart.current = { x: p.x, y: p.y }
+        }
         onDragStart?.()
       }}
       onDragMove={({ operation }) => {
@@ -339,22 +364,51 @@ export function DraggableList<T extends { id: number }>({
         const { source } = operation
         if (!isSortable(source)) return
         const finalSortableIndex = source.index
+        // Dropped onto the last-section tail? (It's a plain droppable, not part
+        // of the sortable sequence, so it's identified by the drop target id.)
+        const droppedTailSection = tailSectionIndex(operation.target?.id ?? '')
 
         if (source.id === INSERT_BUTTON_ID) {
-          // Reaching onDragEnd means the FAB was actually dragged past the 8px
-          // threshold (a plain tap never activates a drag - it's handled by
-          // onTap/onRequestInsert below), so this is always a real placement.
-          const target = resolveInsertTarget(rows, INSERT_BUTTON_ID, finalSortableIndex)
+          // Released inside the dead zone (barely moved from the resting
+          // corner) - treat it as a cancel, not an insertion.
+          const start = fabDragStart.current
+          const end = operation.position?.current
+          const inDeadZone =
+            start != null &&
+            end != null &&
+            Math.hypot(end.x - start.x, end.y - start.y) < FAB_DEAD_ZONE_PX
+          if (inDeadZone) return
+          const target =
+            droppedTailSection != null
+              ? resolveTailDrop(rows, droppedTailSection)
+              : resolveInsertTarget(rows, INSERT_BUTTON_ID, finalSortableIndex)
           insertButton?.onRequestInsert(target.sectionIndex, target.insertIndex)
+        } else if (droppedTailSection != null) {
+          const target = resolveTailDrop(rows, droppedTailSection, source.id)
+          onReorder(toItemId(source.id), target.sectionIndex, target.insertIndex)
         } else {
           const commit = resolveCommit(rows, source.id, finalSortableIndex)
           if (commit) onReorder(toItemId(source.id), commit.toSectionIndex, commit.insertIndex)
         }
       }}
     >
-      <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+      {/* A flex column that fills at least the viewport height, so the final
+          section's tail row (flex: 1) can expand to cover all the empty space
+          below the list as a large "drop at the end" target. */}
+      <ul
+        style={{
+          listStyle: 'none',
+          padding: 0,
+          margin: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          minHeight: '100%',
+        }}
+      >
         {rows.map((row, i) =>
-          isSortableRow(rows, i) ? (
+          row.kind === 'section-tail' ? (
+            <SectionTail key={String(row.id)} id={row.id} sectionIndex={row.sectionIndex} />
+          ) : isSortableRow(rows, i) ? (
             <SortableRow
               key={row.kind === 'insert-button' ? `insert-button:${fabResetKey}` : String(row.id)}
               row={row}
@@ -363,14 +417,10 @@ export function DraggableList<T extends { id: number }>({
               itemStyle={itemStyle}
               onItemClick={onItemClick}
               onTapInsert={() => insertButton?.onRequestInsert(0, 0)}
-              extraPaddingBottom={i === tailPaddingIndex ? LAST_SECTION_DROP_TAIL_HEIGHT : 0}
+              fabShowPlaceholder={isFabDragging && !fabInDeadZone}
             />
           ) : (
-            <StaticRow
-              key={String(row.id)}
-              row={row}
-              extraPaddingBottom={i === tailPaddingIndex ? LAST_SECTION_DROP_TAIL_HEIGHT : 0}
-            />
+            <StaticRow key={String(row.id)} row={row} />
           )
         )}
       </ul>
@@ -399,6 +449,8 @@ export function DraggableList<T extends { id: number }>({
       </DragOverlay>
 
       {isFabDragging && fabDragPos ? <FabDragPreview x={fabDragPos.x} y={fabDragPos.y} /> : null}
+
+      <AutoScrollControl paused={fabInOrAboveDeadZone} />
     </DragDropProvider>
   )
 }
