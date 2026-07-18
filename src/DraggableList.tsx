@@ -15,10 +15,6 @@ import {
 } from './drag-utils'
 import { DraggableInsertButton, FabDragPreview, FAB_SIZE } from './DraggableInsertButton'
 
-// Shared by mouse-drag and FAB-drag activation: below this distance, the
-// press is a tap (open the task / insert at the start); above it, a drag
-// begins. For the FAB this also prevents the placeholder from flashing on a
-// plain tap.
 const DRAG_ACTIVATION_PX = 8
 const TOUCH_DRAG_DELAY_MS = 400
 const TOUCH_DRAG_TOLERANCE_PX = 8
