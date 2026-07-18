@@ -186,10 +186,9 @@ export function resolveCommit<T extends { id: number }>(
 // insert point.
 export function resolveInsertTarget<T extends { id: number }>(
   rows: Row<T>[],
-  buttonId: UniqueIdentifier,
   toIndex: number
 ): { sectionIndex: number; insertIndex: number } {
-  return resolveTarget(rows, locateRow(rows, buttonId), toIndex)
+  return resolveTarget(rows, locateRow(rows, INSERT_BUTTON_ID), toIndex)
 }
 
 // Resolves a drop onto the list container: the end of the last section. The

@@ -248,19 +248,19 @@ describe('resolveInsertTarget', () => {
   // where it settled: header:0=0, item1=1, item2=2, header:1=3, item3=4, FAB=5.
 
   it('settling between the first two items inserts after the first, in section 0', () => {
-    expect(resolveInsertTarget(rows(), INSERT_BUTTON_ID, 2)).toEqual({ sectionIndex: 0, insertIndex: 1 })
+    expect(resolveInsertTarget(rows(), 2)).toEqual({ sectionIndex: 0, insertIndex: 1 })
   })
 
   it('settling just after the header (index 4) inserts at the top of section 1', () => {
-    expect(resolveInsertTarget(rows(), INSERT_BUTTON_ID, 4)).toEqual({ sectionIndex: 1, insertIndex: 0 })
+    expect(resolveInsertTarget(rows(), 4)).toEqual({ sectionIndex: 1, insertIndex: 0 })
   })
 
   it('settling at its own resting slot (index 5) appends to the end of section 1', () => {
-    expect(resolveInsertTarget(rows(), INSERT_BUTTON_ID, 5)).toEqual({ sectionIndex: 1, insertIndex: 1 })
+    expect(resolveInsertTarget(rows(), 5)).toEqual({ sectionIndex: 1, insertIndex: 1 })
   })
 
   it('settling at the very top (index 1) inserts at the top of section 0', () => {
-    expect(resolveInsertTarget(rows(), INSERT_BUTTON_ID, 1)).toEqual({ sectionIndex: 0, insertIndex: 0 })
+    expect(resolveInsertTarget(rows(), 1)).toEqual({ sectionIndex: 0, insertIndex: 0 })
   })
 
   it('settling into an empty first section inserts at its start', () => {
@@ -274,7 +274,7 @@ describe('resolveInsertTarget', () => {
       { kind: 'insert-button', id: INSERT_BUTTON_ID },
     ]
 
-    expect(resolveInsertTarget(emptyFirst, INSERT_BUTTON_ID, 1)).toEqual({ sectionIndex: 0, insertIndex: 0 })
+    expect(resolveInsertTarget(emptyFirst, 1)).toEqual({ sectionIndex: 0, insertIndex: 0 })
   })
 
   it('resolves to section 0 for a list with no header rows at all', () => {
@@ -284,7 +284,7 @@ describe('resolveInsertTarget', () => {
       { kind: 'insert-button', id: INSERT_BUTTON_ID },
     ]
 
-    expect(resolveInsertTarget(flat, INSERT_BUTTON_ID, 1)).toEqual({ sectionIndex: 0, insertIndex: 1 })
+    expect(resolveInsertTarget(flat, 1)).toEqual({ sectionIndex: 0, insertIndex: 1 })
   })
 })
 

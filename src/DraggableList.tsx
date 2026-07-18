@@ -375,7 +375,7 @@ export function DraggableList<T extends { id: number }>({
           if (inDeadZone) return
           const target = droppedOnContainer
             ? resolveEndDrop(rows)
-            : resolveInsertTarget(rows, INSERT_BUTTON_ID, finalIndex)
+            : resolveInsertTarget(rows, finalIndex)
           insertButton?.onRequestInsert(target.sectionIndex, target.insertIndex)
         } else if (droppedOnContainer) {
           const target = resolveEndDrop(rows, source.id)
