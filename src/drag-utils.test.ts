@@ -118,59 +118,112 @@ describe('resolveCommit', () => {
   function rows(): Row<Item>[] {
     return [
       { kind: 'header', id: 'header:0', sectionIndex: 0, content: null },
-      { kind: 'item', id: 1, sectionIndex: 0, item: { id: 1 } },
-      { kind: 'item', id: 2, sectionIndex: 0, item: { id: 2 } },
-      { kind: 'item', id: 3, sectionIndex: 0, item: { id: 3 } },
+      { kind: 'item', id: 1, item: { id: 1 } },
+      { kind: 'item', id: 2, item: { id: 2 } },
+      { kind: 'item', id: 3, item: { id: 3 } },
       { kind: 'header', id: 'header:1', sectionIndex: 1, content: null },
-      { kind: 'item', id: 4, sectionIndex: 1, item: { id: 4 } },
-      { kind: 'item', id: 5, sectionIndex: 1, item: { id: 5 } },
+      { kind: 'item', id: 4, item: { id: 4 } },
+      { kind: 'item', id: 5, item: { id: 5 } },
       { kind: 'section-tail', id: 'tail:1', sectionIndex: 1, isLast: true },
     ]
   }
 
-  // The third arg is the dragged row's SETTLED position in dnd-kit's sortable
-  // index space (source.index at drag end): its index among the sortable rows.
-  // That space includes the last-section tail and non-first headers (all drop
-  // targets) but NOT the first header (pinned). For rows() it is: item1=0,
-  // item2=1, item3=2, header:1=3, item4=4, item5=5, tail:1=6.
+  // The third arg is the dragged row's SETTLED full-array position (source.index
+  // at drag end). Every non-tail row is a sortable keyed by its full-array
+  // index, so the space is simply the array positions: header:0=0, item1=1,
+  // item2=2, item3=3, header:1=4, item4=5, item5=6. The tail (position 7) is a
+  // plain droppable, not a group member, so nothing settles there - end-of-
+  // section tail drops go through resolveTailDrop instead.
 
-  it('returns null when the item settled back at its own sortable index', () => {
-    expect(resolveCommit(rows(), 1, 0)).toBeNull()
+  it('returns null when the item settled back at its own index', () => {
+    expect(resolveCommit(rows(), 1, 1)).toBeNull()
   })
 
-  it('same-section move down: item1 (0) settling at index 2 lands 3rd in section 0', () => {
-    expect(resolveCommit(rows(), 1, 2)).toEqual({ toSectionIndex: 0, insertIndex: 2 })
+  it('same-section move down: item1 (1) settling at index 3 lands 3rd in section 0', () => {
+    expect(resolveCommit(rows(), 1, 3)).toEqual({ toSectionIndex: 0, insertIndex: 2 })
   })
 
-  it('same-section move up: item3 (2) settling at index 0 lands 1st in section 0', () => {
-    expect(resolveCommit(rows(), 3, 0)).toEqual({ toSectionIndex: 0, insertIndex: 0 })
+  it('same-section move up: item3 (3) settling at index 1 lands 1st in section 0', () => {
+    expect(resolveCommit(rows(), 3, 1)).toEqual({ toSectionIndex: 0, insertIndex: 0 })
   })
 
-  it('cross-section move onto the header slot (index 3) lands at the top of section 1', () => {
-    expect(resolveCommit(rows(), 1, 3)).toEqual({ toSectionIndex: 1, insertIndex: 0 })
+  it('cross-section move onto the header slot (index 4) lands at the top of section 1', () => {
+    expect(resolveCommit(rows(), 1, 4)).toEqual({ toSectionIndex: 1, insertIndex: 0 })
   })
 
-  it('cross-section move past the header (index 4) lands in section 1 after item4', () => {
-    expect(resolveCommit(rows(), 1, 4)).toEqual({ toSectionIndex: 1, insertIndex: 1 })
+  it('cross-section move past the header (index 5) lands in section 1 after item4', () => {
+    expect(resolveCommit(rows(), 1, 5)).toEqual({ toSectionIndex: 1, insertIndex: 1 })
   })
 
-  it('onto the last-section tail (index 6) appends to the end of section 1', () => {
+  it('settling past the last item (index 6) appends to the end of section 1', () => {
     expect(resolveCommit(rows(), 1, 6)).toEqual({ toSectionIndex: 1, insertIndex: 2 })
   })
 
-  it('cross-section move up: item5 (5) settling at index 0 lands at the top of section 0', () => {
+  it('cross-section move up: item5 (6) settling at index 1 lands at the top of section 0', () => {
+    expect(resolveCommit(rows(), 5, 1)).toEqual({ toSectionIndex: 0, insertIndex: 0 })
+  })
+
+  // Index 0 is the pinned first header (a disabled sortable that is never a
+  // drop target), so the optimistic sorter can never actually settle a drag
+  // there - the topmost reachable slot is index 1. Even if index 0 were passed,
+  // it resolves harmlessly: for a row already at the top of section 0 it's a
+  // no-op, and any other row would land at the top of section 0 (never above
+  // the header in the committed model).
+  it('drop above the first header (index 0) is unreachable/no-op for the top row', () => {
+    expect(resolveCommit(rows(), 1, 0)).toBeNull()
+  })
+
+  it('drop above the first header (index 0) still attributes to the top of section 0', () => {
     expect(resolveCommit(rows(), 5, 0)).toEqual({ toSectionIndex: 0, insertIndex: 0 })
   })
 
   it('resolves to section 0 for a list with no header rows at all', () => {
     const flat: Row<Item>[] = [
-      { kind: 'item', id: 1, sectionIndex: 0, item: { id: 1 } },
-      { kind: 'item', id: 2, sectionIndex: 0, item: { id: 2 } },
-      { kind: 'item', id: 3, sectionIndex: 0, item: { id: 3 } },
+      { kind: 'item', id: 1, item: { id: 1 } },
+      { kind: 'item', id: 2, item: { id: 2 } },
+      { kind: 'item', id: 3, item: { id: 3 } },
       { kind: 'section-tail', id: 'tail:0', sectionIndex: 0, isLast: true },
     ]
 
     expect(resolveCommit(flat, 1, 2)).toEqual({ toSectionIndex: 0, insertIndex: 2 })
+  })
+
+  it('headerless first section: item from section 1 lands positionally in section 0', () => {
+    const mixed: Row<Item>[] = [
+      { kind: 'item', id: 1, item: { id: 1 } },
+      { kind: 'item', id: 2, item: { id: 2 } },
+      { kind: 'header', id: 'header:1', sectionIndex: 1, content: null },
+      { kind: 'item', id: 3, item: { id: 3 } },
+      { kind: 'section-tail', id: 'tail:1', sectionIndex: 1, isLast: true },
+    ]
+
+    expect(resolveCommit(mixed, 3, 1)).toEqual({ toSectionIndex: 0, insertIndex: 1 })
+  })
+
+  describe('with insert-slot and expanded rows in the index space', () => {
+    // Disabled sortables (insert-slot, expanded panel) still occupy an index
+    // slot but are never drop targets, so a drag reordering around them must
+    // skip them when counting the section insert position. Positions:
+    // header:0=0, item1=1, insert-slot=2, item2=3, expanded(id 3)=4, item4=5.
+    function rows(): Row<Item>[] {
+      return [
+        { kind: 'header', id: 'header:0', sectionIndex: 0, content: null },
+        { kind: 'item', id: 1, item: { id: 1 } },
+        { kind: 'insert-slot', id: 'insert-slot', content: null },
+        { kind: 'item', id: 2, item: { id: 2 } },
+        { kind: 'expanded', id: 3, content: null },
+        { kind: 'item', id: 4, item: { id: 4 } },
+        { kind: 'section-tail', id: 'tail:0', sectionIndex: 0, isLast: true },
+      ]
+    }
+
+    it('moving item4 up to just before item2 skips the insert-slot in the count', () => {
+      expect(resolveCommit(rows(), 4, 3)).toEqual({ toSectionIndex: 0, insertIndex: 1 })
+    })
+
+    it('moving item1 down past the expanded row counts it as an item', () => {
+      expect(resolveCommit(rows(), 1, 5)).toEqual({ toSectionIndex: 0, insertIndex: 3 })
+    })
   })
 })
 
@@ -180,40 +233,55 @@ describe('resolveInsertTarget', () => {
   function rows(): Row<Item>[] {
     return [
       { kind: 'header', id: 'header:0', sectionIndex: 0, content: null },
-      { kind: 'item', id: 1, sectionIndex: 0, item: { id: 1 } },
-      { kind: 'item', id: 2, sectionIndex: 0, item: { id: 2 } },
+      { kind: 'item', id: 1, item: { id: 1 } },
+      { kind: 'item', id: 2, item: { id: 2 } },
       { kind: 'header', id: 'header:1', sectionIndex: 1, content: null },
-      { kind: 'item', id: 3, sectionIndex: 1, item: { id: 3 } },
+      { kind: 'item', id: 3, item: { id: 3 } },
       { kind: 'insert-button', id: INSERT_BUTTON_ID },
       { kind: 'section-tail', id: 'tail:1', sectionIndex: 1, isLast: true },
     ]
   }
 
-  // The FAB is itself a sortable row; the second arg is where it settled in
-  // dnd-kit's sortable index space, which includes the last-section tail and
-  // the non-first header. For rows() that space is: item1=0, item2=1,
-  // header:1=2, item3=3, FAB=4, tail:1=5.
+  // The FAB is itself a sortable row keyed by its full-array index; the second
+  // arg is where it settled in full-array space: header:0=0, item1=1, item2=2,
+  // header:1=3, item3=4, FAB=5. The tail (position 6) is a plain droppable, not
+  // a group member.
 
   it('settling between the first two items inserts after the first, in section 0', () => {
-    expect(resolveInsertTarget(rows(), INSERT_BUTTON_ID, 1)).toEqual({ sectionIndex: 0, insertIndex: 1 })
+    expect(resolveInsertTarget(rows(), INSERT_BUTTON_ID, 2)).toEqual({ sectionIndex: 0, insertIndex: 1 })
   })
 
-  it('settling just after the header (index 3) inserts at the top of section 1', () => {
-    expect(resolveInsertTarget(rows(), INSERT_BUTTON_ID, 3)).toEqual({ sectionIndex: 1, insertIndex: 0 })
+  it('settling just after the header (index 4) inserts at the top of section 1', () => {
+    expect(resolveInsertTarget(rows(), INSERT_BUTTON_ID, 4)).toEqual({ sectionIndex: 1, insertIndex: 0 })
   })
 
-  it('settling on the last-section tail (index 5) appends to the end of section 1', () => {
+  it('settling at its own resting slot (index 5) appends to the end of section 1', () => {
     expect(resolveInsertTarget(rows(), INSERT_BUTTON_ID, 5)).toEqual({ sectionIndex: 1, insertIndex: 1 })
   })
 
-  it('settling at the very top inserts at the top of section 0', () => {
-    expect(resolveInsertTarget(rows(), INSERT_BUTTON_ID, 0)).toEqual({ sectionIndex: 0, insertIndex: 0 })
+  it('settling at the very top (index 1) inserts at the top of section 0', () => {
+    expect(resolveInsertTarget(rows(), INSERT_BUTTON_ID, 1)).toEqual({ sectionIndex: 0, insertIndex: 0 })
+  })
+
+  it('settling into an empty first section inserts at its start', () => {
+    // Section 0 is empty (header:0 with no items). Positions: header:0=0,
+    // header:1=1, item1=2, FAB=3. Dropping the FAB just below header:0 (index 1)
+    // resolves to the empty section 0, insert index 0.
+    const emptyFirst: Row<Item>[] = [
+      { kind: 'header', id: 'header:0', sectionIndex: 0, content: null },
+      { kind: 'header', id: 'header:1', sectionIndex: 1, content: null },
+      { kind: 'item', id: 1, item: { id: 1 } },
+      { kind: 'insert-button', id: INSERT_BUTTON_ID },
+      { kind: 'section-tail', id: 'tail:1', sectionIndex: 1, isLast: true },
+    ]
+
+    expect(resolveInsertTarget(emptyFirst, INSERT_BUTTON_ID, 1)).toEqual({ sectionIndex: 0, insertIndex: 0 })
   })
 
   it('resolves to section 0 for a list with no header rows at all', () => {
     const flat: Row<Item>[] = [
-      { kind: 'item', id: 1, sectionIndex: 0, item: { id: 1 } },
-      { kind: 'item', id: 2, sectionIndex: 0, item: { id: 2 } },
+      { kind: 'item', id: 1, item: { id: 1 } },
+      { kind: 'item', id: 2, item: { id: 2 } },
       { kind: 'insert-button', id: INSERT_BUTTON_ID },
       { kind: 'section-tail', id: 'tail:0', sectionIndex: 0, isLast: true },
     ]
