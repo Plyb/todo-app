@@ -200,9 +200,11 @@ describe('resolveCommit', () => {
   })
 
   describe('with insert-slot and expanded rows present', () => {
-    // The insert-slot and expanded panel are drop targets (droppable) but never
-    // items, so they occupy a position and can be settled onto, yet must NOT be
-    // counted when computing the section insert index. Positions: header:0=0,
+    // Both the insert-slot and the expanded panel are drop targets (droppable)
+    // that occupy a position and can be settled onto. They differ in the insert
+    // count: the insert-slot is an inert placeholder, never counted; the
+    // expanded panel represents the item it expands, which still occupies that
+    // logical slot, so it IS counted as an item. Positions: header:0=0,
     // item1=1, insert-slot=2, item2=3, expanded(id 3)=4, item4=5.
     function rows(): Row<Item>[] {
       return [

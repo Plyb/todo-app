@@ -126,10 +126,6 @@ function ListRow<T extends { id: number }>({
   fabShowPlaceholder?: boolean
 }) {
   const isInsertButton = row.kind === 'insert-button'
-  // Items are freely draggable + droppable; the FAB is draggable but never a
-  // drop target; everything else (headers, insert-slot, expanded panel) is a
-  // drop target but never dragged - except the header at row index 0, which is
-  // fully inert so it stays pinned at the top.
   const disabled =
     isInsertButton
       ? { droppable: true }
