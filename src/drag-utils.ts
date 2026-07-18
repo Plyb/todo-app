@@ -2,11 +2,12 @@ import type { UniqueIdentifier } from '@dnd-kit/abstract'
 import { arrayMove } from '@dnd-kit/helpers'
 import type { ReactNode } from 'react'
 
-// A single flat list of rows is what dnd-kit actually sorts. Section
-// membership is derived from position (each row carries the sectionIndex it
-// currently sits under) rather than from separate per-section arrays/contexts
-// - this is what lets headers, the FAB's insert-placeholder, and the expanded
-// task panel all shift out of the way of a real drag the same way tasks do
+// A single flat list of rows is what dnd-kit actually sorts, using each row's
+// position in the list as its sort index. Section membership is derived from
+// position by scanning back to the nearest header (only headers carry a
+// sectionIndex), rather than from separate per-section arrays/contexts - this
+// is what lets headers, the FAB's insert-placeholder, and the expanded task
+// panel all shift out of the way of a real drag the same way tasks do.
 
 type HeaderRow = {
   kind: 'header'
@@ -18,14 +19,12 @@ type HeaderRow = {
 type ItemRow<T> = {
   kind: 'item'
   id: number
-  sectionIndex: number
   item: T
 }
 
 type InsertSlotRow = {
   kind: 'insert-slot'
   id: 'insert-slot'
-  sectionIndex: number
   content: ReactNode
 }
 
@@ -34,7 +33,6 @@ type InsertSlotRow = {
 type ExpandedRow = {
   kind: 'expanded'
   id: number
-  sectionIndex: number
   content: ReactNode
 }
 
@@ -86,17 +84,17 @@ export function buildRows<T extends { id: number }>(
 
     section.items.forEach((item, i) => {
       if (insertSlot?.sectionIndex === sectionIndex && insertSlot.index === i) {
-        rows.push({ kind: 'insert-slot', id: 'insert-slot', sectionIndex, content: insertSlot.content })
+        rows.push({ kind: 'insert-slot', id: 'insert-slot', content: insertSlot.content })
       }
       if (expandedSlot?.afterItemId === item.id) {
-        rows.push({ kind: 'expanded', id: item.id, sectionIndex, content: expandedSlot.content })
+        rows.push({ kind: 'expanded', id: item.id, content: expandedSlot.content })
       } else {
-        rows.push({ kind: 'item', id: item.id, sectionIndex, item })
+        rows.push({ kind: 'item', id: item.id, item })
       }
     })
 
     if (insertSlot?.sectionIndex === sectionIndex && insertSlot.index === section.items.length) {
-      rows.push({ kind: 'insert-slot', id: 'insert-slot', sectionIndex, content: insertSlot.content })
+      rows.push({ kind: 'insert-slot', id: 'insert-slot', content: insertSlot.content })
     }
   })
 
@@ -132,66 +130,25 @@ export function locateRow<T>(rows: Row<T>[], id: UniqueIdentifier): number {
   return index
 }
 
-function insertIndexInSection<T>(rows: Row<T>[], uptoIndex: number, sectionIndex: number): number {
+function countItemsInSection<T>(
+  rows: Row<T>[],
+  sectionIndex: number,
+  uptoIndex: number,
+  excludeId?: UniqueIdentifier
+): number {
   let count = 0
+  let currentSection = 0
   for (let i = 0; i < uptoIndex; i++) {
     const row = rows[i]
-    if ((row.kind === 'item' || row.kind === 'expanded') && row.sectionIndex === sectionIndex) count++
+    if (row.kind === 'header') {
+      currentSection = row.sectionIndex
+      continue
+    }
+    if ((row.kind === 'item' || row.kind === 'expanded') && currentSection === sectionIndex && row.id !== excludeId) {
+      count++
+    }
   }
   return count
-}
-
-// Which rows dnd-kit sorts. Items and the insert-button (FAB) are always
-// sortable. Headers are sortable too - they need to be drop targets so a drag
-// crossing a section boundary registers over them, and they animate/shift as
-// items move above them - EXCEPT the very first header, which stays pinned to
-// the top of the list and must never move. The insert-slot and expanded panel
-// are never sortable (they stay put and only settle via re-render).
-//
-// The `index` handed to each sortable row's useSortable() is its position
-// within THIS subsequence, matching dnd-kit's optimistic-sorting index space.
-export function isFirstHeaderIndex<T>(rows: Row<T>[], rowIndex: number): boolean {
-  if (rows[rowIndex].kind !== 'header') return false
-  return rows.findIndex((r) => r.kind === 'header') === rowIndex
-}
-
-export function isSortableRow<T>(rows: Row<T>[], rowIndex: number): boolean {
-  const row = rows[rowIndex]
-  if (row.kind === 'item' || row.kind === 'insert-button') return true
-  if (row.kind === 'header') return !isFirstHeaderIndex(rows, rowIndex)
-  // Section-tail rows are NOT sortable - they're a plain droppable pinned at
-  // the bottom. If they were in the sortable sequence, a drag to the very
-  // bottom could settle AFTER the tail (past the end of the list). Instead the
-  // tail is a separate drop target handled explicitly in onDragEnd.
-  return false
-}
-
-// The 0-based index dnd-kit should be given for a sortable row - its position
-// among only the sortable rows. Non-sortable rows return -1.
-export function sortableIndexOf<T>(rows: Row<T>[], rowIndex: number): number {
-  let count = 0
-  for (let i = 0; i < rowIndex; i++) {
-    if (isSortableRow(rows, i)) count++
-  }
-  return isSortableRow(rows, rowIndex) ? count : -1
-}
-
-// Rebuilds the flat row order after the active sortable row has moved from
-// `fromSortableIndex` to `toSortableIndex` WITHIN the sortable subsequence,
-// while every non-sortable row (first header / insert-slot / expanded) keeps
-// its absolute slot. dnd-kit reports drag results purely as indices into the
-// sortable subsequence (source.initialIndex -> source.index); this maps that
-// back onto the full row model so section membership can be derived exactly
-// as before.
-function reorderBySortableIndex<T>(
-  rows: Row<T>[],
-  fromSortableIndex: number,
-  toSortableIndex: number
-): Row<T>[] {
-  const sortable = rows.filter((_, i) => isSortableRow(rows, i))
-  const movedSortable = arrayMove(sortable, fromSortableIndex, toSortableIndex)
-  let cursor = 0
-  return rows.map((row, i) => (isSortableRow(rows, i) ? movedSortable[cursor++] : row))
 }
 
 // Headers never move (they're never draggable), so a header row's own
@@ -209,53 +166,48 @@ function sectionIndexAtPosition<T>(rows: Row<T>[], position: number): number {
 }
 
 // Resolves a drop into a target section + insert index, given the flat row
-// array as it was BEFORE the drop plus the active row's final position in
-// dnd-kit's sortable index space (from source.index at drag end). The live
-// in-drag preview is handled entirely by dnd-kit's own optimistic sorting -
-// this only runs once, at drag end, to translate the settled index back into
-// the section/insert coordinates the app stores. Returns null for a no-op
-// (dropped back where it started).
+// array as it was BEFORE the drop plus the active row's final position (from
+// source.index at drag end). The live in-drag preview is handled entirely by
+// dnd-kit's own optimistic sorting - this only runs once, at drag end, to
+// translate the settled index back into the section/insert coordinates the app
+// stores. Returns null for a no-op (dropped back where it started).
 export function resolveCommit<T extends { id: number }>(
   rows: Row<T>[],
   activeId: UniqueIdentifier,
-  toSortableIndex: number
+  toIndex: number
 ): { toSectionIndex: number; insertIndex: number } | null {
-  const activeIndex = locateRow(rows, activeId)
-  const fromSortableIndex = sortableIndexOf(rows, activeIndex)
-  if (fromSortableIndex === -1) return null
-  if (toSortableIndex === fromSortableIndex) return null
+  const fromIndex = locateRow(rows, activeId)
+  if (toIndex === fromIndex) return null
 
-  const reordered = reorderBySortableIndex(rows, fromSortableIndex, toSortableIndex)
+  const reordered = arrayMove(rows, fromIndex, toIndex)
   const newIndex = reordered.findIndex((r) => r.id === activeId)
   const toSectionIndex = sectionIndexAtPosition(reordered, newIndex)
-  const insertIndex = insertIndexInSection(reordered, newIndex, toSectionIndex)
+  const insertIndex = countItemsInSection(reordered, toSectionIndex, newIndex)
 
-  const fromSectionIndex = sectionIndexAtPosition(rows, activeIndex)
-  const fromInsertIndex = insertIndexInSection(rows, activeIndex, fromSectionIndex)
+  const fromSectionIndex = sectionIndexAtPosition(rows, fromIndex)
+  const fromInsertIndex = countItemsInSection(rows, fromSectionIndex, fromIndex)
   if (toSectionIndex === fromSectionIndex && insertIndex === fromInsertIndex) return null
 
   return { toSectionIndex, insertIndex }
 }
 
 // Resolves where a brand-new task should be inserted, given the insert
-// button's final position in dnd-kit's sortable index space at drop time.
-// Deliberately distinct from resolveCommit: the button isn't a real placement
-// being diffed against a prior one, so there's no no-op guard - wherever it
-// settled is the requested insert point. The button row is itself sortable,
-// so we reconstruct the row order with it moved to its settled index, then
-// read off the section + insert index at its new slot.
+// button's final position at drop time. Deliberately distinct from
+// resolveCommit: the button isn't a real placement being diffed against a
+// prior one, so there's no no-op guard - wherever it settled is the requested
+// insert point. The button row is itself a sortable, so we reconstruct the row
+// order with it moved to its settled index, then read off the section + insert
+// index at its new slot.
 export function resolveInsertTarget<T extends { id: number }>(
   rows: Row<T>[],
   buttonId: UniqueIdentifier,
-  toSortableIndex: number
+  toIndex: number
 ): { sectionIndex: number; insertIndex: number } {
-  const buttonIndex = locateRow(rows, buttonId)
-  const fromSortableIndex = sortableIndexOf(rows, buttonIndex)
-  const reordered =
-    fromSortableIndex === -1 ? rows : reorderBySortableIndex(rows, fromSortableIndex, toSortableIndex)
+  const fromIndex = locateRow(rows, buttonId)
+  const reordered = arrayMove(rows, fromIndex, toIndex)
   const newIndex = reordered.findIndex((r) => r.id === buttonId)
   const sectionIndex = sectionIndexAtPosition(reordered, newIndex)
-  return { sectionIndex, insertIndex: insertIndexInSection(reordered, newIndex, sectionIndex) }
+  return { sectionIndex, insertIndex: countItemsInSection(reordered, sectionIndex, newIndex) }
 }
 
 // Whether a droppable id is a section tail, and if so which section it ends.
@@ -265,20 +217,14 @@ export function tailSectionIndex(id: UniqueIdentifier): number | null {
 }
 
 // Resolves a drop ONTO a section tail: the end of that section. The tail isn't
-// part of the sortable sequence (see isSortableRow), so it's matched by the
-// drop target's id rather than a settled index. `activeId` (when it's an
-// existing item) is excluded from the count so a within-section drop to the
-// end reports the correct index.
+// a sortable group member - it's a plain droppable pinned at the bottom - so
+// it's matched by the drop target's id rather than a settled index. `activeId`
+// (when it's an existing item) is excluded from the count so a within-section
+// drop to the end reports the correct index.
 export function resolveTailDrop<T extends { id: number }>(
   rows: Row<T>[],
   sectionIndex: number,
   activeId?: UniqueIdentifier
 ): { sectionIndex: number; insertIndex: number } {
-  let count = 0
-  for (const row of rows) {
-    if ((row.kind === 'item' || row.kind === 'expanded') && row.sectionIndex === sectionIndex && row.id !== activeId) {
-      count++
-    }
-  }
-  return { sectionIndex, insertIndex: count }
+  return { sectionIndex, insertIndex: countItemsInSection(rows, sectionIndex, rows.length, activeId) }
 }

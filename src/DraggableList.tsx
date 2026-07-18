@@ -10,8 +10,6 @@ import {
   resolveInsertTarget,
   resolveTailDrop,
   tailSectionIndex,
-  isSortableRow,
-  sortableIndexOf,
   INSERT_BUTTON_ID,
   type Row,
 } from './drag-utils'
@@ -110,10 +108,7 @@ type DraggableListProps<T extends { id: number }> = {
   onDragEnd?: () => void
 }
 
-// A row that dnd-kit sorts: an item, a section tail, a non-first header, or
-// the FAB. `index` is its position among the sortable rows only, which is the
-// index space dnd-kit's optimistic sorting operates in.
-function SortableRow<T extends { id: number }>({
+function ListRow<T extends { id: number }>({
   row,
   index,
   renderItem,
@@ -131,18 +126,20 @@ function SortableRow<T extends { id: number }>({
   fabShowPlaceholder?: boolean
 }) {
   const isInsertButton = row.kind === 'insert-button'
-  // Headers and section-tails are drop targets but never dragged.
-  const isDropOnly = row.kind === 'header' || row.kind === 'section-tail'
+  const disabled =
+    isInsertButton
+      ? { droppable: true }
+      : row.kind === 'header' && index === 0
+      ? true
+      : row.kind === 'item'
+      ? undefined
+      : { draggable: true }
   // Pointer-down coords for tap detection on item rows (see the <li> below).
   const tapOrigin = useRef<{ x: number; y: number } | null>(null)
   const { ref, handleRef, isDragging } = useSortable({
     id: row.id,
     index,
-    // Headers/section-tails are drop targets (so a cross-section or
-    // end-of-section drag registers over them and they animate as items shift)
-    // but never draggable. The FAB can be dragged but is never a drop target;
-    // items are freely draggable and droppable.
-    disabled: isDropOnly ? { draggable: true } : isInsertButton ? { droppable: true } : undefined,
+    disabled,
     // Apply the tuned pointer sensor per-draggable so the activation threshold
     // is guaranteed (relying on the provider-level sensor let items fall back
     // to dnd-kit's 5px default, which made tap-jitter start unwanted drags and
@@ -166,7 +163,27 @@ function SortableRow<T extends { id: number }>({
 
   if (row.kind === 'header') {
     return (
-      <li ref={ref} data-section-index={row.sectionIndex} style={{ listStyle: 'none' }}>
+      <li ref={ref} style={{ listStyle: 'none' }}>
+        {row.content}
+      </li>
+    )
+  }
+
+  if (row.kind === 'insert-slot') {
+    return (
+      <li ref={ref} data-insert-slot style={{ listStyle: 'none' }}>
+        {row.content}
+      </li>
+    )
+  }
+
+  if (row.kind === 'expanded') {
+    return (
+      <li
+        ref={ref}
+        style={{ listStyle: 'none', position: 'relative', zIndex: 11 }}
+        onClick={(e) => e.stopPropagation()}
+      >
         {row.content}
       </li>
     )
@@ -178,7 +195,6 @@ function SortableRow<T extends { id: number }>({
   return (
     <li
       ref={ref}
-      data-section-index={row.sectionIndex}
       data-item-row
       // dnd-kit suppresses the native click for any press it began tracking
       // (even sub-threshold jitter), so we detect the tap ourselves from the
@@ -213,38 +229,6 @@ function SortableRow<T extends { id: number }>({
       {renderItem(row.item)}
     </li>
   )
-}
-
-// A row dnd-kit never touches: a header, the new-task input slot, or the
-// expanded panel. These stay put during a drag (never draggable, never a drop
-// target), which is exactly what keeps the first header pinned and every
-// header immovable.
-function StaticRow<T extends { id: number }>({ row }: { row: Row<T> }) {
-  switch (row.kind) {
-    case 'header':
-      return (
-        <li data-section-index={row.sectionIndex} style={{ listStyle: 'none' }}>
-          {row.content}
-        </li>
-      )
-    case 'insert-slot':
-      return (
-        <li data-insert-slot style={{ listStyle: 'none' }}>
-          {row.content}
-        </li>
-      )
-    case 'expanded':
-      return (
-        <li
-          style={{ listStyle: 'none', position: 'relative', zIndex: 11 }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {row.content}
-        </li>
-      )
-    default:
-      return null
-  }
 }
 
 // The trailing drop zone of the last section. It's a plain droppable (NOT a
@@ -363,7 +347,7 @@ export function DraggableList<T extends { id: number }>({
 
         const { source } = operation
         if (!isSortable(source)) return
-        const finalSortableIndex = source.index
+        const finalIndex = source.index
         // Dropped onto the last-section tail? (It's a plain droppable, not part
         // of the sortable sequence, so it's identified by the drop target id.)
         const droppedTailSection = tailSectionIndex(operation.target?.id ?? '')
@@ -381,13 +365,13 @@ export function DraggableList<T extends { id: number }>({
           const target =
             droppedTailSection != null
               ? resolveTailDrop(rows, droppedTailSection)
-              : resolveInsertTarget(rows, INSERT_BUTTON_ID, finalSortableIndex)
+              : resolveInsertTarget(rows, INSERT_BUTTON_ID, finalIndex)
           insertButton?.onRequestInsert(target.sectionIndex, target.insertIndex)
         } else if (droppedTailSection != null) {
           const target = resolveTailDrop(rows, droppedTailSection, source.id)
           onReorder(toItemId(source.id), target.sectionIndex, target.insertIndex)
         } else {
-          const commit = resolveCommit(rows, source.id, finalSortableIndex)
+          const commit = resolveCommit(rows, source.id, finalIndex)
           if (commit) onReorder(toItemId(source.id), commit.toSectionIndex, commit.insertIndex)
         }
       }}
@@ -408,19 +392,17 @@ export function DraggableList<T extends { id: number }>({
         {rows.map((row, i) =>
           row.kind === 'section-tail' ? (
             <SectionTail key={String(row.id)} id={row.id} sectionIndex={row.sectionIndex} />
-          ) : isSortableRow(rows, i) ? (
-            <SortableRow
+          ) : (
+            <ListRow
               key={row.kind === 'insert-button' ? `insert-button:${fabResetKey}` : String(row.id)}
               row={row}
-              index={sortableIndexOf(rows, i)}
+              index={i}
               renderItem={renderItem}
               itemStyle={itemStyle}
               onItemClick={onItemClick}
               onTapInsert={() => insertButton?.onRequestInsert(0, 0)}
               fabShowPlaceholder={isFabDragging && !fabInDeadZone}
             />
-          ) : (
-            <StaticRow key={String(row.id)} row={row} />
           )
         )}
       </ul>

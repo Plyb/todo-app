@@ -34,18 +34,17 @@ describe('DraggableList flat row rendering', () => {
     const rows = Array.from(container.querySelectorAll('li'))
     expect(
       rows.map((li) => ({
-        sectionIndex: li.dataset.sectionIndex,
         tail: li.dataset.sectionTail,
         isItem: li.dataset.itemRow !== undefined,
         text: li.textContent,
       }))
     ).toEqual([
-      { sectionIndex: '0', tail: undefined, isItem: false, text: 'Section A' },
-      { sectionIndex: '0', tail: undefined, isItem: true, text: 'Item 1' },
-      { sectionIndex: '0', tail: undefined, isItem: true, text: 'Item 2' },
-      { sectionIndex: '1', tail: undefined, isItem: false, text: 'Section B' },
-      { sectionIndex: '1', tail: undefined, isItem: true, text: 'Item 3' },
-      { sectionIndex: undefined, tail: '1', isItem: false, text: '' },
+      { tail: undefined, isItem: false, text: 'Section A' },
+      { tail: undefined, isItem: true, text: 'Item 1' },
+      { tail: undefined, isItem: true, text: 'Item 2' },
+      { tail: undefined, isItem: false, text: 'Section B' },
+      { tail: undefined, isItem: true, text: 'Item 3' },
+      { tail: '1', isItem: false, text: '' },
     ])
   })
 
