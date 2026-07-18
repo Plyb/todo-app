@@ -65,14 +65,14 @@ describe('DraggableList flat row rendering', () => {
     ])
   })
 
-  it('wraps the rows in a viewport-filling droppable <ul> as the drop-past-end zone', () => {
+  it('wraps the rows in a droppable <ul> that grows to fill its parent as the drop-past-end zone', () => {
     const { container } = renderList([
       { header: <h2>Section A</h2>, items: [{ id: 1 }, { id: 2 }] },
       { header: <h2>Section B</h2>, items: [{ id: 3 }] },
     ])
 
     const list = container.querySelector('ul')!
-    expect(list.style.minHeight).toBe('100dvh')
+    expect(list.style.flex).toBe('1 0 auto')
   })
 
   it('renders an expanded panel row in place of its item', () => {

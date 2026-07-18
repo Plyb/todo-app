@@ -231,7 +231,10 @@ function ListRow<T extends { id: number }>({
 // lands at the end of the list. CollisionPriority.Lowest is load-bearing: the
 // container geometrically contains every item droppable, so without it it would
 // out-compete a hovered item near its vertical center. Must render inside
-// DragDropProvider since useDroppable reads the manager from context.
+// DragDropProvider since useDroppable reads the manager from context. flex:
+// '1 0 auto' makes it fill the remaining height of its flex-column parent (so
+// the drop-past-end zone reaches the viewport bottom without overflowing it
+// when a sibling like the view-selector button is present).
 function ListContainer({ children }: { children: React.ReactNode }) {
   const { ref } = useDroppable({ id: LIST_DROPPABLE_ID, collisionPriority: CollisionPriority.Lowest })
   return (
@@ -243,7 +246,7 @@ function ListContainer({ children }: { children: React.ReactNode }) {
         margin: 0,
         display: 'flex',
         flexDirection: 'column',
-        minHeight: '100dvh',
+        flex: '1 0 auto',
       }}
     >
       {children}
