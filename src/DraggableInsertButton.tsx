@@ -1,4 +1,5 @@
-import { theme } from './theme'
+import React from 'react'
+import { theme, fabPlaceholder } from './theme'
 
 export const FAB_BOTTOM = 24
 export const FAB_RIGHT = 24
@@ -6,6 +7,18 @@ export const FAB_SIZE = 56
 
 export function FabGlyph() {
   return <span style={{ fontSize: 28, lineHeight: 1 }}>+</span>
+}
+
+const fabCircleStyle: React.CSSProperties = {
+  width: FAB_SIZE,
+  height: FAB_SIZE,
+  borderRadius: '50%',
+  background: theme.colors.brand,
+  color: '#fff',
+  boxShadow: theme.shadows.fabCircle,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
 }
 
 // A circular clone that follows the pointer while the FAB is dragged.
@@ -21,19 +34,11 @@ export function FabDragPreview({ x, y }: { x: number; y: number }) {
   return (
     <div
       style={{
+        ...fabCircleStyle,
         position: 'fixed',
         left: x,
         top: y,
-        width: FAB_SIZE,
-        height: FAB_SIZE,
         transform: 'translate(-50%, -50%) scale(1.1)',
-        borderRadius: '50%',
-        background: theme.colors.brand,
-        color: '#fff',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
         pointerEvents: 'none',
         zIndex: theme.zIndex.fab + 1,
       }}
@@ -81,10 +86,10 @@ export function DraggableInsertButton({
       {showPlaceholder ? (
         <div
           style={{
-            height: 44,
-            background: 'rgba(26,115,232,0.08)',
+            height: fabPlaceholder.height,
+            background: fabPlaceholder.backgroundColor,
             borderRadius: theme.radii.md,
-            border: `2px dashed ${theme.colors.brand}`,
+            border: `${fabPlaceholder.borderStyle} ${theme.colors.brand}`,
             margin: '4px 0',
           }}
         />
@@ -96,19 +101,11 @@ export function DraggableInsertButton({
         // distance sensor), so the native click fires - insert at the start.
         onClick={onTap}
         style={{
+          ...fabCircleStyle,
           position: 'fixed',
           bottom: FAB_BOTTOM,
           right: FAB_RIGHT,
-          width: FAB_SIZE,
-          height: FAB_SIZE,
-          borderRadius: '50%',
-          background: theme.colors.brand,
-          color: '#fff',
           border: 'none',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
           touchAction: 'pan-y',
           cursor: 'pointer',
           zIndex: theme.zIndex.fab,
