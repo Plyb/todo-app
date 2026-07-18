@@ -108,16 +108,7 @@ type DraggableListProps<T extends { id: number }> = {
   onDragEnd?: () => void
 }
 
-// Every non-tail row is a dnd-kit sortable keyed by its full-array `index`
-// (the section-tail stays a plain droppable, rendered separately). What each
-// kind is allowed to do is set purely through `disabled`: items are freely
-// draggable + droppable; the FAB is draggable but never a drop target; headers
-// are drop targets but never dragged (so a cross-section drag registers over
-// them and they animate as items shift) - except the header at row index 0,
-// which is fully inert so it stays pinned at the top; the insert-slot and
-// expanded panel are fully inert too (they hold their slot in the index space
-// and animate, but can neither be dragged nor received onto).
-function SortableRow<T extends { id: number }>({
+function ListRow<T extends { id: number }>({
   row,
   index,
   renderItem,
@@ -135,16 +126,18 @@ function SortableRow<T extends { id: number }>({
   fabShowPlaceholder?: boolean
 }) {
   const isInsertButton = row.kind === 'insert-button'
+  // Items are freely draggable + droppable; the FAB is draggable but never a
+  // drop target; everything else (headers, insert-slot, expanded panel) is a
+  // drop target but never dragged - except the header at row index 0, which is
+  // fully inert so it stays pinned at the top.
   const disabled =
-    row.kind === 'header'
-      ? index === 0
-        ? true
-        : { draggable: true }
-      : row.kind === 'insert-slot' || row.kind === 'expanded'
-      ? true
-      : isInsertButton
+    isInsertButton
       ? { droppable: true }
-      : undefined
+      : row.kind === 'header' && index === 0
+      ? true
+      : row.kind === 'item'
+      ? undefined
+      : { draggable: true }
   // Pointer-down coords for tap detection on item rows (see the <li> below).
   const tapOrigin = useRef<{ x: number; y: number } | null>(null)
   const { ref, handleRef, isDragging } = useSortable({
@@ -404,7 +397,7 @@ export function DraggableList<T extends { id: number }>({
           row.kind === 'section-tail' ? (
             <SectionTail key={String(row.id)} id={row.id} sectionIndex={row.sectionIndex} />
           ) : (
-            <SortableRow
+            <ListRow
               key={row.kind === 'insert-button' ? `insert-button:${fabResetKey}` : String(row.id)}
               row={row}
               index={i}

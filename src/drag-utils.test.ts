@@ -128,12 +128,11 @@ describe('resolveCommit', () => {
     ]
   }
 
-  // The third arg is the dragged row's SETTLED full-array position (source.index
-  // at drag end). Every non-tail row is a sortable keyed by its full-array
-  // index, so the space is simply the array positions: header:0=0, item1=1,
-  // item2=2, item3=3, header:1=4, item4=5, item5=6. The tail (position 7) is a
-  // plain droppable, not a group member, so nothing settles there - end-of-
-  // section tail drops go through resolveTailDrop instead.
+  // The third arg is the dragged row's SETTLED position (source.index at drag
+  // end): its position in the row array. header:0=0, item1=1, item2=2, item3=3,
+  // header:1=4, item4=5, item5=6. The tail (position 7) is a plain droppable,
+  // not a group member, so nothing settles there - end-of-section tail drops go
+  // through resolveTailDrop instead.
 
   it('returns null when the item settled back at its own index', () => {
     expect(resolveCommit(rows(), 1, 1)).toBeNull()
@@ -200,11 +199,11 @@ describe('resolveCommit', () => {
     expect(resolveCommit(mixed, 3, 1)).toEqual({ toSectionIndex: 0, insertIndex: 1 })
   })
 
-  describe('with insert-slot and expanded rows in the index space', () => {
-    // Disabled sortables (insert-slot, expanded panel) still occupy an index
-    // slot but are never drop targets, so a drag reordering around them must
-    // skip them when counting the section insert position. Positions:
-    // header:0=0, item1=1, insert-slot=2, item2=3, expanded(id 3)=4, item4=5.
+  describe('with insert-slot and expanded rows present', () => {
+    // The insert-slot and expanded panel are drop targets (droppable) but never
+    // items, so they occupy a position and can be settled onto, yet must NOT be
+    // counted when computing the section insert index. Positions: header:0=0,
+    // item1=1, insert-slot=2, item2=3, expanded(id 3)=4, item4=5.
     function rows(): Row<Item>[] {
       return [
         { kind: 'header', id: 'header:0', sectionIndex: 0, content: null },
@@ -224,6 +223,19 @@ describe('resolveCommit', () => {
     it('moving item1 down past the expanded row counts it as an item', () => {
       expect(resolveCommit(rows(), 1, 5)).toEqual({ toSectionIndex: 0, insertIndex: 3 })
     })
+
+    it('dropping directly onto the insert-slot lands at that slot position', () => {
+      // item4 (5) settling onto the insert-slot (2), which sits between item1
+      // and item2 - so it lands after item1, at insert index 1.
+      expect(resolveCommit(rows(), 4, 2)).toEqual({ toSectionIndex: 0, insertIndex: 1 })
+    })
+
+    it('dropping directly onto the expanded row lands right after that item', () => {
+      // item1 (1) settling onto the expanded panel (4) for item3 - the settled
+      // slot is where the expanded item sits, so item1 lands after item2 and
+      // item3, at insert index 2.
+      expect(resolveCommit(rows(), 1, 4)).toEqual({ toSectionIndex: 0, insertIndex: 2 })
+    })
   })
 })
 
@@ -242,10 +254,9 @@ describe('resolveInsertTarget', () => {
     ]
   }
 
-  // The FAB is itself a sortable row keyed by its full-array index; the second
-  // arg is where it settled in full-array space: header:0=0, item1=1, item2=2,
-  // header:1=3, item3=4, FAB=5. The tail (position 6) is a plain droppable, not
-  // a group member.
+  // The FAB is itself a sortable row keyed by its position; the second arg is
+  // where it settled: header:0=0, item1=1, item2=2, header:1=3, item3=4, FAB=5.
+  // The tail (position 6) is a plain droppable, not a group member.
 
   it('settling between the first two items inserts after the first, in section 0', () => {
     expect(resolveInsertTarget(rows(), INSERT_BUTTON_ID, 2)).toEqual({ sectionIndex: 0, insertIndex: 1 })

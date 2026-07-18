@@ -3,7 +3,7 @@ import { arrayMove } from '@dnd-kit/helpers'
 import type { ReactNode } from 'react'
 
 // A single flat list of rows is what dnd-kit actually sorts, using each row's
-// full-array position as its sort index. Section membership is derived from
+// position in the list as its sort index. Section membership is derived from
 // position by scanning back to the nearest header (only headers carry a
 // sectionIndex), rather than from separate per-section arrays/contexts - this
 // is what lets headers, the FAB's insert-placeholder, and the expanded task
@@ -130,11 +130,6 @@ export function locateRow<T>(rows: Row<T>[], id: UniqueIdentifier): number {
   return index
 }
 
-// Counts item/expanded rows belonging to `sectionIndex` among rows[0..uptoIndex),
-// optionally skipping `excludeId`. Membership is derived positionally (the
-// nearest preceding header governs a row's section) rather than from a per-row
-// field, so it stays correct after arrayMove leaves the moved row's own section
-// stale. Shared by the drop-resolution helpers below.
 function countItemsInSection<T>(
   rows: Row<T>[],
   sectionIndex: number,
@@ -171,10 +166,9 @@ function sectionIndexAtPosition<T>(rows: Row<T>[], position: number): number {
 }
 
 // Resolves a drop into a target section + insert index, given the flat row
-// array as it was BEFORE the drop plus the active row's final full-array
-// position (from source.index at drag end - every non-tail row is a sortable
-// keyed by its full-array index). The live in-drag preview is handled entirely
-// by dnd-kit's own optimistic sorting - this only runs once, at drag end, to
+// array as it was BEFORE the drop plus the active row's final position (from
+// source.index at drag end). The live in-drag preview is handled entirely by
+// dnd-kit's own optimistic sorting - this only runs once, at drag end, to
 // translate the settled index back into the section/insert coordinates the app
 // stores. Returns null for a no-op (dropped back where it started).
 export function resolveCommit<T extends { id: number }>(
@@ -198,7 +192,7 @@ export function resolveCommit<T extends { id: number }>(
 }
 
 // Resolves where a brand-new task should be inserted, given the insert
-// button's final full-array position at drop time. Deliberately distinct from
+// button's final position at drop time. Deliberately distinct from
 // resolveCommit: the button isn't a real placement being diffed against a
 // prior one, so there's no no-op guard - wherever it settled is the requested
 // insert point. The button row is itself a sortable, so we reconstruct the row
