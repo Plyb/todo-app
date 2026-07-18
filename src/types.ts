@@ -7,6 +7,7 @@ export type Task = {
   id: number
   name: string
   completedAt: string | null  // ISO date string 'YYYY-MM-DD' the task was marked done, or null if not done
+  archivedAt: string | null  // ISO date string 'YYYY-MM-DD' the task was archived, or null if not archived
   rank: string
   statusSlug: string
   notes: string

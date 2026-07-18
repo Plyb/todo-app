@@ -72,6 +72,7 @@ describe('rankAtInsertIndex', () => {
     name: `Task ${id}`,
     rank,
     completedAt: null,
+    archivedAt: null,
     statusSlug: 'backlog',
     notes: '',
   })

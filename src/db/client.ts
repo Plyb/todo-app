@@ -20,7 +20,7 @@ export function withDefault<T>(schema: z.ZodType<T>, fallback: () => T): z.ZodTy
 }
 
 export const DB_NAME = 'todo-app'
-export const DB_VERSION = 9
+export const DB_VERSION = 10
 export const TASKS_STORE = 'tasks'
 export const STATUSES_STORE = 'statuses'
 export const VIEWS_STORE = 'views'
@@ -38,9 +38,16 @@ const DEFAULT_STATUSES: Status[] = [
 const DEMO_TASKS: StoredTask[] = (() => {
   const middle = LexoRank.middle()
   return [
-    { name: 'Buy groceries', completedAt: null, rank: middle.toString(), statusSlug: 'today', notes: '' },
-    { name: 'Walk the dog', completedAt: null, rank: middle.genNext().toString(), statusSlug: 'today', notes: '' },
-    { name: 'Write weekly update', completedAt: null, rank: middle.genNext().genNext().toString(), statusSlug: 'backlog', notes: '' },
+    { name: 'Buy groceries', completedAt: null, archivedAt: null, rank: middle.toString(), statusSlug: 'today', notes: '' },
+    { name: 'Walk the dog', completedAt: null, archivedAt: null, rank: middle.genNext().toString(), statusSlug: 'today', notes: '' },
+    {
+      name: 'Write weekly update',
+      completedAt: null,
+      archivedAt: null,
+      rank: middle.genNext().genNext().toString(),
+      statusSlug: 'backlog',
+      notes: '',
+    },
   ]
 })()
 
@@ -124,9 +131,10 @@ function seedDefaultStatuses(transaction: IDBTransaction): void {
 // (issue #127): separate per-field passes each read the ORIGINAL record before
 // the others' cursor.update() committed, so each write spread a stale snapshot
 // and clobbered the previously-backfilled field. The `done` -> `completedAt`
-// conversion (issue #167) is folded into this same pass for the same reason:
-// it must run for every oldVersion below 9, which overlaps every other
-// field's gate, so a separate cursor pass would reintroduce the race.
+// conversion (issue #167) and the `archivedAt` backfill (issue #90) are folded
+// into this same pass for the same reason: they must run for every oldVersion
+// below 10, which overlaps every other field's gate, so a separate cursor pass
+// would reintroduce the race.
 async function migrateTaskFields(transaction: IDBTransaction, oldVersion: number): Promise<void> {
   const store = transaction.objectStore(TASKS_STORE)
   let rankGen = LexoRank.middle()
@@ -157,6 +165,10 @@ async function migrateTaskFields(transaction: IDBTransaction, oldVersion: number
       // today under the new schema.
       updated.completedAt = record.done ? todayDateString : null
       delete updated.done
+      changed = true
+    }
+    if (record.archivedAt === undefined) {
+      updated.archivedAt = null
       changed = true
     }
 
@@ -234,12 +246,13 @@ const MIGRATION_STEPS: MigrationStep[] = [
     },
   },
   {
-    // Backfill rank (v3), statusSlug (v4) and notes (v5), and convert done ->
-    // completedAt (v9, issue #167), in one cursor pass. Gated at version 9 so
-    // it runs whenever any of those fields could be missing or done still
-    // needs converting; the per-field oldVersion + presence guards inside pick
-    // exactly the ones this user still lacks.
-    version: 9,
+    // Backfill rank (v3), statusSlug (v4) and notes (v5), convert done ->
+    // completedAt (v9, issue #167), and backfill archivedAt (v10, issue #90),
+    // in one cursor pass. Gated at version 10 so it runs whenever any of those
+    // fields could be missing or done still needs converting; the per-field
+    // oldVersion + presence guards inside pick exactly the ones this user
+    // still lacks.
+    version: 10,
     migrate: (_db, transaction, oldVersion) => migrateTaskFields(transaction, oldVersion),
   },
 ]

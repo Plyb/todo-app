@@ -173,9 +173,9 @@ describe('runner abort-on-error (rolls back a partial multi-store write)', () =>
 })
 
 describe('migration replay', () => {
-  it('upgrades a v1 database (tasks store only, no completedAt/rank/statusSlug/notes) to v9', async () => {
+  it('upgrades a v1 database (tasks store only, no completedAt/archivedAt/rank/statusSlug/notes) to v10', async () => {
     // Simulate a database left behind by the very first shipped schema: only
-    // the tasks store exists, and records predate the completedAt/rank/statusSlug/notes fields.
+    // the tasks store exists, and records predate the completedAt/archivedAt/rank/statusSlug/notes fields.
     await new Promise<void>((resolve, reject) => {
       const request = indexedDB.open(DB_NAME, 1)
       request.onupgradeneeded = () => {
@@ -199,7 +199,7 @@ describe('migration replay', () => {
 
     const tasks = await db.loadTasks()
     const legacy = tasks.find((t) => t.name === 'Legacy task')
-    expect(legacy).toMatchObject({ completedAt: null, statusSlug: 'backlog', notes: '' })
+    expect(legacy).toMatchObject({ completedAt: null, archivedAt: null, statusSlug: 'backlog', notes: '' })
     expect(typeof legacy?.rank).toBe('string')
     expect(legacy?.rank.length).toBeGreaterThan(0)
 
@@ -209,12 +209,12 @@ describe('migration replay', () => {
     const views = await db.loadViews()
     expect(views.map((v) => v.slug).sort()).toEqual(['archived', 'backlog', 'today', 'today-extra'])
 
-    // Confirm the upgrade chain actually landed on version 9 and won't fire another upgrade.
+    // Confirm the upgrade chain actually landed on version 10 and won't fire another upgrade.
     await new Promise<void>((resolve, reject) => {
       const verifyRequest = indexedDB.open(DB_NAME)
-      verifyRequest.onupgradeneeded = () => reject(new Error('unexpected upgrade needed; migration did not reach version 9'))
+      verifyRequest.onupgradeneeded = () => reject(new Error('unexpected upgrade needed; migration did not reach version 10'))
       verifyRequest.onsuccess = () => {
-        expect(verifyRequest.result.version).toBe(9)
+        expect(verifyRequest.result.version).toBe(10)
         verifyRequest.result.close()
         resolve()
       }
@@ -224,7 +224,7 @@ describe('migration replay', () => {
 })
 
 describe('migration integrity (raw store, issue #127)', () => {
-  it('persists completedAt/rank/statusSlug into the raw store after a multi-version v1 -> v9 upgrade', async () => {
+  it('persists completedAt/rank/statusSlug into the raw store after a multi-version v1 -> v10 upgrade', async () => {
     // Seed a v1 database whose sole task record predates the
     // completedAt/rank/statusSlug/notes fields entirely.
     await new Promise<void>((resolve, reject) => {
@@ -245,7 +245,7 @@ describe('migration integrity (raw store, issue #127)', () => {
       request.onerror = () => reject(request.error)
     })
 
-    // Trigger the full v1 -> v9 upgrade through db.ts.
+    // Trigger the full v1 -> v10 upgrade through db.ts.
     vi.resetModules()
     const db = await import('./db')
     await db.loadTasks()
@@ -285,15 +285,15 @@ describe('migration integrity (raw store, issue #127)', () => {
 })
 
 describe('readTasks validation (Zod schema at the read boundary)', () => {
-  it('defaults completedAt/rank/statusSlug/notes when a record at DB_VERSION 9 is still missing them', async () => {
+  it('defaults completedAt/archivedAt/rank/statusSlug/notes when a record at DB_VERSION 10 is still missing them', async () => {
     const db = await import('./db')
-    await db.loadTasks() // opens the db at DB_VERSION 9 and seeds demo tasks
+    await db.loadTasks() // opens the db at DB_VERSION 10 and seeds demo tasks
 
     await putRaw('tasks', { name: 'Stuck on old backfill' })
 
     const tasks = await db.loadTasks()
     const legacy = tasks.find((t) => t.name === 'Stuck on old backfill')
-    expect(legacy).toMatchObject({ completedAt: null, statusSlug: 'backlog', notes: '' })
+    expect(legacy).toMatchObject({ completedAt: null, archivedAt: null, statusSlug: 'backlog', notes: '' })
     expect(typeof legacy?.rank).toBe('string')
     expect(legacy?.rank.length).toBeGreaterThan(0)
   })

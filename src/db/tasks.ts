@@ -23,6 +23,7 @@ import { deleteSubtaskLinksByChildInStore, deleteSubtaskLinksByParentInStore } f
 const storedTaskSchema = z.object({
   name: z.string(),
   completedAt: withDefault(z.string().nullable(), () => null),
+  archivedAt: withDefault(z.string().nullable(), () => null),
   rank: withDefault(z.string(), () => LexoRank.middle().toString()),
   statusSlug: withDefault(z.string(), () => 'backlog'),
   notes: withDefault(z.string(), () => ''),
@@ -51,19 +52,26 @@ export async function loadTasks(): Promise<Task[]> {
 
 export async function createTask(name: string, rank: string, statusSlug: string = 'backlog'): Promise<Task> {
   const key = await withStore(TASKS_STORE, 'readwrite', (store) =>
-    requestToPromise(store.add({ name, completedAt: null, rank, statusSlug, notes: '' })),
+    requestToPromise(store.add({ name, completedAt: null, archivedAt: null, rank, statusSlug, notes: '' })),
   )
-  return { id: keyToTaskId(key), name, completedAt: null, rank, statusSlug, notes: '' }
+  return { id: keyToTaskId(key), name, completedAt: null, archivedAt: null, rank, statusSlug, notes: '' }
 }
 
 export async function saveTask(task: Task): Promise<void> {
   await withStore(TASKS_STORE, 'readwrite', (store) => {
-    store.put({ name: task.name, completedAt: task.completedAt, rank: task.rank, statusSlug: task.statusSlug, notes: task.notes }, task.id)
+    store.put(
+      { name: task.name, completedAt: task.completedAt, archivedAt: task.archivedAt, rank: task.rank, statusSlug: task.statusSlug, notes: task.notes },
+      task.id,
+    )
   })
 }
 
 export async function updateTaskCompletedAt(id: number, completedAt: string | null): Promise<void> {
   await withStore(TASKS_STORE, 'readwrite', (store) => patchRecordById<StoredTask>(store, id, { completedAt }))
+}
+
+export async function updateTaskArchivedAt(id: number, archivedAt: string | null): Promise<void> {
+  await withStore(TASKS_STORE, 'readwrite', (store) => patchRecordById<StoredTask>(store, id, { archivedAt }))
 }
 
 export async function updateTaskRank(id: number, rank: string): Promise<void> {
