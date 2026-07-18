@@ -359,9 +359,13 @@ export function DraggableList<T extends { id: number }>({
           const end = operation.position?.current
           const inDeadZone = start !== null && end !== null && isWithinDeadZone(start, end)
           if (inDeadZone) return
-          const target = droppedOnContainer
-            ? resolveEndDrop(rows)
-            : resolveInsertTarget(rows, finalIndex)
+          // Unlike a real item, the FAB has no pointer-anchored droppable shape,
+          // so at drop it collides with the whole-list container rather than the
+          // hovered row - `droppedOnContainer` is true even for a mid-list drop.
+          // Its settled sortable index (maintained by dnd-kit's optimistic
+          // sorting off row-to-row hovers, independent of the drop target) does
+          // reflect where it landed, including the end, so always resolve from it.
+          const target = resolveInsertTarget(rows, finalIndex)
           insertButton?.onRequestInsert(target.sectionIndex, target.insertIndex)
         } else if (droppedOnContainer) {
           const target = resolveEndDrop(rows, source.id)
