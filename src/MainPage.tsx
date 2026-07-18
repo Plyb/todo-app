@@ -63,13 +63,14 @@ function ViewSelectorButton({ viewName, onClick }: { viewName: string; onClick: 
   )
 }
 
-function TaskRow({ task, onDoneChange, showIndicator, isBlocked, parentTaskName }: { task: Task; onDoneChange: (done: boolean) => void; showIndicator?: boolean; isBlocked: boolean; parentTaskName?: string }) {
+export function TaskRow({ task, onDoneChange, showIndicator, isBlocked, parentTaskName }: { task: Task; onDoneChange: (done: boolean) => void; showIndicator?: boolean; isBlocked: boolean; parentTaskName?: string }) {
   return (
     <>
       <input
         type="checkbox"
         checked={task.completedAt !== null}
         onChange={(e) => onDoneChange(e.target.checked)}
+        onClick={(e) => e.stopPropagation()}
       />
       <span style={task.completedAt !== null ? { color: theme.colors.textDisabled } : undefined}>
         {isBlocked && <span style={{ marginRight: 4, color: theme.colors.danger }}>⊘</span>}
