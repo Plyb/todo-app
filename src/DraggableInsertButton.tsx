@@ -47,8 +47,8 @@ export function FabDragPreview({ x, y }: { x: number; y: number }) {
 }
 
 type DraggableInsertButtonProps = {
-  setNodeRef: (element: Element | null) => void
-  setHandleRef: (element: Element | null) => void
+  ref: (element: Element | null) => void
+  handleRef: (element: Element | null) => void
   isDragging: boolean
   // Whether to show the dashed insertion placeholder. Driven entirely by the
   // parent (isFabDragging && past the dead zone) rather than the child's own
@@ -65,8 +65,8 @@ type DraggableInsertButtonProps = {
 // - dragging past dead zone: the dashed placeholder, live-positioned by
 //   dnd-kit's optimistic sorting. The DragOverlay clone follows the pointer.
 export function DraggableInsertButton({
-  setNodeRef,
-  setHandleRef,
+  ref,
+  handleRef,
   isDragging,
   showPlaceholder,
   onTap,
@@ -78,7 +78,7 @@ export function DraggableInsertButton({
   // pointer-following FabDragPreview is the visible feedback instead).
   return (
     <li
-      ref={setNodeRef}
+      ref={ref}
       style={{ height: showPlaceholder ? undefined : 0, overflow: 'visible', listStyle: 'none' }}
     >
       {showPlaceholder ? (
@@ -93,7 +93,7 @@ export function DraggableInsertButton({
         />
       ) : null}
       <button
-        ref={setHandleRef}
+        ref={handleRef}
         aria-label="Add task"
         // The FAB's 8px Distance constraint means anything past that is a
         // drag, and dnd-kit suppresses the native click once it starts
