@@ -353,9 +353,6 @@ export function DraggableList<T extends { id: number }>({
         const { source } = operation
         if (!isSortable(source)) return
         const finalIndex = source.index
-        // Dropped in the empty space below the list? The container is a plain
-        // droppable, not part of the sortable sequence, so it's identified by
-        // the drop target id (source.index is stale for a non-sortable target).
         const droppedOnContainer = operation.target?.id === LIST_DROPPABLE_ID
 
         if (source.id === INSERT_BUTTON_ID) {

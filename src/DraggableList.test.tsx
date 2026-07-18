@@ -44,7 +44,7 @@ function renderList(sections: TestSection[]) {
 }
 
 describe('DraggableList flat row rendering', () => {
-  it('renders header + item rows in flat DOM order, with no trailing tail element', () => {
+  it('renders header + item rows in flat DOM order', () => {
     const { container } = renderList([
       { header: <h2>Section A</h2>, items: [{ id: 1 }, { id: 2 }] },
       { header: <h2>Section B</h2>, items: [{ id: 3 }] },
@@ -63,7 +63,6 @@ describe('DraggableList flat row rendering', () => {
       { isItem: false, text: 'Section B' },
       { isItem: true, text: 'Item 3' },
     ])
-    expect(container.querySelector('li[data-section-tail]')).toBeNull()
   })
 
   it('wraps the rows in a viewport-filling droppable <ul> as the drop-past-end zone', () => {
@@ -72,26 +71,11 @@ describe('DraggableList flat row rendering', () => {
       { header: <h2>Section B</h2>, items: [{ id: 3 }] },
     ])
 
-    // The container itself is the drop-past-end zone (minHeight fills the
-    // viewport); no tail element inflates the last item's hit area.
     const list = container.querySelector('ul')!
     expect(list.style.minHeight).toBe('100dvh')
-    const item3 = Array.from(container.querySelectorAll('li[data-item-row]')).find((li) => li.textContent === 'Item 3')!
-    expect((item3 as HTMLElement).style.paddingBottom).toBe('12px')
   })
 
-  it('renders an empty final section without a tail element', () => {
-    const { container } = renderList([
-      { header: <h2>Section A</h2>, items: [{ id: 1 }] },
-      { header: <h2>Section B</h2>, items: [] },
-    ])
-
-    const rows = Array.from(container.querySelectorAll('li'))
-    expect(rows.map((li) => li.textContent)).toEqual(['Section A', 'Item 1', 'Section B'])
-    expect(container.querySelector('li[data-section-tail]')).toBeNull()
-  })
-
-  it('renders an expanded panel row without a trailing tail', () => {
+  it('renders an expanded panel row in place of its item', () => {
     const { container } = render(
       <DraggableList
         sections={[{ header: <h2>Section A</h2>, items: [{ id: 1 }, { id: 2 }] }]}
@@ -103,7 +87,6 @@ describe('DraggableList flat row rendering', () => {
 
     const rows = Array.from(container.querySelectorAll('li'))
     expect(rows.map((li) => li.textContent)).toEqual(['Section A', 'Item 1', 'Panel'])
-    expect(container.querySelector('li[data-section-tail]')).toBeNull()
   })
 
   it('registers the list container with the lowest collision priority so a hovered item wins the tie-break near the container center', () => {
