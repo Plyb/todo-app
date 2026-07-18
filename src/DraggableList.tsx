@@ -134,7 +134,6 @@ function ListRow<T extends { id: number }>({
       : row.kind === 'item'
       ? undefined
       : { draggable: true }
-  // Pointer-down coords for tap detection on item rows (see the <li> below).
   const tapOrigin = useRef<{ x: number; y: number } | null>(null)
   const { ref, handleRef, isDragging } = useSortable({
     id: row.id,
@@ -145,90 +144,90 @@ function ListRow<T extends { id: number }>({
     // to dnd-kit's 5px default, which made tap-jitter start unwanted drags and
     // swallow the tap). The FAB uses its own instant-ish variant.
     sensors: isInsertButton ? [fabPointerActivation] : [pointerActivation],
-    // The FAB disables just its drop animation (see fabNoDropAnimation).
     plugins: isInsertButton ? (defaults) => [...defaults, fabNoDropAnimation] : undefined,
   })
 
-  if (row.kind === 'insert-button') {
-    return (
-      <DraggableInsertButton
-        ref={ref}
-        handleRef={handleRef}
-        isDragging={isDragging}
-        showPlaceholder={fabShowPlaceholder}
-        onTap={onTapInsert}
-      />
-    )
+  switch (row.kind) {
+    case 'insert-button':
+      return (
+        <DraggableInsertButton
+          ref={ref}
+          handleRef={handleRef}
+          isDragging={isDragging}
+          showPlaceholder={fabShowPlaceholder}
+          onTap={onTapInsert}
+        />
+      )
+
+    case 'header':
+      return (
+        <li ref={ref} style={{ listStyle: 'none' }}>
+          {row.content}
+        </li>
+      )
+
+    case 'insert-slot':
+      return (
+        <li ref={ref} data-insert-slot style={{ listStyle: 'none' }}>
+          {row.content}
+        </li>
+      )
+
+    case 'expanded':
+      return (
+        <li
+          ref={ref}
+          style={{ listStyle: 'none', position: 'relative', zIndex: 11 }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {row.content}
+        </li>
+      )
+
+    default: {
+      if (row.kind !== 'item') return null
+
+      const itemId = row.item.id
+      return (
+        <li
+          ref={ref}
+          data-item-row
+          // dnd-kit suppresses the native click for any press it began tracking
+          // (even sub-threshold jitter), so we detect the tap ourselves from the
+          // pointer travel between down and up rather than using onClick.
+          onPointerDown={(e) => {
+            tapOrigin.current = { x: e.clientX, y: e.clientY }
+          }}
+          onPointerUp={(e) => {
+            e.stopPropagation()
+            const origin = tapOrigin.current
+            tapOrigin.current = null
+            // origin is only null for a pointerup with no captured pointerdown on this row (rare).
+            if (isDragging || !origin) return
+            const traveled = Math.hypot(e.clientX - origin.x, e.clientY - origin.y)
+            if (traveled < TASK_TAP_TOLERANCE_PX) onItemClick?.(itemId)
+          }}
+          style={{
+            listStyle: 'none',
+            cursor: isDragging ? 'grabbing' : 'grab',
+            boxSizing: 'border-box',
+            position: 'relative',
+            padding: '12px 16px',
+            borderBottom: `1px solid ${theme.colors.divider}`,
+            zIndex: isDragging ? 0 : 1,
+            touchAction: 'pan-y`',
+            ...itemStyle?.(row.item),
+            // Applied AFTER itemStyle so a dragging row is always fully hidden -
+            // the DragOverlay clone is the only visible copy. (itemStyle may set
+            // its own opacity for selection fading, which must not win here.)
+            ...(isDragging ? { opacity: 0 } : null),
+          }}
+        >
+          {renderItem(row.item)}
+        </li>
+      )
+    }
   }
-
-  if (row.kind === 'header') {
-    return (
-      <li ref={ref} style={{ listStyle: 'none' }}>
-        {row.content}
-      </li>
-    )
-  }
-
-  if (row.kind === 'insert-slot') {
-    return (
-      <li ref={ref} data-insert-slot style={{ listStyle: 'none' }}>
-        {row.content}
-      </li>
-    )
-  }
-
-  if (row.kind === 'expanded') {
-    return (
-      <li
-        ref={ref}
-        style={{ listStyle: 'none', position: 'relative', zIndex: 11 }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {row.content}
-      </li>
-    )
-  }
-
-  if (row.kind !== 'item') return null
-
-  const itemId = row.item.id
-  return (
-    <li
-      ref={ref}
-      data-item-row
-      // dnd-kit suppresses the native click for any press it began tracking
-      // (even sub-threshold jitter), so we detect the tap ourselves from the
-      // pointer travel between down and up rather than using onClick.
-      onPointerDown={(e) => {
-        tapOrigin.current = { x: e.clientX, y: e.clientY }
-      }}
-      onPointerUp={(e) => {
-        e.stopPropagation()
-        const origin = tapOrigin.current
-        tapOrigin.current = null
-        if (isDragging || !origin) return
-        const traveled = Math.hypot(e.clientX - origin.x, e.clientY - origin.y)
-        if (traveled < TASK_TAP_TOLERANCE_PX) onItemClick?.(itemId)
-      }}
-      style={{
-        listStyle: 'none',
-        cursor: isDragging ? 'grabbing' : 'grab',
-        boxSizing: 'border-box',
-        position: 'relative',
-        padding: '12px 16px',
-        borderBottom: `1px solid ${theme.colors.divider}`,
-        zIndex: isDragging ? 0 : 1,
-        touchAction: 'pan-y`',
-        ...itemStyle?.(row.item),
-        // Applied AFTER itemStyle so a dragging row is always fully hidden -
-        // the DragOverlay clone is the only visible copy. (itemStyle may set
-        // its own opacity for selection fading, which must not win here.)
-        ...(isDragging ? { opacity: 0 } : null),
-      }}
-    >
-      {renderItem(row.item)}
-    </li>
-  )
 }
 
 // The wrapping <ul> as a plain droppable so a drag released below the last row
