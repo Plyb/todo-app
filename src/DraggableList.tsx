@@ -148,8 +148,8 @@ function ListRow<T extends { id: number }>({
   if (row.kind === 'insert-button') {
     return (
       <DraggableInsertButton
-        setNodeRef={ref}
-        setActivatorNodeRef={handleRef}
+        ref={ref}
+        handleRef={handleRef}
         isDragging={isDragging}
         showPlaceholder={fabShowPlaceholder}
         onTap={onTapInsert}
