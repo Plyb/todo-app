@@ -1,16 +1,18 @@
 import '@testing-library/jest-dom/vitest'
 import React from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render } from '@testing-library/react'
+import { act, cleanup, render } from '@testing-library/react'
 import { CollisionPriority } from '@dnd-kit/abstract'
 import { DraggableList } from './DraggableList'
-import { LIST_DROPPABLE_ID } from './drag-utils'
+import { INSERT_BUTTON_ID, LIST_DROPPABLE_ID } from './drag-utils'
 
 // Capture every useDroppable input while delegating to the real hook, so the
 // container's collision priority can be asserted (there's no layout in jsdom to
-// exercise real collision detection).
-const { droppableInputs } = vi.hoisted(() => ({
+// exercise real collision detection). Also capture the provider's onDragEnd so
+// a synthetic drop can be replayed (jsdom has no layout to drive a real one).
+const { droppableInputs, capturedProps } = vi.hoisted(() => ({
   droppableInputs: [] as Array<{ id?: unknown; collisionPriority?: unknown }>,
+  capturedProps: { onDragEnd: undefined as ((event: unknown) => void) | undefined },
 }))
 vi.mock('@dnd-kit/react', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@dnd-kit/react')>()
@@ -20,7 +22,19 @@ vi.mock('@dnd-kit/react', async (importOriginal) => {
       droppableInputs.push(input)
       return (actual.useDroppable as (i: unknown) => unknown)(input)
     },
+    DragDropProvider: (props: { onDragEnd?: (event: unknown) => void }) => {
+      capturedProps.onDragEnd = props.onDragEnd
+      return React.createElement(actual.DragDropProvider, props)
+    },
   }
+})
+
+// isSortable narrows the drag source to a real Sortable instance; the synthetic
+// operation replayed below isn't one, so force it true (useSortable stays real
+// for rendering).
+vi.mock('@dnd-kit/react/sortable', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@dnd-kit/react/sortable')>()
+  return { ...actual, isSortable: () => true }
 })
 
 // Not wired up project-wide (vitest.config.ts has no `globals: true`, so
@@ -134,5 +148,40 @@ describe('insert button', () => {
     const lastRow = rows[rows.length - 1]
 
     expect(lastRow.querySelector('button[aria-label="Add task"]')).not.toBeNull()
+  })
+
+  // Regression for the FAB always inserting at the bottom: the FAB collides with
+  // the whole-list container on drop (not the hovered row), so its drop must be
+  // resolved from its settled sortable index, never from the container target.
+  it('resolves a mid-list FAB drop from its settled index, even though it lands on the container', () => {
+    const onRequestInsert = vi.fn()
+    // Rows: header:0=0, item1=1, item2=2, header:1=3, item3=4, FAB=5.
+    render(
+      <DraggableList
+        sections={[
+          { header: <h2>Section A</h2>, items: [{ id: 1 }, { id: 2 }] },
+          { header: <h2>Section B</h2>, items: [{ id: 3 }] },
+        ]}
+        onReorder={() => {}}
+        renderItem={(item: Item) => <span>Item {item.id}</span>}
+        insertButton={{ onRequestInsert }}
+      />
+    )
+
+    // FAB settled between item1 and item2 (index 2) but released over the
+    // container. The bug routed this to the end of the last section (1, 1);
+    // the fix resolves it from the settled index to (0, 1).
+    act(() => {
+      capturedProps.onDragEnd?.({
+        canceled: false,
+        operation: {
+          source: { id: INSERT_BUTTON_ID, index: 2 },
+          target: { id: LIST_DROPPABLE_ID },
+          position: { current: { x: 0, y: 0 } },
+        },
+      })
+    })
+
+    expect(onRequestInsert).toHaveBeenCalledWith(0, 1)
   })
 })
