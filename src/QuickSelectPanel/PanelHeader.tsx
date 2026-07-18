@@ -27,7 +27,7 @@ export function PanelHeader({ task, onClose }: PanelHeaderProps) {
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: theme.space.sm, padding: '12px 16px', borderBottom: `1px solid ${theme.colors.divider}`, margin: '-16px -16px 0' }}>
-      <input type="checkbox" checked={task.done} onChange={(e) => setDone(task.id, e.target.checked)} />
+      <input type="checkbox" checked={task.completedAt !== null} onChange={(e) => setDone(task.id, e.target.checked)} />
       <input
         ref={inputRef}
         value={name}
@@ -40,7 +40,7 @@ export function PanelHeader({ task, onClose }: PanelHeaderProps) {
           border: 'none',
           outline: 'none',
           background: 'transparent',
-          color: task.done ? theme.colors.textDisabled : undefined,
+          color: task.completedAt !== null ? theme.colors.textDisabled : undefined,
         }}
       />
     </div>

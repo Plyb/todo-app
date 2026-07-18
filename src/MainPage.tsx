@@ -68,10 +68,10 @@ function TaskRow({ task, onDoneChange, showIndicator, isBlocked, parentTaskName 
     <>
       <input
         type="checkbox"
-        checked={task.done}
+        checked={task.completedAt !== null}
         onChange={(e) => onDoneChange(e.target.checked)}
       />
-      <span style={task.done ? { color: theme.colors.textDisabled } : undefined}>
+      <span style={task.completedAt !== null ? { color: theme.colors.textDisabled } : undefined}>
         {isBlocked && <span style={{ marginRight: 4, color: theme.colors.danger }}>⊘</span>}
         {task.name}
       </span>

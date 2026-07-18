@@ -3,7 +3,7 @@ import { groupBlockingRelationships, resolveSubtaskItems } from './derivations'
 import type { Task, BlockingRelationship, SubtaskLink } from '../types'
 
 function makeTask(id: number, name: string): Task {
-  return { id, name, done: false, rank: '0', statusSlug: 'backlog', notes: '' }
+  return { id, name, completedAt: null, rank: '0', statusSlug: 'backlog', notes: '' }
 }
 
 describe('groupBlockingRelationships', () => {

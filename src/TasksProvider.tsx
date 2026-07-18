@@ -3,6 +3,7 @@ import * as db from './db'
 import type { Task, Status, View } from './types'
 import type { StatusUsage } from './db'
 import { byRank } from './rank-utils'
+import { isArchiveEligible } from './archive-utils'
 import { readCurrentViewSlug, writeCurrentViewSlug, readRecentViewSlugs, writeRecentViewSlugs, getAutoArchiveSlug } from './storage'
 import { TasksContext, type TasksContextValue } from './tasks-context'
 
@@ -20,19 +21,22 @@ export function TasksProvider({ children }: { children: ReactNode }) {
   const [recentViewSlugs, setRecentViewSlugs] = useState<string[]>(
     () => readRecentViewSlugs()
   )
-  const archiveRan = useRef(false)
+  const archiveLastScannedDateRef = useRef<string | null>(null)
 
   useEffect(() => {
-    if (tasks.length === 0 || archiveRan.current) return
-    archiveRan.current = true
+    if (tasks.length === 0) return
     const slug = getAutoArchiveSlug()
     if (!slug) return
-    const lastRun = localStorage.getItem('auto-archive-last-run')
-    const today = new Date().toDateString()
-    if (lastRun === today) return
-    localStorage.setItem('auto-archive-last-run', today)
-    setTasks(prev => prev.map(t => t.done ? { ...t, statusSlug: slug } : t))
-    tasks.filter(t => t.done).forEach(t => db.updateTaskStatus(t.id, slug))
+
+    const today = getTodayDateString()
+    if (archiveLastScannedDateRef.current === today) return
+    archiveLastScannedDateRef.current = today
+
+    const toArchive = tasks.filter(t => t.statusSlug !== slug && isArchiveEligible(t, today))
+    if (toArchive.length === 0) return
+    const toArchiveIds = new Set(toArchive.map(t => t.id))
+    setTasks(prev => prev.map(t => toArchiveIds.has(t.id) ? { ...t, statusSlug: slug } : t))
+    toArchive.forEach(t => db.updateTaskStatus(t.id, slug))
   }, [tasks])
 
   const [autoTransitionedTaskIds, setAutoTransitionedTaskIds] = useState<Set<number>>(new Set())
@@ -131,8 +135,9 @@ export function TasksProvider({ children }: { children: ReactNode }) {
   }
 
   function setDone(id: number, done: boolean): void {
-    db.updateTaskDone(id, done).catch(() => refetchTasks())
-    setTasks(prev => prev.map(t => t.id === id ? { ...t, done } : t))
+    const completedAt = done ? getTodayDateString() : null
+    db.updateTaskCompletedAt(id, completedAt).catch(() => refetchTasks())
+    setTasks(prev => prev.map(t => t.id === id ? { ...t, completedAt } : t))
   }
 
   function moveTask(id: number, toStatusSlug: string, newRank: string, changeStatus: boolean): void {

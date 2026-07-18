@@ -22,10 +22,10 @@ export function RelatedTaskEntry({ task, onOpen, onDoneChange }: RelatedTaskEntr
     >
       <input
         type="checkbox"
-        checked={task.done}
+        checked={task.completedAt !== null}
         onChange={(e) => onDoneChange(task.id, e.target.checked)}
       />
-      <span onClick={() => onOpen(task.id)} style={{ cursor: 'pointer', color: task.done ? theme.colors.textDisabled : undefined }}>
+      <span onClick={() => onOpen(task.id)} style={{ cursor: 'pointer', color: task.completedAt !== null ? theme.colors.textDisabled : undefined }}>
         {task.name}
       </span>
     </div>
