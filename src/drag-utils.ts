@@ -41,12 +41,11 @@ export const INSERT_BUTTON_ID = 'insert-button' as const
 // empty space below the last row resolves to the end of the list.
 export const LIST_DROPPABLE_ID = 'list-container' as const
 
-// The FAB, folded into the same flat sortable list as a genuine draggable -
-// always the array's last row. Unlike insert-slot/expanded, it DOES
-// participate in the normal live-shift strategy (plain useSortable optimistic
-// sorting, like any other row) - dragging it toward the top of the list
-// should open a gap through the intervening rows exactly like dragging a
-// real task does.
+// The FAB is folded into the same flat sortable list as a genuine draggable -
+// always the array's last row, occupying a real position and participating
+// in sorting like any other row. Easy to miss since it's a button, not a
+// task: dragging it toward the top of the list opens a gap through the
+// intervening rows exactly like dragging a real task does.
 type InsertButtonRow = {
   kind: 'insert-button'
   id: typeof INSERT_BUTTON_ID
