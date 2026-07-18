@@ -38,6 +38,10 @@ type ExpandedRow = {
 
 export const INSERT_BUTTON_ID = 'insert-button' as const
 
+// The wrapping <ul>, registered as a plain droppable so a drag released in the
+// empty space below the last row resolves to the end of the list.
+export const LIST_DROPPABLE_ID = 'list-container' as const
+
 // The FAB, folded into the same flat sortable list as a genuine draggable -
 // always the array's last row. Unlike insert-slot/expanded, it DOES
 // participate in the normal live-shift strategy (see DraggableList's
@@ -48,26 +52,12 @@ type InsertButtonRow = {
   id: typeof INSERT_BUTTON_ID
 }
 
-// An empty, content-less droppable row appended after each section's items.
-// It's the explicit "drop at the end of this section" target, so the last
-// item keeps its natural size/hit-area instead of being inflated with tail
-// padding. Landing on it resolves to insertIndex = end of the section. The
-// LAST section's tail flexes to fill the remaining viewport (see the
-// component), giving a large, forgiving "drop past everything" zone.
-type SectionTailRow = {
-  kind: 'section-tail'
-  id: `tail:${number}`
-  sectionIndex: number
-  isLast: boolean
-}
-
 export type Row<T> =
   | HeaderRow
   | ItemRow<T>
   | InsertSlotRow
   | ExpandedRow
   | InsertButtonRow
-  | SectionTailRow
 
 export function buildRows<T extends { id: number }>(
   sections: { header?: ReactNode; items: T[] }[],
@@ -98,25 +88,8 @@ export function buildRows<T extends { id: number }>(
     }
   })
 
-  // The FAB goes BEFORE the trailing tail so the tail is always the very last
-  // droppable slot - otherwise a drag to the bottom of the page could settle
-  // AFTER the tail (in the FAB's slot), which isn't a real position.
   if (hasInsertButton) {
     rows.push({ kind: 'insert-button', id: INSERT_BUTTON_ID })
-  }
-
-  // Only the LAST section gets a tail: a single flexible drop zone that fills
-  // the space below the list so a task or the FAB can be dropped past the last
-  // row and land at the end. (Inner sections don't need one - dropping at a
-  // section boundary is handled by the next header / the reorder resolution.)
-  const lastSectionIndex = sections.length - 1
-  if (lastSectionIndex >= 0) {
-    rows.push({
-      kind: 'section-tail',
-      id: `tail:${lastSectionIndex}`,
-      sectionIndex: lastSectionIndex,
-      isLast: true,
-    })
   }
 
   return rows
@@ -210,21 +183,14 @@ export function resolveInsertTarget<T extends { id: number }>(
   return { sectionIndex, insertIndex: countItemsInSection(reordered, sectionIndex, newIndex) }
 }
 
-// Whether a droppable id is a section tail, and if so which section it ends.
-export function tailSectionIndex(id: UniqueIdentifier): number | null {
-  const match = /^tail:(\d+)$/.exec(String(id))
-  return match ? Number(match[1]) : null
-}
-
-// Resolves a drop ONTO a section tail: the end of that section. The tail isn't
-// a sortable group member - it's a plain droppable pinned at the bottom - so
-// it's matched by the drop target's id rather than a settled index. `activeId`
-// (when it's an existing item) is excluded from the count so a within-section
+// Resolves a drop onto the list container: the end of the last section. The
+// container is a plain droppable matched by its target id, not a settled sort
+// index. `activeId` (an existing item) is excluded so a within-last-section
 // drop to the end reports the correct index.
-export function resolveTailDrop<T extends { id: number }>(
+export function resolveEndDrop<T extends { id: number }>(
   rows: Row<T>[],
-  sectionIndex: number,
   activeId?: UniqueIdentifier
 ): { sectionIndex: number; insertIndex: number } {
+  const sectionIndex = rows.reduce((max, row) => (row.kind === 'header' ? Math.max(max, row.sectionIndex) : max), 0)
   return { sectionIndex, insertIndex: countItemsInSection(rows, sectionIndex, rows.length, activeId) }
 }

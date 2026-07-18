@@ -359,7 +359,7 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
   return (
     <main
       onClick={() => setSelectedTaskId(null)}
-      style={{ minHeight: '100vh' }}
+      style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}
     >
       {shouldShowViewSelectorButton() && (
         <ViewSelectorButton viewName={currentView.name} onClick={() => setViewModalOpen(true)} />
