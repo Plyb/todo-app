@@ -1,5 +1,4 @@
 import type { UniqueIdentifier } from '@dnd-kit/abstract'
-import { arrayMove } from '@dnd-kit/helpers'
 import type { ReactNode } from 'react'
 
 // A single flat list of rows is what dnd-kit actually sorts, using each row's
@@ -129,18 +128,32 @@ function countItemsInSection<T>(
   return count
 }
 
-// Headers never move (they're never draggable), so a header row's own
-// sectionIndex field is always accurate - unlike an item/expanded row's,
-// which goes stale for whichever row was just relocated by arrayMove. So
-// section membership at any array position is derived by scanning backward
-// for the nearest header, never by reading a (possibly-just-moved) row's own
-// field directly.
+// Only headers carry a sectionIndex, so section membership at any array
+// position is derived by scanning backward for the nearest header rather than
+// reading a row's own field.
 function sectionIndexAtPosition<T>(rows: Row<T>[], position: number): number {
   for (let i = position - 1; i >= 0; i--) {
     const row = rows[i]
     if (row.kind === 'header') return row.sectionIndex
   }
   return 0
+}
+
+// Landing slot = min(toIndex, last), matching arrayMove's splice-append clamp.
+// arrayMove lands an up-move before that slot and a down-move after it, so a
+// down-move reads one row further and excludes the moved row from the count (it
+// still sits in the pre-drop prefix being scanned). This reads the section +
+// insert index straight off the pre-drop array, with no reordered copy.
+function resolveTarget<T>(
+  rows: Row<T>[],
+  fromIndex: number,
+  toIndex: number
+): { sectionIndex: number; insertIndex: number } {
+  const landing = Math.min(toIndex, rows.length - 1)
+  const boundary = landing > fromIndex ? landing + 1 : landing
+  const sectionIndex = sectionIndexAtPosition(rows, boundary)
+  const insertIndex = countItemsInSection(rows, sectionIndex, boundary, rows[fromIndex].id)
+  return { sectionIndex, insertIndex }
 }
 
 // Resolves a drop into a target section + insert index, given the flat row
@@ -157,10 +170,7 @@ export function resolveCommit<T extends { id: number }>(
   const fromIndex = locateRow(rows, activeId)
   if (toIndex === fromIndex) return null
 
-  const reordered = arrayMove(rows, fromIndex, toIndex)
-  const newIndex = reordered.findIndex((r) => r.id === activeId)
-  const toSectionIndex = sectionIndexAtPosition(reordered, newIndex)
-  const insertIndex = countItemsInSection(reordered, toSectionIndex, newIndex)
+  const { sectionIndex: toSectionIndex, insertIndex } = resolveTarget(rows, fromIndex, toIndex)
 
   const fromSectionIndex = sectionIndexAtPosition(rows, fromIndex)
   const fromInsertIndex = countItemsInSection(rows, fromSectionIndex, fromIndex)
@@ -173,19 +183,13 @@ export function resolveCommit<T extends { id: number }>(
 // button's final position at drop time. Deliberately distinct from
 // resolveCommit: the button isn't a real placement being diffed against a
 // prior one, so there's no no-op guard - wherever it settled is the requested
-// insert point. The button row is itself a sortable, so we reconstruct the row
-// order with it moved to its settled index, then read off the section + insert
-// index at its new slot.
+// insert point.
 export function resolveInsertTarget<T extends { id: number }>(
   rows: Row<T>[],
   buttonId: UniqueIdentifier,
   toIndex: number
 ): { sectionIndex: number; insertIndex: number } {
-  const fromIndex = locateRow(rows, buttonId)
-  const reordered = arrayMove(rows, fromIndex, toIndex)
-  const newIndex = reordered.findIndex((r) => r.id === buttonId)
-  const sectionIndex = sectionIndexAtPosition(reordered, newIndex)
-  return { sectionIndex, insertIndex: countItemsInSection(reordered, sectionIndex, newIndex) }
+  return resolveTarget(rows, locateRow(rows, buttonId), toIndex)
 }
 
 // Resolves a drop onto the list container: the end of the last section. The
