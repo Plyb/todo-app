@@ -59,40 +59,45 @@ export type Row<T> =
   | ExpandedRow
   | InsertButtonRow
 
+function* generateRows<T extends { id: number }>(
+  sections: { header?: ReactNode; items: T[] }[],
+  insertSlot?: { sectionIndex: number; index: number; content: ReactNode },
+  expandedSlot?: { afterItemId: number; content: ReactNode },
+  hasInsertButton?: boolean
+): Generator<Row<T>> {
+  for (const [sectionIndex, section] of sections.entries()) {
+    if (section.header) {
+      yield { kind: 'header', id: `header:${sectionIndex}`, sectionIndex, content: section.header }
+    }
+
+    for (const [i, item] of section.items.entries()) {
+      if (insertSlot?.sectionIndex === sectionIndex && insertSlot.index === i) {
+        yield { kind: 'insert-slot', id: 'insert-slot', content: insertSlot.content }
+      }
+      if (expandedSlot?.afterItemId === item.id) {
+        yield { kind: 'expanded', id: item.id, content: expandedSlot.content }
+      } else {
+        yield { kind: 'item', id: item.id, item }
+      }
+    }
+
+    if (insertSlot?.sectionIndex === sectionIndex && insertSlot.index === section.items.length) {
+      yield { kind: 'insert-slot', id: 'insert-slot', content: insertSlot.content }
+    }
+  }
+
+  if (hasInsertButton) {
+    yield { kind: 'insert-button', id: INSERT_BUTTON_ID }
+  }
+}
+
 export function buildRows<T extends { id: number }>(
   sections: { header?: ReactNode; items: T[] }[],
   insertSlot?: { sectionIndex: number; index: number; content: ReactNode },
   expandedSlot?: { afterItemId: number; content: ReactNode },
   hasInsertButton?: boolean
 ): Row<T>[] {
-  const rows: Row<T>[] = []
-
-  sections.forEach((section, sectionIndex) => {
-    if (section.header) {
-      rows.push({ kind: 'header', id: `header:${sectionIndex}`, sectionIndex, content: section.header })
-    }
-
-    section.items.forEach((item, i) => {
-      if (insertSlot?.sectionIndex === sectionIndex && insertSlot.index === i) {
-        rows.push({ kind: 'insert-slot', id: 'insert-slot', content: insertSlot.content })
-      }
-      if (expandedSlot?.afterItemId === item.id) {
-        rows.push({ kind: 'expanded', id: item.id, content: expandedSlot.content })
-      } else {
-        rows.push({ kind: 'item', id: item.id, item })
-      }
-    })
-
-    if (insertSlot?.sectionIndex === sectionIndex && insertSlot.index === section.items.length) {
-      rows.push({ kind: 'insert-slot', id: 'insert-slot', content: insertSlot.content })
-    }
-  })
-
-  if (hasInsertButton) {
-    rows.push({ kind: 'insert-button', id: INSERT_BUTTON_ID })
-  }
-
-  return rows
+  return [...generateRows(sections, insertSlot, expandedSlot, hasInsertButton)]
 }
 
 export function locateRow<T>(rows: Row<T>[], id: UniqueIdentifier): number {
