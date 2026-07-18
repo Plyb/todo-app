@@ -37,6 +37,10 @@ function toItemId(id: UniqueIdentifier): number {
   return typeof id === 'number' ? id : Number(id)
 }
 
+function isWithinDeadZone(start: { x: number; y: number }, end: { x: number; y: number }): boolean {
+  return Math.hypot(end.x - start.x, end.y - start.y) < FAB_DEAD_ZONE_PX
+}
+
 // A drag must be allowed to start even though each task row's content is a
 // <button> (with a checkbox inside). The PointerSensor's DEFAULT
 // preventActivation blocks any press that lands on an interactive element, so
@@ -308,10 +312,11 @@ export function DraggableList<T extends { id: number }>({
   // release won't insert.
   const fabInDeadZone =
     isFabDragging &&
-    fabDragPos != null &&
-    fabDragStart.current != null &&
-    Math.hypot(fabDragPos.x - fabDragStart.current.x, fabDragPos.y - fabDragStart.current.y) < FAB_DEAD_ZONE_PX
+    fabDragPos !== null &&
+    fabDragStart.current !== null &&
+    isWithinDeadZone(fabDragStart.current, fabDragPos)
 
+  // Deliberately x-only, not the 2D dead zone: any horizontal movement in this column should disable auto-scroll.
   const fabInOrAboveDeadZone =
     isFabDragging &&
     fabDragPos !== null &&
@@ -333,14 +338,17 @@ export function DraggableList<T extends { id: number }>({
         // between the button hiding (isDragging) and the first onDragMove
         // positioning the preview, which reads as a flash right after the
         // drag threshold is crossed.
-        const p = operation.position?.current
-        if (p) {
-          setFabDragPos({ x: p.x, y: p.y })
-          fabDragStart.current = { x: p.x, y: p.y }
+        if (operation.source?.id === INSERT_BUTTON_ID) {
+          const p = operation.position?.current
+          if (p) {
+            setFabDragPos({ x: p.x, y: p.y })
+            fabDragStart.current = { x: p.x, y: p.y }
+          }
         }
         onDragStart?.()
       }}
       onDragMove={({ operation }) => {
+        if (operation.source?.id !== INSERT_BUTTON_ID) return
         const p = operation.position?.current
         if (p) setFabDragPos({ x: p.x, y: p.y })
       }}
@@ -354,19 +362,16 @@ export function DraggableList<T extends { id: number }>({
         if (canceled) return
 
         const { source } = operation
+        // Type-narrowing guard for source.index: only sortable rows are ever
+        // draggable sources, so this isn't expected to fire at real drag-end.
         if (!isSortable(source)) return
         const finalIndex = source.index
         const droppedOnContainer = operation.target?.id === LIST_DROPPABLE_ID
 
         if (source.id === INSERT_BUTTON_ID) {
-          // Released inside the dead zone (barely moved from the resting
-          // corner) - treat it as a cancel, not an insertion.
           const start = fabDragStart.current
           const end = operation.position?.current
-          const inDeadZone =
-            start != null &&
-            end != null &&
-            Math.hypot(end.x - start.x, end.y - start.y) < FAB_DEAD_ZONE_PX
+          const inDeadZone = start !== null && end !== null && isWithinDeadZone(start, end)
           if (inDeadZone) return
           const target = droppedOnContainer
             ? resolveEndDrop(rows)
