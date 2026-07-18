@@ -21,8 +21,6 @@ export function TasksProvider({ children }: { children: ReactNode }) {
   const [recentViewSlugs, setRecentViewSlugs] = useState<string[]>(
     () => readRecentViewSlugs()
   )
-  // Tracks the last calendar day we scanned for archive-eligible tasks, so a
-  // tab left open only re-scans once per day instead of on every tasks change.
   const archiveLastScannedDateRef = useRef<string | null>(null)
 
   useEffect(() => {
@@ -34,11 +32,6 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     if (archiveLastScannedDateRef.current === today) return
     archiveLastScannedDateRef.current = today
 
-    // Archive-eligibility is per-task (one full calendar day since completion),
-    // not a global "first run today" gate - see isArchiveEligible. Excluding
-    // already-archived tasks also keeps this converging: without it, mapping
-    // to a same-value statusSlug would still produce a new tasks array every
-    // render and re-trigger this effect forever.
     const toArchive = tasks.filter(t => t.statusSlug !== slug && isArchiveEligible(t, today))
     if (toArchive.length === 0) return
     const toArchiveIds = new Set(toArchive.map(t => t.id))
