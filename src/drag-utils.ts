@@ -43,9 +43,10 @@ export const LIST_DROPPABLE_ID = 'list-container' as const
 
 // The FAB, folded into the same flat sortable list as a genuine draggable -
 // always the array's last row. Unlike insert-slot/expanded, it DOES
-// participate in the normal live-shift strategy (see DraggableList's
-// shouldLiveShift) - dragging it toward the top of the list should open a
-// gap through the intervening rows exactly like dragging a real task does.
+// participate in the normal live-shift strategy (plain useSortable optimistic
+// sorting, like any other row) - dragging it toward the top of the list
+// should open a gap through the intervening rows exactly like dragging a
+// real task does.
 type InsertButtonRow = {
   kind: 'insert-button'
   id: typeof INSERT_BUTTON_ID
@@ -156,12 +157,9 @@ function resolveTarget<T>(
   return { sectionIndex, insertIndex }
 }
 
-// Resolves a drop into a target section + insert index, given the flat row
-// array as it was BEFORE the drop plus the active row's final position (from
-// source.index at drag end). The live in-drag preview is handled entirely by
-// dnd-kit's own optimistic sorting - this only runs once, at drag end, to
-// translate the settled index back into the section/insert coordinates the app
-// stores. Returns null for a no-op (dropped back where it started).
+// Runs once, at drag end, to translate the row's settled index back into
+// section/insert coordinates, reading off the pre-drop row array. Returns
+// null for a no-op (dropped back where it started).
 export function resolveCommit<T extends { id: number }>(
   rows: Row<T>[],
   activeId: UniqueIdentifier,
