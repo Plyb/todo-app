@@ -1,8 +1,27 @@
 import '@testing-library/jest-dom/vitest'
 import React from 'react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render } from '@testing-library/react'
+import { CollisionPriority } from '@dnd-kit/abstract'
 import { DraggableList } from './DraggableList'
+import { LIST_DROPPABLE_ID } from './drag-utils'
+
+// Capture every useDroppable input while delegating to the real hook, so the
+// container's collision priority can be asserted (there's no layout in jsdom to
+// exercise real collision detection).
+const { droppableInputs } = vi.hoisted(() => ({
+  droppableInputs: [] as Array<{ id?: unknown; collisionPriority?: unknown }>,
+}))
+vi.mock('@dnd-kit/react', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@dnd-kit/react')>()
+  return {
+    ...actual,
+    useDroppable: (input: { id?: unknown; collisionPriority?: unknown }) => {
+      droppableInputs.push(input)
+      return (actual.useDroppable as (i: unknown) => unknown)(input)
+    },
+  }
+})
 
 // Not wired up project-wide (vitest.config.ts has no `globals: true`, so
 // testing-library's own auto-cleanup can't find a global afterEach to hook
@@ -25,7 +44,7 @@ function renderList(sections: TestSection[]) {
 }
 
 describe('DraggableList flat row rendering', () => {
-  it('renders header + item rows in flat DOM order, with a single tail on the last section', () => {
+  it('renders header + item rows in flat DOM order, with no trailing tail element', () => {
     const { container } = renderList([
       { header: <h2>Section A</h2>, items: [{ id: 1 }, { id: 2 }] },
       { header: <h2>Section B</h2>, items: [{ id: 3 }] },
@@ -34,50 +53,45 @@ describe('DraggableList flat row rendering', () => {
     const rows = Array.from(container.querySelectorAll('li'))
     expect(
       rows.map((li) => ({
-        tail: li.dataset.sectionTail,
         isItem: li.dataset.itemRow !== undefined,
         text: li.textContent,
       }))
     ).toEqual([
-      { tail: undefined, isItem: false, text: 'Section A' },
-      { tail: undefined, isItem: true, text: 'Item 1' },
-      { tail: undefined, isItem: true, text: 'Item 2' },
-      { tail: undefined, isItem: false, text: 'Section B' },
-      { tail: undefined, isItem: true, text: 'Item 3' },
-      { tail: '1', isItem: false, text: '' },
+      { isItem: false, text: 'Section A' },
+      { isItem: true, text: 'Item 1' },
+      { isItem: true, text: 'Item 2' },
+      { isItem: false, text: 'Section B' },
+      { isItem: true, text: 'Item 3' },
     ])
+    expect(container.querySelector('li[data-section-tail]')).toBeNull()
   })
 
-  it('emits a single flexible tail on the last section (no padding baked onto the last item)', () => {
+  it('wraps the rows in a viewport-filling droppable <ul> as the drop-past-end zone', () => {
     const { container } = renderList([
       { header: <h2>Section A</h2>, items: [{ id: 1 }, { id: 2 }] },
       { header: <h2>Section B</h2>, items: [{ id: 3 }] },
     ])
 
-    // The last item carries only its normal 12px padding - no inflated tail
-    // drop zone; the trailing space is a separate tail row instead.
-    const item2 = Array.from(container.querySelectorAll('li[data-item-row]')).find((li) => li.textContent === 'Item 2')!
-    expect((item2 as HTMLElement).style.paddingBottom).toBe('12px')
-
-    const tails = Array.from(container.querySelectorAll('li[data-section-tail]'))
-    // Only the last section has a tail, and it flexes to fill the viewport.
-    expect(tails.map((li) => (li as HTMLElement).dataset.sectionTail)).toEqual(['1'])
-    expect((tails[0] as HTMLElement).style.flex).toContain('1')
+    // The container itself is the drop-past-end zone (minHeight fills the
+    // viewport); no tail element inflates the last item's hit area.
+    const list = container.querySelector('ul')!
+    expect(list.style.minHeight).toBe('100dvh')
+    const item3 = Array.from(container.querySelectorAll('li[data-item-row]')).find((li) => li.textContent === 'Item 3')!
+    expect((item3 as HTMLElement).style.paddingBottom).toBe('12px')
   })
 
-  it('still emits a tail for an empty final section (a drop target with no items)', () => {
+  it('renders an empty final section without a tail element', () => {
     const { container } = renderList([
       { header: <h2>Section A</h2>, items: [{ id: 1 }] },
       { header: <h2>Section B</h2>, items: [] },
     ])
 
     const rows = Array.from(container.querySelectorAll('li'))
-    const last = rows[rows.length - 1]
-    expect(last.dataset.sectionTail).toBe('1')
-    expect(last.textContent).toBe('')
+    expect(rows.map((li) => li.textContent)).toEqual(['Section A', 'Item 1', 'Section B'])
+    expect(container.querySelector('li[data-section-tail]')).toBeNull()
   })
 
-  it('keeps a tail after an expanded panel row', () => {
+  it('renders an expanded panel row without a trailing tail', () => {
     const { container } = render(
       <DraggableList
         sections={[{ header: <h2>Section A</h2>, items: [{ id: 1 }, { id: 2 }] }]}
@@ -88,8 +102,17 @@ describe('DraggableList flat row rendering', () => {
     )
 
     const rows = Array.from(container.querySelectorAll('li'))
-    expect(rows.map((li) => li.textContent)).toEqual(['Section A', 'Item 1', 'Panel', ''])
-    expect(rows[rows.length - 1].dataset.sectionTail).toBe('0')
+    expect(rows.map((li) => li.textContent)).toEqual(['Section A', 'Item 1', 'Panel'])
+    expect(container.querySelector('li[data-section-tail]')).toBeNull()
+  })
+
+  it('registers the list container with the lowest collision priority so a hovered item wins the tie-break near the container center', () => {
+    droppableInputs.length = 0
+    renderList([{ header: <h2>Section A</h2>, items: [{ id: 1 }] }])
+
+    const containerInput = droppableInputs.find((i) => i.id === LIST_DROPPABLE_ID)
+    expect(containerInput).toBeDefined()
+    expect(containerInput!.collisionPriority).toBe(CollisionPriority.Lowest)
   })
 })
 
@@ -119,18 +142,14 @@ describe('insert button', () => {
     expect((container.querySelector('button[aria-label="Add task"]') as HTMLElement).style.position).toBe('fixed')
   })
 
-  it('sits just before the trailing tail, which stays the array\'s final row', () => {
+  it('sits as the array\'s final row', () => {
     const { container } = renderWithInsertButton([
       { header: <h2>Section A</h2>, items: [{ id: 1 }, { id: 2 }] },
     ])
 
     const rows = Array.from(container.querySelectorAll('li'))
     const lastRow = rows[rows.length - 1]
-    const secondToLast = rows[rows.length - 2]
 
-    // The tail is the final row so nothing can settle after it; the FAB is
-    // right before it.
-    expect(lastRow.dataset.sectionTail).toBe('0')
-    expect(secondToLast.querySelector('button[aria-label="Add task"]')).not.toBeNull()
+    expect(lastRow.querySelector('button[aria-label="Add task"]')).not.toBeNull()
   })
 })

@@ -2,15 +2,15 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { DragDropProvider, DragOverlay, useDroppable, useDragDropManager } from '@dnd-kit/react'
 import { useSortable, isSortable } from '@dnd-kit/react/sortable'
 import { PointerSensor, PointerActivationConstraints, Feedback, AutoScroller } from '@dnd-kit/dom'
-import type { UniqueIdentifier } from '@dnd-kit/abstract'
+import { CollisionPriority, type UniqueIdentifier } from '@dnd-kit/abstract'
 import { theme } from './theme'
 import {
   buildRows,
   resolveCommit,
   resolveInsertTarget,
-  resolveTailDrop,
-  tailSectionIndex,
+  resolveEndDrop,
   INSERT_BUTTON_ID,
+  LIST_DROPPABLE_ID,
   type Row,
 } from './drag-utils'
 import { DraggableInsertButton, FabDragPreview, FAB_SIZE } from './DraggableInsertButton'
@@ -32,10 +32,6 @@ const FAB_DEAD_ZONE_PX = (FAB_SIZE / 2) * 1.5
 // tracking - even sub-threshold jitter - so item taps are detected here from
 // pointerdown/up coordinates instead of relying on the click event.
 const TASK_TAP_TOLERANCE_PX = 8
-// Height of a section's trailing drop zone (the empty droppable row after its
-// items). Non-final sections use this fixed height; the final section's tail
-// flexes to fill the rest of the viewport (see SECTION_TAIL_MIN_FILL usage).
-const SECTION_TAIL_HEIGHT = 24
 
 function toItemId(id: UniqueIdentifier): number {
   return typeof id === 'number' ? id : Number(id)
@@ -231,18 +227,27 @@ function ListRow<T extends { id: number }>({
   )
 }
 
-// The trailing drop zone of the last section. It's a plain droppable (NOT a
-// sortable) pinned at the bottom, filling the remaining viewport, so a task or
-// the FAB can be dropped past the last row and land at the end - without ever
-// being able to settle *after* it (which a sortable tail allowed).
-function SectionTail({ id, sectionIndex }: { id: UniqueIdentifier; sectionIndex: number }) {
-  const { ref } = useDroppable({ id })
+// The wrapping <ul> as a plain droppable so a drag released below the last row
+// lands at the end of the list. CollisionPriority.Lowest is load-bearing: the
+// container geometrically contains every item droppable, so without it it would
+// out-compete a hovered item near its vertical center. Must render inside
+// DragDropProvider since useDroppable reads the manager from context.
+function ListContainer({ children }: { children: React.ReactNode }) {
+  const { ref } = useDroppable({ id: LIST_DROPPABLE_ID, collisionPriority: CollisionPriority.Lowest })
   return (
-    <li
+    <ul
       ref={ref}
-      data-section-tail={sectionIndex}
-      style={{ listStyle: 'none', flex: '1 0 auto', minHeight: SECTION_TAIL_HEIGHT }}
-    />
+      style={{
+        listStyle: 'none',
+        padding: 0,
+        margin: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        minHeight: '100dvh',
+      }}
+    >
+      {children}
+    </ul>
   )
 }
 
@@ -348,9 +353,10 @@ export function DraggableList<T extends { id: number }>({
         const { source } = operation
         if (!isSortable(source)) return
         const finalIndex = source.index
-        // Dropped onto the last-section tail? (It's a plain droppable, not part
-        // of the sortable sequence, so it's identified by the drop target id.)
-        const droppedTailSection = tailSectionIndex(operation.target?.id ?? '')
+        // Dropped in the empty space below the list? The container is a plain
+        // droppable, not part of the sortable sequence, so it's identified by
+        // the drop target id (source.index is stale for a non-sortable target).
+        const droppedOnContainer = operation.target?.id === LIST_DROPPABLE_ID
 
         if (source.id === INSERT_BUTTON_ID) {
           // Released inside the dead zone (barely moved from the resting
@@ -362,13 +368,12 @@ export function DraggableList<T extends { id: number }>({
             end != null &&
             Math.hypot(end.x - start.x, end.y - start.y) < FAB_DEAD_ZONE_PX
           if (inDeadZone) return
-          const target =
-            droppedTailSection != null
-              ? resolveTailDrop(rows, droppedTailSection)
-              : resolveInsertTarget(rows, INSERT_BUTTON_ID, finalIndex)
+          const target = droppedOnContainer
+            ? resolveEndDrop(rows)
+            : resolveInsertTarget(rows, INSERT_BUTTON_ID, finalIndex)
           insertButton?.onRequestInsert(target.sectionIndex, target.insertIndex)
-        } else if (droppedTailSection != null) {
-          const target = resolveTailDrop(rows, droppedTailSection, source.id)
+        } else if (droppedOnContainer) {
+          const target = resolveEndDrop(rows, source.id)
           onReorder(toItemId(source.id), target.sectionIndex, target.insertIndex)
         } else {
           const commit = resolveCommit(rows, source.id, finalIndex)
@@ -376,36 +381,20 @@ export function DraggableList<T extends { id: number }>({
         }
       }}
     >
-      {/* A flex column that fills at least the viewport height, so the final
-          section's tail row (flex: 1) can expand to cover all the empty space
-          below the list as a large "drop at the end" target. */}
-      <ul
-        style={{
-          listStyle: 'none',
-          padding: 0,
-          margin: 0,
-          display: 'flex',
-          flexDirection: 'column',
-          minHeight: '100%',
-        }}
-      >
-        {rows.map((row, i) =>
-          row.kind === 'section-tail' ? (
-            <SectionTail key={String(row.id)} id={row.id} sectionIndex={row.sectionIndex} />
-          ) : (
-            <ListRow
-              key={row.kind === 'insert-button' ? `insert-button:${fabResetKey}` : String(row.id)}
-              row={row}
-              index={i}
-              renderItem={renderItem}
-              itemStyle={itemStyle}
-              onItemClick={onItemClick}
-              onTapInsert={() => insertButton?.onRequestInsert(0, 0)}
-              fabShowPlaceholder={isFabDragging && !fabInDeadZone}
-            />
-          )
-        )}
-      </ul>
+      <ListContainer>
+        {rows.map((row, i) => (
+          <ListRow
+            key={row.kind === 'insert-button' ? `insert-button:${fabResetKey}` : String(row.id)}
+            row={row}
+            index={i}
+            renderItem={renderItem}
+            itemStyle={itemStyle}
+            onItemClick={onItemClick}
+            onTapInsert={() => insertButton?.onRequestInsert(0, 0)}
+            fabShowPlaceholder={isFabDragging && !fabInDeadZone}
+          />
+        ))}
+      </ListContainer>
 
       {/* Item drags use dnd-kit's DragOverlay: the source row renders at
           opacity 0 and this scaled clone tracks the pointer. (The FAB has its

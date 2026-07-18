@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { buildRows, locateRow, resolveCommit, resolveInsertTarget, INSERT_BUTTON_ID, type Row } from './drag-utils'
+import {
+  buildRows,
+  locateRow,
+  resolveCommit,
+  resolveInsertTarget,
+  resolveEndDrop,
+  INSERT_BUTTON_ID,
+  type Row,
+} from './drag-utils'
 
 type Item = { id: number }
 
@@ -11,7 +19,7 @@ describe('buildRows', () => {
     ]
   }
 
-  it('flattens sections into header + item rows, with a single tail on the last section', () => {
+  it('flattens sections into header + item rows', () => {
     const rows = buildRows(sections())
 
     expect(rows.map((r) => [r.kind, r.id])).toEqual([
@@ -22,20 +30,13 @@ describe('buildRows', () => {
       ['header', 'header:1'],
       ['item', 4],
       ['item', 5],
-      ['section-tail', 'tail:1'],
     ])
   })
 
-  it('omits the header row when a section has no header (single-section still gets its tail)', () => {
+  it('omits the header row when a section has no header', () => {
     const rows = buildRows([{ items: [{ id: 1 }] }])
 
-    expect(rows.map((r) => r.kind)).toEqual(['item', 'section-tail'])
-  })
-
-  it('only the last section has a tail, and it is marked isLast', () => {
-    const rows = buildRows(sections())
-    const tails = rows.filter((r) => r.kind === 'section-tail')
-    expect(tails.map((r) => [r.id, r.kind === 'section-tail' ? r.isLast : null])).toEqual([['tail:1', true]])
+    expect(rows.map((r) => r.kind)).toEqual(['item'])
   })
 
   it('splices an insert-slot row at the given index within a section', () => {
@@ -50,7 +51,6 @@ describe('buildRows', () => {
       ['header', 'header:1'],
       ['item', 4],
       ['item', 5],
-      ['section-tail', 'tail:1'],
     ])
   })
 
@@ -66,14 +66,13 @@ describe('buildRows', () => {
       ['header', 'header:1'],
       ['item', 4],
       ['item', 5],
-      ['section-tail', 'tail:1'],
     ])
   })
 
-  it('places a lone insert-slot row in an empty section (followed by the last-section tail)', () => {
+  it('places a lone insert-slot row in an empty section', () => {
     const rows = buildRows([{ header: 'A', items: [] }], { sectionIndex: 0, index: 0, content: 'slot' })
 
-    expect(rows.map((r) => r.kind)).toEqual(['header', 'insert-slot', 'section-tail'])
+    expect(rows.map((r) => r.kind)).toEqual(['header', 'insert-slot'])
   })
 
   it('replaces the matching item with an expanded row at the same position', () => {
@@ -87,17 +86,13 @@ describe('buildRows', () => {
       ['header', 'header:1'],
       ['item', 4],
       ['item', 5],
-      ['section-tail', 'tail:1'],
     ])
   })
 
-  it('places the insert-button before the trailing tail so the tail is the final row', () => {
+  it('appends the insert-button as the final row', () => {
     const rows = buildRows(sections(), undefined, undefined, true)
 
-    expect(rows.slice(-2).map((r) => [r.kind, r.id])).toEqual([
-      ['insert-button', INSERT_BUTTON_ID],
-      ['section-tail', 'tail:1'],
-    ])
+    expect(rows[rows.length - 1]).toEqual({ kind: 'insert-button', id: INSERT_BUTTON_ID })
   })
 
   it('omits the insert-button row by default', () => {
@@ -124,15 +119,13 @@ describe('resolveCommit', () => {
       { kind: 'header', id: 'header:1', sectionIndex: 1, content: null },
       { kind: 'item', id: 4, item: { id: 4 } },
       { kind: 'item', id: 5, item: { id: 5 } },
-      { kind: 'section-tail', id: 'tail:1', sectionIndex: 1, isLast: true },
     ]
   }
 
   // The third arg is the dragged row's SETTLED position (source.index at drag
   // end): its position in the row array. header:0=0, item1=1, item2=2, item3=3,
-  // header:1=4, item4=5, item5=6. The tail (position 7) is a plain droppable,
-  // not a group member, so nothing settles there - end-of-section tail drops go
-  // through resolveTailDrop instead.
+  // header:1=4, item4=5, item5=6. A drop in the empty space below the list is a
+  // container drop (resolveEndDrop), not a settled sort index handled here.
 
   it('returns null when the item settled back at its own index', () => {
     expect(resolveCommit(rows(), 1, 1)).toBeNull()
@@ -181,7 +174,6 @@ describe('resolveCommit', () => {
       { kind: 'item', id: 1, item: { id: 1 } },
       { kind: 'item', id: 2, item: { id: 2 } },
       { kind: 'item', id: 3, item: { id: 3 } },
-      { kind: 'section-tail', id: 'tail:0', sectionIndex: 0, isLast: true },
     ]
 
     expect(resolveCommit(flat, 1, 2)).toEqual({ toSectionIndex: 0, insertIndex: 2 })
@@ -193,7 +185,6 @@ describe('resolveCommit', () => {
       { kind: 'item', id: 2, item: { id: 2 } },
       { kind: 'header', id: 'header:1', sectionIndex: 1, content: null },
       { kind: 'item', id: 3, item: { id: 3 } },
-      { kind: 'section-tail', id: 'tail:1', sectionIndex: 1, isLast: true },
     ]
 
     expect(resolveCommit(mixed, 3, 1)).toEqual({ toSectionIndex: 0, insertIndex: 1 })
@@ -214,7 +205,6 @@ describe('resolveCommit', () => {
         { kind: 'item', id: 2, item: { id: 2 } },
         { kind: 'expanded', id: 3, content: null },
         { kind: 'item', id: 4, item: { id: 4 } },
-        { kind: 'section-tail', id: 'tail:0', sectionIndex: 0, isLast: true },
       ]
     }
 
@@ -242,8 +232,7 @@ describe('resolveCommit', () => {
 })
 
 describe('resolveInsertTarget', () => {
-  // Mirrors real buildRows output: the FAB sits just before the single
-  // last-section tail, which is the final row.
+  // Mirrors real buildRows output: the FAB is the final row.
   function rows(): Row<Item>[] {
     return [
       { kind: 'header', id: 'header:0', sectionIndex: 0, content: null },
@@ -252,13 +241,11 @@ describe('resolveInsertTarget', () => {
       { kind: 'header', id: 'header:1', sectionIndex: 1, content: null },
       { kind: 'item', id: 3, item: { id: 3 } },
       { kind: 'insert-button', id: INSERT_BUTTON_ID },
-      { kind: 'section-tail', id: 'tail:1', sectionIndex: 1, isLast: true },
     ]
   }
 
   // The FAB is itself a sortable row keyed by its position; the second arg is
   // where it settled: header:0=0, item1=1, item2=2, header:1=3, item3=4, FAB=5.
-  // The tail (position 6) is a plain droppable, not a group member.
 
   it('settling between the first two items inserts after the first, in section 0', () => {
     expect(resolveInsertTarget(rows(), INSERT_BUTTON_ID, 2)).toEqual({ sectionIndex: 0, insertIndex: 1 })
@@ -285,7 +272,6 @@ describe('resolveInsertTarget', () => {
       { kind: 'header', id: 'header:1', sectionIndex: 1, content: null },
       { kind: 'item', id: 1, item: { id: 1 } },
       { kind: 'insert-button', id: INSERT_BUTTON_ID },
-      { kind: 'section-tail', id: 'tail:1', sectionIndex: 1, isLast: true },
     ]
 
     expect(resolveInsertTarget(emptyFirst, INSERT_BUTTON_ID, 1)).toEqual({ sectionIndex: 0, insertIndex: 0 })
@@ -296,9 +282,49 @@ describe('resolveInsertTarget', () => {
       { kind: 'item', id: 1, item: { id: 1 } },
       { kind: 'item', id: 2, item: { id: 2 } },
       { kind: 'insert-button', id: INSERT_BUTTON_ID },
-      { kind: 'section-tail', id: 'tail:0', sectionIndex: 0, isLast: true },
     ]
 
     expect(resolveInsertTarget(flat, INSERT_BUTTON_ID, 1)).toEqual({ sectionIndex: 0, insertIndex: 1 })
+  })
+})
+
+describe('resolveEndDrop', () => {
+  function rows(): Row<Item>[] {
+    return [
+      { kind: 'header', id: 'header:0', sectionIndex: 0, content: null },
+      { kind: 'item', id: 1, item: { id: 1 } },
+      { kind: 'item', id: 2, item: { id: 2 } },
+      { kind: 'item', id: 3, item: { id: 3 } },
+      { kind: 'header', id: 'header:1', sectionIndex: 1, content: null },
+      { kind: 'item', id: 4, item: { id: 4 } },
+      { kind: 'item', id: 5, item: { id: 5 } },
+    ]
+  }
+
+  it('appends to the end of the last section (FAB / new task, nothing excluded)', () => {
+    expect(resolveEndDrop(rows())).toEqual({ sectionIndex: 1, insertIndex: 2 })
+  })
+
+  it('excludes the active item when it already lives in the last section', () => {
+    // Dragging item5 (2nd of section 1) to the end: it must not count itself,
+    // so it lands after item4 at index 1, not 2.
+    expect(resolveEndDrop(rows(), 5)).toEqual({ sectionIndex: 1, insertIndex: 1 })
+  })
+
+  it('counts the full last section when the active item comes from another section', () => {
+    expect(resolveEndDrop(rows(), 1)).toEqual({ sectionIndex: 1, insertIndex: 2 })
+  })
+
+  it('resolves to section 0, index 0 when there are no sections at all', () => {
+    expect(resolveEndDrop([])).toEqual({ sectionIndex: 0, insertIndex: 0 })
+  })
+
+  it('resolves to section 0 for a headerless flat list', () => {
+    const flat: Row<Item>[] = [
+      { kind: 'item', id: 1, item: { id: 1 } },
+      { kind: 'item', id: 2, item: { id: 2 } },
+    ]
+
+    expect(resolveEndDrop(flat)).toEqual({ sectionIndex: 0, insertIndex: 2 })
   })
 })
