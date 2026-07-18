@@ -19,6 +19,7 @@ const fabCircleStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
+  fontFamily: 'system-ui',
 }
 
 // A circular clone that follows the pointer while the FAB is dragged.
