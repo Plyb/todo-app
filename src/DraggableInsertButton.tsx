@@ -23,14 +23,11 @@ const fabCircleStyle: React.CSSProperties = {
 }
 
 // A circular clone that follows the pointer while the FAB is dragged.
-//
-// Unlike task rows, the FAB's sortable source element is a 0-height list row
-// pinned nowhere near the pointer, so dnd-kit's <DragOverlay> (which anchors
-// to the source element's rect) can't position a FAB preview correctly - it
-// lands top-left. Instead the parent tracks the live drag position (via
-// DragDropProvider's onDragMove - dnd-kit swallows window pointer events once
-// a drag is active, so a plain listener can't) and passes it here so the
-// circle sits centered under the cursor, matching the old FAB's feel.
+// dnd-kit's <DragOverlay> anchors to the source element's rect, but the FAB's
+// source is a 0-height row nowhere near the pointer, so it can't position a
+// preview correctly. The parent tracks position itself via onDragMove (a
+// plain window listener won't see moves - dnd-kit swallows them during a
+// drag) and passes it in here.
 export function FabDragPreview({ x, y }: { x: number; y: number }) {
   return (
     <div
@@ -51,7 +48,7 @@ export function FabDragPreview({ x, y }: { x: number; y: number }) {
 
 type DraggableInsertButtonProps = {
   setNodeRef: (element: Element | null) => void
-  setActivatorNodeRef: (element: Element | null) => void
+  setHandleRef: (element: Element | null) => void
   isDragging: boolean
   // Whether to show the dashed insertion placeholder. Driven entirely by the
   // parent (isFabDragging && past the dead zone) rather than the child's own
@@ -69,7 +66,7 @@ type DraggableInsertButtonProps = {
 //   dnd-kit's optimistic sorting. The DragOverlay clone follows the pointer.
 export function DraggableInsertButton({
   setNodeRef,
-  setActivatorNodeRef,
+  setHandleRef,
   isDragging,
   showPlaceholder,
   onTap,
@@ -96,10 +93,12 @@ export function DraggableInsertButton({
         />
       ) : null}
       <button
-        ref={setActivatorNodeRef}
+        ref={setHandleRef}
         aria-label="Add task"
-        // A tap doesn't move far enough to activate a drag (see the FAB's 8px
-        // distance sensor), so the native click fires - insert at the start.
+        // The FAB's 8px Distance constraint means anything past that is a
+        // drag, and dnd-kit suppresses the native click once it starts
+        // tracking - so onClick only fires on a genuine tap. onTap inserts at
+        // the top of the first section (onRequestInsert(0, 0)).
         onClick={onTap}
         style={{
           ...fabCircleStyle,

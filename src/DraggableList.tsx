@@ -149,7 +149,7 @@ function ListRow<T extends { id: number }>({
     return (
       <DraggableInsertButton
         setNodeRef={ref}
-        setActivatorNodeRef={handleRef}
+        setHandleRef={handleRef}
         isDragging={isDragging}
         showPlaceholder={fabShowPlaceholder}
         onTap={onTapInsert}
