@@ -19,6 +19,10 @@ const fabCircleStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
+  // Buttons don't inherit font-family from ancestors by default, so without an
+  // explicit value here the resting button's glyph rendered in the browser's
+  // UI font while the drag preview (a plain div) picked up the page font.
+  fontFamily: 'system-ui',
 }
 
 // A circular clone that follows the pointer while the FAB is dragged.
