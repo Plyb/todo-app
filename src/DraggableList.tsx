@@ -41,11 +41,6 @@ function isWithinDeadZone(start: { x: number; y: number }, end: { x: number; y: 
   return Math.hypot(end.x - start.x, end.y - start.y) < FAB_DEAD_ZONE_PX
 }
 
-// No custom preventActivation: dnd-kit's default already blocks activation
-// for presses landing on an interactive element (input/select/textarea/
-// button/a[href]/contenteditable, via closest()) unless that element is the
-// drag source's own designated `handle`. A task row's only interactive
-// element is the checkbox <input>, which that default check already covers.
 
 // The default PointerSensor already differentiates pointer types, but we want
 // the old feel exactly: mouse starts a drag after an 8px move (tap-vs-drag
@@ -71,8 +66,6 @@ const pointerActivation = PointerSensor.configure({
 // activate instantly on pointerdown, turning every tap into a zero-length
 // drag.) A distance constraint also covers touch here, since dragging the
 // corner FAB is a deliberate gesture that shouldn't wait on a hold delay.
-// No preventActivation override needed: the FAB <button> is registered as its
-// own sortable `handle`, which the default preventActivation always exempts.
 const fabPointerActivation = PointerSensor.configure({
   activationConstraints: [new PointerActivationConstraints.Distance({ value: FAB_DRAG_ACTIVATION_PX })],
 })
