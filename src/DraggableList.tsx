@@ -15,13 +15,13 @@ import {
 } from './drag-utils'
 import { DraggableInsertButton, FabDragPreview, FAB_SIZE } from './DraggableInsertButton'
 
-const MOUSE_DRAG_ACTIVATION_PX = 8
+// Shared by mouse-drag and FAB-drag activation: below this distance, the
+// press is a tap (open the task / insert at the start); above it, a drag
+// begins. For the FAB this also prevents the placeholder from flashing on a
+// plain tap.
+const DRAG_ACTIVATION_PX = 8
 const TOUCH_DRAG_DELAY_MS = 400
 const TOUCH_DRAG_TOLERANCE_PX = 8
-// The FAB starts dragging only after the pointer moves this far; below it, the
-// press is a tap (insert at the start). A single threshold both disambiguates
-// tap-vs-drag and prevents the placeholder from flashing on a plain tap.
-const FAB_DRAG_ACTIVATION_PX = 8
 // While the FAB stays within this distance of where the drag began, the drag
 // is treated as "not yet committed": no insertion placeholder is shown and a
 // release cancels instead of inserting. 1.5x the FAB's own radius gives a
@@ -56,7 +56,7 @@ const pointerActivation = PointerSensor.configure({
         }),
       ]
     }
-    return [new PointerActivationConstraints.Distance({ value: MOUSE_DRAG_ACTIVATION_PX })]
+    return [new PointerActivationConstraints.Distance({ value: DRAG_ACTIVATION_PX })]
   },
 })
 
@@ -67,7 +67,7 @@ const pointerActivation = PointerSensor.configure({
 // drag.) A distance constraint also covers touch here, since dragging the
 // corner FAB is a deliberate gesture that shouldn't wait on a hold delay.
 const fabPointerActivation = PointerSensor.configure({
-  activationConstraints: [new PointerActivationConstraints.Distance({ value: FAB_DRAG_ACTIVATION_PX })],
+  activationConstraints: [new PointerActivationConstraints.Distance({ value: DRAG_ACTIVATION_PX })],
 })
 
 // The FAB keeps default feedback (element promotion drives its isDragging
@@ -244,11 +244,7 @@ function ListContainer({ children }: { children: React.ReactNode }) {
   )
 }
 
-// Suppresses dnd-kit's auto-scroll while `paused` is true. Used to stop the
-// page from scrolling down when the FAB is merely hovering its own dead zone
-// near the bottom-right corner (dragging past the dead zone re-enables it, so
-// dropping at the true bottom still scrolls). Must live inside the provider.
-function AutoScrollControl({ paused }: { paused: boolean }) {
+function PausableAutoScrollControl({ paused }: { paused: boolean }) {
   const manager = useDragDropManager()
   useEffect(() => {
     const plugins = manager?.plugins as Array<{ disabled: boolean }> | undefined
@@ -325,18 +321,18 @@ export function DraggableList<T extends { id: number }>({
         // positioning the preview, which reads as a flash right after the
         // drag threshold is crossed.
         if (operation.source?.id === INSERT_BUTTON_ID) {
-          const p = operation.position?.current
-          if (p) {
-            setFabDragPos({ x: p.x, y: p.y })
-            fabDragStart.current = { x: p.x, y: p.y }
+          const pos = operation.position?.current
+          if (pos) {
+            setFabDragPos({ x: pos.x, y: pos.y })
+            fabDragStart.current = { x: pos.x, y: pos.y }
           }
         }
         onDragStart?.()
       }}
       onDragMove={({ operation }) => {
         if (operation.source?.id !== INSERT_BUTTON_ID) return
-        const p = operation.position?.current
-        if (p) setFabDragPos({ x: p.x, y: p.y })
+        const pos = operation.position?.current
+        if (pos) setFabDragPos({ x: pos.x, y: pos.y })
       }}
       onDragEnd={({ operation, canceled }) => {
         setActiveId(null)
@@ -416,7 +412,7 @@ export function DraggableList<T extends { id: number }>({
 
       {isFabDragging && fabDragPos ? <FabDragPreview x={fabDragPos.x} y={fabDragPos.y} /> : null}
 
-      <AutoScrollControl paused={fabInOrAboveDeadZone} />
+      <PausableAutoScrollControl paused={fabInOrAboveDeadZone} />
     </DragDropProvider>
   )
 }
