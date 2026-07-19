@@ -32,7 +32,6 @@ const DEFAULT_STATUSES: Status[] = [
   { slug: 'today', name: 'Today' },
   { slug: 'today-extra', name: 'Today Extra' },
   { slug: 'backlog', name: 'Backlog' },
-  { slug: 'archived', name: 'Archived' },
 ]
 
 const DEMO_TASKS: StoredTask[] = (() => {
