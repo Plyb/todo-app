@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { Task, Status, SubtaskLink } from '../types'
 import { loadSubtaskLinks } from '../db'
 import { theme } from '../theme'
+import { useTasks } from '../tasks-context'
 import { PanelHeader } from './PanelHeader'
 import { DeleteConfirm } from './DeleteConfirm'
 import { ParentSection } from './ParentSection'
@@ -9,6 +10,7 @@ import { SubtasksSection } from './SubtasksSection'
 import { RelatedTasksSection } from './RelatedTasksSection'
 import { NotesSection } from './NotesSection'
 import { StatusScheduleSection } from './StatusScheduleSection'
+import { ArchiveToggle } from './ArchiveToggle'
 
 type QuickSelectPanelProps = {
   task: Task
@@ -23,9 +25,17 @@ type QuickSelectPanelProps = {
 }
 
 export function QuickSelectPanel({ task, statuses, allTasks, onClose, onChangeStatus, onDelete, onOpenTask, onBlockingRelationshipAdded, onSubtaskLinkAdded }: QuickSelectPanelProps) {
+  const { setArchived } = useTasks()
   const [backdropReady, setBackdropReady] = useState(false)
   const [expanded, setExpanded] = useState(false)
   const [subtaskLinks, setSubtaskLinks] = useState<SubtaskLink[]>([])
+  const [archivedDraft, setArchivedDraft] = useState(task.archivedAt !== null)
+
+  useEffect(() => {
+    // Reload the draft whenever the panel is pointed at a (possibly different) task,
+    // since this same panel instance is reused across selections rather than remounted.
+    setArchivedDraft(task.archivedAt !== null)
+  }, [task.id, task.archivedAt])
 
   useEffect(() => {
     const id = requestAnimationFrame(() => setExpanded(true))
@@ -43,6 +53,13 @@ export function QuickSelectPanel({ task, statuses, allTasks, onClose, onChangeSt
   }, [task.id])
 
   function handleClose() {
+    // Commit the archive toggle now, at the start of the close sequence, rather than
+    // after the collapse animation finishes: the deferred-commit contract only requires
+    // not writing while the panel is open, so firing here lets the write run alongside
+    // the animation instead of adding extra delay after it.
+    if (archivedDraft !== (task.archivedAt !== null)) {
+      setArchived(task.id, archivedDraft)
+    }
     setExpanded(false)
     setTimeout(onClose, theme.durations.panelExpand)
   }
@@ -69,6 +86,8 @@ export function QuickSelectPanel({ task, statuses, allTasks, onClose, onChangeSt
           <NotesSection task={task} />
 
           <StatusScheduleSection task={task} statuses={statuses} onChangeStatus={onChangeStatus} />
+
+          <ArchiveToggle archived={archivedDraft} onChange={setArchivedDraft} />
 
           <DeleteConfirm taskId={task.id} onDelete={onDelete} onClose={handleClose} />
 

@@ -140,6 +140,12 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     setTasks(prev => prev.map(t => t.id === id ? { ...t, completedAt } : t))
   }
 
+  function setArchived(id: number, archived: boolean): void {
+    const archivedAt = archived ? getTodayDateString() : null
+    db.updateTaskArchivedAt(id, archivedAt).catch(() => refetchTasks())
+    setTasks(prev => prev.map(t => t.id === id ? { ...t, archivedAt } : t))
+  }
+
   function moveTask(id: number, toStatusSlug: string, newRank: string, changeStatus: boolean): void {
     if (changeStatus) db.updateTaskStatus(id, toStatusSlug).catch(() => refetchTasks())
     db.updateTaskRank(id, newRank).catch(() => refetchTasks())
@@ -265,6 +271,7 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     recentViewSlugs,
     autoTransitionedTaskIds,
     setDone,
+    setArchived,
     moveTask,
     setStatus,
     renameTask,
