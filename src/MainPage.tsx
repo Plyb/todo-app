@@ -3,6 +3,7 @@ import { loadAllBlocks, loadAllSubtaskLinks } from './db'
 import type { BlockingRelationship, SubtaskLink, Task, ViewSelectorVisibility } from './types'
 import { DraggableList } from './DraggableList'
 import { ArchiveView } from './ArchiveView'
+import { LoadMoreSentinel } from './LoadMoreSentinel'
 import { NewTaskInputField } from './NewTaskInputField'
 import { rankAtInsertIndex } from './rank-utils'
 import { QuickSelectPanel } from './QuickSelectPanel'
@@ -12,8 +13,14 @@ import { useOverscrollGesture } from './useOverscrollGesture'
 import { useTasks, useStatuses, useViews } from './tasks-context'
 import { OverscrollIndicator } from './OverscrollIndicator'
 import { VIEW_SELECTOR_VISIBILITY_KEY } from './storage'
-import { isUserDefinedView } from './synthetic-view-utils'
-import { displayedTasksForView, sectionTasksForStatus, sortArchivedTasks, type ArchivedTask } from './view-utils'
+import { ARCHIVE_VIEW_SLUG, isUserDefinedView } from './synthetic-view-utils'
+import {
+  archivedTasksOf,
+  displayedTasksForView,
+  sectionTasksForStatus,
+  sortArchivedTasks,
+  DEFAULT_SECTION_PAGING,
+} from './view-utils'
 
 const OVERSCROLL_TRIGGER_DISTANCE = 100
 
@@ -97,6 +104,8 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
   const {
     tasks,
     autoTransitionedTaskIds,
+    sectionPaging,
+    requestTaskPage,
     setDone,
     moveTask,
     setStatus,
@@ -129,6 +138,24 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
 
   const currentView = views.find((v) => v.slug === currentViewSlug)
 
+  // requestTaskPage is re-created every render (it closes over the latest
+  // sectionPaging/tasks state); the ref lets the priming effect below always
+  // call the current version without re-subscribing on every render.
+  const requestTaskPageRef = useRef(requestTaskPage)
+  requestTaskPageRef.current = requestTaskPage
+
+  useEffect(() => {
+    // Primes each of the current view's sections with their first page (a
+    // no-op for a section that's already loaded or loading) - covers both the
+    // very first view shown at startup and every subsequent view switch.
+    if (!currentView) return
+    if (isUserDefinedView(currentView)) {
+      currentView.statusSlugs.forEach((slug) => requestTaskPageRef.current(slug))
+    } else {
+      requestTaskPageRef.current(ARCHIVE_VIEW_SLUG)
+    }
+  }, [currentView])
+
   // Tasks shown across all sections of the current view, used below so the
   // cleanup effect can clear indicators for whatever was actually on screen
   // right before the view changes. Archived tasks are excluded here (they're
@@ -139,10 +166,12 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
     [currentView, tasks]
   )
 
-  const archivedTasks = useMemo(
-    () => sortArchivedTasks(tasks.filter((t): t is ArchivedTask => t.archivedAt !== null)),
-    [tasks]
-  )
+  const archivedTasks = useMemo(() => sortArchivedTasks(archivedTasksOf(tasks)), [tasks])
+
+  const archivedPaging = sectionPaging[ARCHIVE_VIEW_SLUG] ?? DEFAULT_SECTION_PAGING
+  const archiveFooter = archivedPaging.isLoading || archivedPaging.hasMore
+    ? <LoadMoreSentinel isLoading={archivedPaging.isLoading} onVisible={() => requestTaskPageRef.current(ARCHIVE_VIEW_SLUG)} />
+    : undefined
 
   const parentTaskNameByChildId = useMemo(
     () =>
@@ -162,6 +191,7 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
       currentView && isUserDefinedView(currentView)
         ? currentView.statusSlugs.map((slug) => {
             const status = statuses.find((s) => s.slug === slug)
+            const paging = sectionPaging[slug] ?? DEFAULT_SECTION_PAGING
             return {
               header: (
                 <h2 style={{ padding: '16px 16px 8px', margin: 0, fontSize: theme.fontSizes.xxl, fontWeight: 700 }}>
@@ -169,10 +199,13 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
                 </h2>
               ),
               items: sectionTasksForStatus(tasks, slug),
+              footer: paging.isLoading || paging.hasMore
+                ? <LoadMoreSentinel isLoading={paging.isLoading} onVisible={() => requestTaskPageRef.current(slug)} />
+                : undefined,
             }
           })
         : [],
-    [currentView, statuses, tasks]
+    [currentView, statuses, tasks, sectionPaging]
   )
 
   const displayedTasksRef = useRef(displayedTasks)
@@ -397,7 +430,7 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
       )}
 
       {!isUserDefinedView(currentView) ? (
-        <ArchiveView tasks={archivedTasks} {...sharedListProps} />
+        <ArchiveView tasks={archivedTasks} footer={archiveFooter} {...sharedListProps} />
       ) : (
         <DraggableList
           sections={sections}

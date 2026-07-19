@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { IDBFactory } from 'fake-indexeddb'
+import { LexoRank } from 'lexorank'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { TasksProvider } from './TasksProvider'
@@ -134,6 +135,7 @@ describe('archive sentinel slug persistence', () => {
 describe('setStatus rank', () => {
   it('recomputes rank so the task does not collide with an existing rank in the destination status', async () => {
     const { result } = renderTasks()
+    act(() => result.current.requestTaskPage('today'))
     await waitFor(() => expect(result.current.tasks.length).toBeGreaterThan(0))
 
     const buyGroceries = result.current.tasks.find((t) => t.name === 'Buy groceries')!
@@ -164,6 +166,7 @@ describe('auto-archive scan effect', () => {
     setAutoArchiveEnabled(true)
 
     const { result } = renderTasks()
+    act(() => result.current.requestTaskPage('today'))
     await waitFor(() => {
       const updated = result.current.tasks.find((t) => t.id === seeded.id)
       expect(updated).toBeDefined()
@@ -179,6 +182,7 @@ describe('auto-archive scan effect', () => {
     await db.updateTaskCompletedAt(seeded.id, '2020-01-01')
 
     const { result } = renderTasks()
+    act(() => result.current.requestTaskPage('today'))
     await waitFor(() => expect(result.current.tasks.length).toBeGreaterThan(0))
 
     const stillUnarchived = result.current.tasks.find((t) => t.id === seeded.id)!
@@ -193,6 +197,8 @@ describe('daily rerank scan effect', () => {
     const short = await db.createTask('Short rank task', '0', 'backlog')
 
     const { result } = renderTasks()
+    act(() => result.current.requestTaskPage('today'))
+    act(() => result.current.requestTaskPage('backlog'))
     await waitFor(() => {
       const updated = result.current.tasks.find((t) => t.id === long.id)
       expect(updated).toBeDefined()
@@ -213,6 +219,7 @@ describe('daily rerank scan effect', () => {
     const seeded = await db.createTask('Normal task', '0', 'today')
 
     const { result } = renderTasks()
+    act(() => result.current.requestTaskPage('today'))
     await waitFor(() => expect(result.current.tasks.length).toBeGreaterThan(0))
 
     const unchanged = result.current.tasks.find((t) => t.id === seeded.id)!
@@ -225,9 +232,103 @@ describe('daily rerank scan effect', () => {
     await db.updateTaskArchivedAt(archived.id, '2020-01-01')
 
     const { result } = renderTasks()
+    // The archived task is excluded from the 'today' status section's page (it's
+    // no longer displayed there), so it only enters memory via the archived view's
+    // own pagination - which is what this test needs, to prove rerank still skips it.
+    act(() => result.current.requestTaskPage(ARCHIVE_VIEW_SLUG))
     await waitFor(() => expect(result.current.tasks.length).toBeGreaterThan(0))
 
     const stillLong = result.current.tasks.find((t) => t.id === archived.id)!
     expect(stillLong.rank).toBe(longRank)
+  })
+})
+
+describe('lazy section pagination (issue #249)', () => {
+  // The db connection (and its tasks store) is shared across every test in this
+  // file (see openDatabasePromise caching in db/client.ts), so each test here
+  // uses a statusSlug no other test in the file touches, keeping its section's
+  // page contents exactly the tasks it creates.
+  async function seedTasksInStatus(count: number, statusSlug: string) {
+    let rank = LexoRank.middle()
+    const created = []
+    for (let i = 0; i < count; i++) {
+      created.push(await db.createTask(`${statusSlug} task ${i}`, rank.toString(), statusSlug))
+      rank = rank.genNext()
+    }
+    return created
+  }
+
+  it('does not load any tasks until a section is requested', async () => {
+    await seedTasksInStatus(5, 'issue249-untouched')
+
+    const { result } = renderTasks()
+    // Nothing else in this test ever calls requestTaskPage, so tasks should
+    // stay empty rather than the old "load everything at startup" behavior.
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(result.current.tasks).toEqual([])
+  })
+
+  it('loads a first page of TASK_PAGE_SIZE tasks, then a second page on a further request', async () => {
+    const statusSlug = 'issue249-two-pages'
+    const created = await seedTasksInStatus(db.TASK_PAGE_SIZE + 5, statusSlug)
+
+    const { result } = renderTasks()
+    act(() => result.current.requestTaskPage(statusSlug))
+
+    await waitFor(() => expect(result.current.tasks).toHaveLength(db.TASK_PAGE_SIZE))
+    expect(result.current.tasks.map((t) => t.id)).toEqual(created.slice(0, db.TASK_PAGE_SIZE).map((t) => t.id))
+    expect(result.current.sectionPaging[statusSlug].hasMore).toBe(true)
+
+    act(() => result.current.requestTaskPage(statusSlug))
+
+    await waitFor(() => expect(result.current.tasks).toHaveLength(created.length))
+    expect(result.current.tasks.map((t) => t.id).sort((a, b) => a - b)).toEqual(
+      created.map((t) => t.id).sort((a, b) => a - b)
+    )
+    expect(result.current.sectionPaging[statusSlug].hasMore).toBe(false)
+  })
+
+  it('marks the section as loading synchronously while its page request is in flight', async () => {
+    const statusSlug = 'issue249-loading-flag'
+    await seedTasksInStatus(3, statusSlug)
+
+    const { result } = renderTasks()
+    act(() => {
+      result.current.requestTaskPage(statusSlug)
+    })
+
+    expect(result.current.sectionPaging[statusSlug].isLoading).toBe(true)
+
+    await waitFor(() => expect(result.current.sectionPaging[statusSlug].isLoading).toBe(false))
+  })
+
+  it('sorts a normal section by rank and the archived section by archivedAt, independently', async () => {
+    const statusSlug = 'issue249-sort-order'
+    const olderArchived = await db.createTask('Older archived', LexoRank.middle().toString(), statusSlug)
+    // Later than any other test's archived date in this shared-db file, so these
+    // two sort to the very top of the (file-wide) archived section regardless of
+    // what other tests have already archived.
+    await db.updateTaskArchivedAt(olderArchived.id, '2026-01-01')
+    const newerArchived = await db.createTask('Newer archived', LexoRank.middle().genNext().toString(), statusSlug)
+    await db.updateTaskArchivedAt(newerArchived.id, '2026-06-01')
+    const rankFirst = await db.createTask('Rank first', LexoRank.middle().genNext().genNext().toString(), statusSlug)
+
+    const { result } = renderTasks()
+    act(() => result.current.requestTaskPage(statusSlug))
+    await waitFor(() => expect(result.current.tasks.some((t) => t.id === rankFirst.id)).toBe(true))
+
+    // The status section excludes archived tasks and sorts by rank - only
+    // rankFirst (not archived) shows up here.
+    expect(result.current.tasks.map((t) => t.id)).toEqual([rankFirst.id])
+
+    act(() => result.current.requestTaskPage(ARCHIVE_VIEW_SLUG))
+    await waitFor(() => expect(result.current.tasks.some((t) => t.id === olderArchived.id)).toBe(true))
+
+    // The archived section sorts most-recently-archived first, unlike rank
+    // order - filtered to just these two ids (other tests may have archived
+    // tasks of their own in this shared db) to check their relative order.
+    const orderedIds = result.current.tasks.map((t) => t.id).filter((id) => id === olderArchived.id || id === newerArchived.id)
+    expect(orderedIds).toEqual([newerArchived.id, olderArchived.id])
   })
 })

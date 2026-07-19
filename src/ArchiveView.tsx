@@ -8,9 +8,10 @@ type ArchiveViewProps = {
   itemStyle?: (task: Task) => CSSProperties
   onItemClick?: (id: number) => void
   expandedSlot?: { afterItemId: number; content: ReactNode }
+  footer?: ReactNode
 }
 
-export function ArchiveView({ tasks, renderItem, itemStyle, onItemClick, expandedSlot }: ArchiveViewProps) {
+export function ArchiveView({ tasks, renderItem, itemStyle, onItemClick, expandedSlot, footer }: ArchiveViewProps) {
   return (
     <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', flex: '1 0 auto' }}>
       {tasks.map((task) => (
@@ -39,6 +40,7 @@ export function ArchiveView({ tasks, renderItem, itemStyle, onItemClick, expande
           )}
         </Fragment>
       ))}
+      {footer && <li style={{ listStyle: 'none' }}>{footer}</li>}
     </ul>
   )
 }

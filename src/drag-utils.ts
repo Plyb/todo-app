@@ -15,6 +15,15 @@ type HeaderRow = {
   content: ReactNode
 }
 
+// A section's lazy-loading footer (spinner or scroll sentinel, see
+// LoadMoreSentinel) - non-draggable and excluded from item-index math exactly
+// like a header, just anchored to the end of its section instead of the start.
+type SectionFooterRow = {
+  kind: 'section-footer'
+  id: `footer:${number}`
+  content: ReactNode
+}
+
 type ItemRow<T> = {
   kind: 'item'
   id: number
@@ -57,9 +66,10 @@ export type Row<T> =
   | InsertSlotRow
   | ExpandedRow
   | InsertButtonRow
+  | SectionFooterRow
 
 function* generateRows<T extends { id: number }>(
-  sections: { header?: ReactNode; items: T[] }[],
+  sections: { header?: ReactNode; items: T[]; footer?: ReactNode }[],
   insertSlot?: { sectionIndex: number; index: number; content: ReactNode },
   expandedSlot?: { afterItemId: number; content: ReactNode },
   hasInsertButton?: boolean
@@ -83,6 +93,10 @@ function* generateRows<T extends { id: number }>(
     if (insertSlot?.sectionIndex === sectionIndex && insertSlot.index === section.items.length) {
       yield { kind: 'insert-slot', id: 'insert-slot', content: insertSlot.content }
     }
+
+    if (section.footer) {
+      yield { kind: 'section-footer', id: `footer:${sectionIndex}`, content: section.footer }
+    }
   }
 
   if (hasInsertButton) {
@@ -91,7 +105,7 @@ function* generateRows<T extends { id: number }>(
 }
 
 export function buildRows<T extends { id: number }>(
-  sections: { header?: ReactNode; items: T[] }[],
+  sections: { header?: ReactNode; items: T[]; footer?: ReactNode }[],
   insertSlot?: { sectionIndex: number; index: number; content: ReactNode },
   expandedSlot?: { afterItemId: number; content: ReactNode },
   hasInsertButton?: boolean

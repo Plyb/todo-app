@@ -1,11 +1,13 @@
 import { LexoRank } from 'lexorank'
 import { z } from 'zod'
 import { byRank } from '../rank-utils'
+import { archivedTasksOf, sortArchivedTasks, type ArchivedTask } from '../view-utils'
 import {
   RELATIONSHIPS_STORE,
   SUBTASKS_STORE,
   TASKS_STORE,
   getAllWithIds,
+  iterateCursor,
   keyToTaskId,
   openTasksDatabase,
   patchRecordById,
@@ -19,6 +21,12 @@ import {
 import type { Task } from '../types'
 import { deleteBlocksByTaskInStore } from './blocks'
 import { deleteSubtaskLinksByChildInStore, deleteSubtaskLinksByParentInStore } from './subtasks'
+
+// The default page size for lazily-loaded sections (issue #249): a section
+// loads this many tasks initially, then this many more per scroll-triggered page.
+export const TASK_PAGE_SIZE = 20
+
+export type TaskPage<T> = { tasks: T[]; hasMore: boolean }
 
 const storedTaskSchema = z.object({
   name: z.string(),
@@ -36,18 +44,79 @@ async function readTasks(): Promise<Task[]> {
   })
 }
 
-export async function loadTasks(): Promise<Task[]> {
-  const tasks = await readTasks()
-  if (tasks.length > 0) {
-    tasks.sort(byRank)
-    return tasks
-  }
+// Cursor pass (rather than getAllWithIds's bulk getAll+getAllKeys) so a
+// section's paginated read only materializes the tasks it actually needs,
+// not every record in the store.
+async function readMatchingTasks(matches: (task: Task) => boolean): Promise<Task[]> {
+  return withStore(TASKS_STORE, 'readonly', async (store) => {
+    const results: Task[] = []
+    await iterateCursor(store, (cursor) => {
+      const task = { id: keyToTaskId(cursor.key), ...storedTaskSchema.parse(cursor.value) }
+      if (matches(task)) results.push(task)
+    })
+    return results
+  })
+}
+
+function paginate<T>(sorted: T[], offset: number, limit: number): TaskPage<T> {
+  return { tasks: sorted.slice(offset, offset + limit), hasMore: offset + limit < sorted.length }
+}
+
+// A brand-new database has no tasks at all; every reader (the full load and
+// every paginated section read) needs the demo tasks seeded before it runs,
+// not just the old startup-only loadTasks path.
+async function ensureSeeded(): Promise<void> {
+  const count = await withStore(TASKS_STORE, 'readonly', (store) => requestToPromise(store.count()))
+  if (count > 0) return
 
   const db = await openTasksDatabase()
   await seedDemoTasks(db)
-  const seededTasks = await readTasks()
-  seededTasks.sort(byRank)
-  return seededTasks
+}
+
+export async function loadTasks(): Promise<Task[]> {
+  await ensureSeeded()
+  const tasks = await readTasks()
+  tasks.sort(byRank)
+  return tasks
+}
+
+// One status section's page, sorted the same way as the rest of the app
+// (byRank) - matches sectionTasksForStatus's filtering, just bounded to a page.
+export async function loadTaskPageForStatus(
+  statusSlug: string,
+  offset: number,
+  limit: number = TASK_PAGE_SIZE
+): Promise<TaskPage<Task>> {
+  await ensureSeeded()
+  const matching = await readMatchingTasks((t) => t.archivedAt === null && t.statusSlug === statusSlug)
+  matching.sort(byRank)
+  return paginate(matching, offset, limit)
+}
+
+// The archived view's page, sorted by sortArchivedTasks (archivedAt, then
+// completedAt, then name) rather than byRank - the archive view's own order.
+export async function loadArchivedTaskPage(
+  offset: number,
+  limit: number = TASK_PAGE_SIZE
+): Promise<TaskPage<ArchivedTask>> {
+  await ensureSeeded()
+  const matching = await readMatchingTasks((t) => t.archivedAt !== null)
+  const sorted = sortArchivedTasks(archivedTasksOf(matching))
+  return paginate(sorted, offset, limit)
+}
+
+// Targeted point-lookup re-read, used to resync only the tasks a caller
+// already holds in memory (e.g. after a failed write, or to check a scheduled
+// transition's task still exists) without loading the rest of the store.
+export async function loadTasksByIds(ids: number[]): Promise<Task[]> {
+  return withStore(TASKS_STORE, 'readonly', async (store) => {
+    const results: Task[] = []
+    for (const id of ids) {
+      const raw = (await requestToPromise(store.get(id))) as Record<string, unknown> | undefined
+      if (raw !== undefined) results.push({ id, ...storedTaskSchema.parse(raw) })
+    }
+    return results
+  })
 }
 
 export async function createTask(name: string, rank: string, statusSlug: string = 'backlog'): Promise<Task> {

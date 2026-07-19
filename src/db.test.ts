@@ -396,3 +396,108 @@ describe('remaining-store read validation (Zod schema at the read boundary)', ()
     await expect(db.loadAllDueTransitions()).rejects.toThrow()
   })
 })
+
+describe('loadTaskPageForStatus (issue #249 lazy pagination)', () => {
+  it('defaults to a page of TASK_PAGE_SIZE tasks, sorted by rank, and reports more are available', async () => {
+    const db = await import('./db')
+    let rank = LexoRank.middle()
+    const created = []
+    for (let i = 0; i < db.TASK_PAGE_SIZE + 5; i++) {
+      created.push(await db.createTask(`Task ${i}`, rank.toString(), 'today'))
+      rank = rank.genNext()
+    }
+
+    const page = await db.loadTaskPageForStatus('today', 0)
+
+    expect(page.tasks).toHaveLength(db.TASK_PAGE_SIZE)
+    expect(page.tasks.map((t) => t.id)).toEqual(created.slice(0, db.TASK_PAGE_SIZE).map((t) => t.id))
+    expect(page.hasMore).toBe(true)
+  })
+
+  it('returns the remainder with hasMore false once the offset reaches the end', async () => {
+    const db = await import('./db')
+    let rank = LexoRank.middle()
+    const created = []
+    for (let i = 0; i < db.TASK_PAGE_SIZE + 5; i++) {
+      created.push(await db.createTask(`Task ${i}`, rank.toString(), 'today'))
+      rank = rank.genNext()
+    }
+
+    const page = await db.loadTaskPageForStatus('today', db.TASK_PAGE_SIZE)
+
+    expect(page.tasks.map((t) => t.id)).toEqual(created.slice(db.TASK_PAGE_SIZE).map((t) => t.id))
+    expect(page.hasMore).toBe(false)
+  })
+
+  it('excludes tasks from other statuses and archived tasks from both the count and the page', async () => {
+    const db = await import('./db')
+    const inToday = await db.createTask('In today', LexoRank.middle().toString(), 'today')
+    await db.createTask('In backlog', LexoRank.middle().genNext().toString(), 'backlog')
+    const archived = await db.createTask('Archived but today status', LexoRank.middle().genNext().genNext().toString(), 'today')
+    await db.updateTaskArchivedAt(archived.id, '2020-01-01')
+
+    const page = await db.loadTaskPageForStatus('today', 0)
+
+    expect(page.tasks.map((t) => t.id)).toEqual([inToday.id])
+    expect(page.hasMore).toBe(false)
+  })
+})
+
+describe('loadArchivedTaskPage (issue #249 lazy pagination, archived view sort order)', () => {
+  it('sorts by archivedAt (most recent first) rather than rank, defaulting to a page of TASK_PAGE_SIZE', async () => {
+    const db = await import('./db')
+    const older = await db.createTask('Older', LexoRank.middle().toString(), 'today')
+    await db.updateTaskArchivedAt(older.id, '2026-01-01')
+    const newer = await db.createTask('Newer', LexoRank.middle().genNext().toString(), 'today')
+    await db.updateTaskArchivedAt(newer.id, '2026-06-01')
+
+    const page = await db.loadArchivedTaskPage(0)
+
+    expect(page.tasks.map((t) => t.id)).toEqual([newer.id, older.id])
+    expect(page.hasMore).toBe(false)
+  })
+
+  it('paginates at TASK_PAGE_SIZE and reports hasMore for a second page', async () => {
+    const db = await import('./db')
+    const created = []
+    for (let i = 0; i < db.TASK_PAGE_SIZE + 3; i++) {
+      const task = await db.createTask(`Archived ${i}`, LexoRank.middle().toString(), 'today')
+      // Distinct archivedAt per task, ascending, so sort order (most-recent-first) is well-defined.
+      await db.updateTaskArchivedAt(task.id, `2026-01-${String(i + 1).padStart(2, '0')}`)
+      created.push(task)
+    }
+    const mostRecentFirst = [...created].reverse()
+
+    const firstPage = await db.loadArchivedTaskPage(0)
+    expect(firstPage.tasks.map((t) => t.id)).toEqual(mostRecentFirst.slice(0, db.TASK_PAGE_SIZE).map((t) => t.id))
+    expect(firstPage.hasMore).toBe(true)
+
+    const secondPage = await db.loadArchivedTaskPage(db.TASK_PAGE_SIZE)
+    expect(secondPage.tasks.map((t) => t.id)).toEqual(mostRecentFirst.slice(db.TASK_PAGE_SIZE).map((t) => t.id))
+    expect(secondPage.hasMore).toBe(false)
+  })
+
+  it('excludes non-archived tasks', async () => {
+    const db = await import('./db')
+    await db.createTask('Not archived', LexoRank.middle().toString(), 'today')
+    const archived = await db.createTask('Archived', LexoRank.middle().genNext().toString(), 'today')
+    await db.updateTaskArchivedAt(archived.id, '2026-01-01')
+
+    const page = await db.loadArchivedTaskPage(0)
+
+    expect(page.tasks.map((t) => t.id)).toEqual([archived.id])
+  })
+})
+
+describe('loadTasksByIds (targeted point-lookup re-read)', () => {
+  it('returns only the requested tasks, ignoring ids that do not exist', async () => {
+    const db = await import('./db')
+    const a = await db.createTask('A', LexoRank.middle().toString(), 'backlog')
+    const b = await db.createTask('B', LexoRank.middle().genNext().toString(), 'backlog')
+    await db.createTask('C (not requested)', LexoRank.middle().genNext().genNext().toString(), 'backlog')
+
+    const tasks = await db.loadTasksByIds([a.id, b.id, 999])
+
+    expect(tasks.map((t) => t.id).sort((x, y) => x - y)).toEqual([a.id, b.id].sort((x, y) => x - y))
+  })
+})
