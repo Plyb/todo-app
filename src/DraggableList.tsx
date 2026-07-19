@@ -18,15 +18,8 @@ import { DraggableInsertButton, FabDragPreview, FAB_SIZE } from './DraggableInse
 const DRAG_ACTIVATION_PX = 8
 const TOUCH_DRAG_DELAY_MS = 400
 const TOUCH_DRAG_TOLERANCE_PX = 8
-// While the FAB stays within this distance of where the drag began, the drag
-// is treated as "not yet committed": no insertion placeholder is shown and a
-// release cancels instead of inserting. 1.5x the FAB's own radius gives a
-// comfortable dead zone around its resting corner.
+// 1.5x the FAB's own radius gives a comfortable dead zone around its resting corner.
 const FAB_DEAD_ZONE_PX = (FAB_SIZE / 2) * 1.5
-// A press on a task that moves less than this counts as a tap (open the task),
-// not a drag. dnd-kit swallows the native click for any press it started
-// tracking - even sub-threshold jitter - so item taps are detected here from
-// pointerdown/up coordinates instead of relying on the click event.
 const TASK_TAP_TOLERANCE_PX = 8
 
 function toItemId(id: UniqueIdentifier): number {
@@ -38,10 +31,6 @@ function isWithinDeadZone(start: { x: number; y: number }, end: { x: number; y: 
 }
 
 
-// The default PointerSensor already differentiates pointer types, but we want
-// the old feel exactly: mouse starts a drag after an 8px move (tap-vs-drag
-// disambiguation), touch after a 400ms hold with an 8px tolerance (so a
-// scroll gesture isn't hijacked).
 const pointerActivation = PointerSensor.configure({
   activationConstraints(event) {
     if (event.pointerType === 'touch') {
@@ -56,12 +45,10 @@ const pointerActivation = PointerSensor.configure({
   },
 })
 
-// The FAB starts a drag only after the pointer travels past the threshold, so
-// a plain tap never enters drag state at all - no placeholder flash, and the
-// resting button never has to hide/reappear. (An empty constraint list would
-// activate instantly on pointerdown, turning every tap into a zero-length
-// drag.) A distance constraint also covers touch here, since dragging the
-// corner FAB is a deliberate gesture that shouldn't wait on a hold delay.
+// An empty constraint list would activate instantly on pointerdown, turning
+// every tap into a zero-length drag. A distance constraint also covers touch
+// here, since dragging the corner FAB is a deliberate gesture that shouldn't
+// wait on a hold delay.
 const fabPointerActivation = PointerSensor.configure({
   activationConstraints: [new PointerActivationConstraints.Distance({ value: DRAG_ACTIVATION_PX })],
 })
@@ -270,11 +257,6 @@ export function DraggableList<T extends { id: number }>({
   // Where the FAB drag began, used to measure the dead zone (see below). Held
   // in a ref since it's only read inside event handlers, never rendered.
   const fabDragStart = useRef<{ x: number; y: number } | null>(null)
-  // Bumped on every drag end to remount the FAB's sortable row. The FAB always
-  // belongs at the very end of the list, but dnd-kit retains the optimistic
-  // position from the previous drag, so without a fresh mount the next drag's
-  // placeholder would briefly appear where the last one ended. Remounting
-  // resets it cleanly back to the end (where it sits invisibly until dragged).
   const [fabResetKey, setFabResetKey] = useState(0)
 
   const rows = useMemo(
@@ -285,9 +267,6 @@ export function DraggableList<T extends { id: number }>({
   const allItems = sections.flatMap((s) => s.items)
   const activeItem = typeof activeId === 'number' ? allItems.find((t) => t.id === activeId) ?? null : null
   const isFabDragging = activeId === INSERT_BUTTON_ID
-  // True while the FAB is being dragged but hasn't left its dead zone yet:
-  // the preview still follows the pointer, but no placeholder is shown and a
-  // release won't insert.
   const fabInDeadZone =
     isFabDragging &&
     fabDragPos !== null &&
@@ -303,8 +282,6 @@ export function DraggableList<T extends { id: number }>({
 
   return (
     <DragDropProvider
-      // Replace the default PointerSensor with our tuned one (mouse distance /
-      // touch delay) while keeping the default KeyboardSensor for a11y.
       sensors={(defaults) => [
         pointerActivation,
         ...defaults.filter((s) => s !== PointerSensor),
@@ -334,7 +311,8 @@ export function DraggableList<T extends { id: number }>({
         setActiveId(null)
         setFabDragPos(null)
         // Remount the FAB so its next drag starts cleanly at the end of the
-        // list rather than at the position this drag left it.
+        // list: dnd-kit retains the optimistic position from the previous
+        // drag otherwise.
         setFabResetKey((k) => k + 1)
         onDragEnd?.()
         if (canceled) return
