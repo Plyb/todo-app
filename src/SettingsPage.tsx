@@ -6,7 +6,7 @@ import { StatusEditorModal } from './StatusEditorModal'
 import { StatusModal } from './StatusModal'
 import { EditableListSection } from './EditableListSection'
 import { theme } from './theme'
-import { getAutoArchiveSlug, setAutoArchiveSlug, useLocalStorageSetting, VIEW_SELECTOR_VISIBILITY_KEY } from './storage'
+import { getAutoArchiveEnabled, setAutoArchiveEnabled, useLocalStorageSetting, VIEW_SELECTOR_VISIBILITY_KEY } from './storage'
 
 type SettingsPageProps = {
   onBack: () => void
@@ -18,13 +18,13 @@ export default function SettingsPage({ onBack }: SettingsPageProps) {
   const [editingView, setEditingView] = useState<View | null>(null)
   const [editingStatus, setEditingStatus] = useState<Status | null>(null)
   const [reassignFromSlug, setReassignFromSlug] = useState<string | null>(null)
-  const [autoArchiveSlug, setAutoArchiveSlugState] = useState(getAutoArchiveSlug)
+  const [autoArchiveEnabled, setAutoArchiveEnabledState] = useState(getAutoArchiveEnabled)
   const [viewSelectorButtonVisibility, setViewSelectorButtonVisibility] = useLocalStorageSetting<Exclude<ViewSelectorVisibility, null>>(VIEW_SELECTOR_VISIBILITY_KEY)
 
-  function handleAutoArchiveChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    const slug = e.target.value === '' ? null : e.target.value
-    setAutoArchiveSlugState(slug)
-    setAutoArchiveSlug(slug)
+  function handleAutoArchiveChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const enabled = e.target.checked
+    setAutoArchiveEnabledState(enabled)
+    setAutoArchiveEnabled(enabled)
   }
 
   function handleViewSelectorButtonVisibilityChange(e: React.ChangeEvent<HTMLSelectElement>) {
@@ -138,13 +138,8 @@ export default function SettingsPage({ onBack }: SettingsPageProps) {
       )}
 
       <section style={{ marginTop: 32 }}>
-        <label htmlFor="auto-archive-select">Auto-archive done tasks</label>
-        <select id="auto-archive-select" value={autoArchiveSlug ?? ''} onChange={handleAutoArchiveChange} style={{ marginLeft: 8 }}>
-          <option value="">None</option>
-          {statuses.map(s => (
-            <option key={s.slug} value={s.slug}>{s.name}</option>
-          ))}
-        </select>
+        <label htmlFor="auto-archive-checkbox">Auto-archive done tasks</label>
+        <input id="auto-archive-checkbox" type="checkbox" checked={autoArchiveEnabled} onChange={handleAutoArchiveChange} style={{ marginLeft: 8 }} />
       </section>
 
       <section style={{ marginTop: 32 }}>

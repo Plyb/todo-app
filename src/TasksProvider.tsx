@@ -4,7 +4,7 @@ import type { Task, Status, View } from './types'
 import type { StatusUsage } from './db'
 import { byRank } from './rank-utils'
 import { isArchiveEligible } from './archive-utils'
-import { readCurrentViewSlug, writeCurrentViewSlug, readRecentViewSlugs, writeRecentViewSlugs, getAutoArchiveSlug } from './storage'
+import { readCurrentViewSlug, writeCurrentViewSlug, readRecentViewSlugs, writeRecentViewSlugs, getAutoArchiveEnabled } from './storage'
 import { TasksContext, type TasksContextValue } from './tasks-context'
 
 function getTodayDateString(): string {
@@ -25,18 +25,17 @@ export function TasksProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (tasks.length === 0) return
-    const slug = getAutoArchiveSlug()
-    if (!slug) return
+    if (!getAutoArchiveEnabled()) return
 
     const today = getTodayDateString()
     if (archiveLastScannedDateRef.current === today) return
     archiveLastScannedDateRef.current = today
 
-    const toArchive = tasks.filter(t => t.statusSlug !== slug && isArchiveEligible(t, today))
+    const toArchive = tasks.filter(t => t.archivedAt === null && isArchiveEligible(t, today))
     if (toArchive.length === 0) return
     const toArchiveIds = new Set(toArchive.map(t => t.id))
-    setTasks(prev => prev.map(t => toArchiveIds.has(t.id) ? { ...t, statusSlug: slug } : t))
-    toArchive.forEach(t => db.updateTaskStatus(t.id, slug))
+    setTasks(prev => prev.map(t => toArchiveIds.has(t.id) ? { ...t, archivedAt: today } : t))
+    toArchive.forEach(t => db.updateTaskArchivedAt(t.id, today))
   }, [tasks])
 
   const [autoTransitionedTaskIds, setAutoTransitionedTaskIds] = useState<Set<number>>(new Set())
