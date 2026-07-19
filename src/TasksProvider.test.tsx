@@ -74,7 +74,7 @@ describe('deleteView navigation', () => {
     // pool of default views. Seed an extra view so this test always has at
     // least one to fall back to, regardless of how much the earlier tests
     // already consumed.
-    await db.saveView({ slug: 'fallback-spare', name: 'Fallback Spare', statusSlugs: ['backlog'] })
+    await db.saveView({ id: 'fallback-spare', name: 'Fallback Spare', statusSlugs: ['backlog'] })
 
     const { result } = renderViews()
     await waitFor(() => expect(result.current.views.length).toBeGreaterThan(0))
