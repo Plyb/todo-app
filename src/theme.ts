@@ -33,9 +33,17 @@ export const fontSizes = {
 
 export const shadows = {
   modal: '0 8px 32px rgba(0,0,0,0.2)',
+  fabCircle: '0 4px 12px rgba(0,0,0,0.25)',
+} as const
+
+export const fabPlaceholder = {
+  height: 44,
+  backgroundColor: 'rgba(26,115,232,0.08)',
+  borderStyle: '2px dashed',
 } as const
 
 export const zIndex = {
+  fab: 5,
   panel: 10,
   panelBackdrop: 11,
   modal: 200,
