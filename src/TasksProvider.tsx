@@ -3,7 +3,7 @@ import * as db from './db'
 import type { Task, Status, View } from './types'
 import type { StatusUsage } from './db'
 import { byRank } from './rank-utils'
-import { isArchiveEligible } from './archive-utils'
+import { isArchiveEligible, isKnownViewSlug } from './archive-utils'
 import { readCurrentViewSlug, writeCurrentViewSlug, readRecentViewSlugs, writeRecentViewSlugs, getAutoArchiveEnabled } from './storage'
 import { TasksContext, type TasksContextValue } from './tasks-context'
 
@@ -85,7 +85,7 @@ export function TasksProvider({ children }: { children: ReactNode }) {
 
       if (loadedViews.length > 0) {
         const storedSlug = readCurrentViewSlug()
-        const validSlug = storedSlug !== null && loadedViews.some((v) => v.slug === storedSlug)
+        const validSlug = storedSlug !== null && isKnownViewSlug(storedSlug, loadedViews)
           ? storedSlug
           : loadedViews[0].slug
         setCurrentViewSlug(validSlug)
@@ -94,7 +94,7 @@ export function TasksProvider({ children }: { children: ReactNode }) {
         }
 
         const storedRecent = readRecentViewSlugs()
-        const validRecent = storedRecent.filter((s) => loadedViews.some((v) => v.slug === s))
+        const validRecent = storedRecent.filter((s) => isKnownViewSlug(s, loadedViews))
         setRecentViewSlugs(validRecent.length > 0 ? validRecent : [validSlug])
       }
     }
@@ -253,7 +253,7 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     const remainingViews = views.filter(v => v.slug !== slug)
     setViews(remainingViews)
 
-    const prunedRecent = recentViewSlugs.filter((s) => s !== slug && remainingViews.some((v) => v.slug === s))
+    const prunedRecent = recentViewSlugs.filter((s) => s !== slug && isKnownViewSlug(s, remainingViews))
     writeRecentViewSlugs(prunedRecent)
     setRecentViewSlugs(prunedRecent)
 

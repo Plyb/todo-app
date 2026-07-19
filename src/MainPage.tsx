@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { loadAllBlocks, loadAllSubtaskLinks } from './db'
 import type { BlockingRelationship, SubtaskLink, Task, ViewSelectorVisibility } from './types'
 import { DraggableList } from './DraggableList'
+import { ArchiveView } from './ArchiveView'
 import { NewTaskInputField } from './NewTaskInputField'
 import { rankAtInsertIndex } from './rank-utils'
 import { QuickSelectPanel } from './QuickSelectPanel'
@@ -11,6 +12,8 @@ import { useOverscrollGesture } from './useOverscrollGesture'
 import { useTasks, useStatuses, useViews } from './tasks-context'
 import { OverscrollIndicator } from './OverscrollIndicator'
 import { VIEW_SELECTOR_VISIBILITY_KEY } from './storage'
+import { ARCHIVE_VIEW, ARCHIVE_VIEW_SLUG, sortArchivedTasks } from './archive-utils'
+import { displayedTasksForView, sectionTasksForStatus } from './view-utils'
 
 const OVERSCROLL_TRIGGER_DISTANCE = 100
 
@@ -125,13 +128,21 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
   })
 
   const currentView = views.find((v) => v.slug === currentViewSlug)
+  const isArchiveView = currentViewSlug === ARCHIVE_VIEW_SLUG
 
   // Tasks shown across all sections of the current view, used below so the
   // cleanup effect can clear indicators for whatever was actually on screen
-  // right before the view changes.
+  // right before the view changes. Archived tasks are excluded here (they're
+  // no longer part of their status) but not from `tasks` itself - subtask and
+  // relationship lookups elsewhere still need to see them.
   const displayedTasks = useMemo(
-    () => (currentView ? tasks.filter((t) => currentView.statusSlugs.includes(t.statusSlug)) : []),
+    () => (currentView ? displayedTasksForView(tasks, currentView) : []),
     [currentView, tasks]
+  )
+
+  const archivedTasks = useMemo(
+    () => sortArchivedTasks(tasks.filter((t) => t.archivedAt !== null)),
+    [tasks]
   )
 
   const parentTaskNameByChildId = useMemo(
@@ -158,7 +169,7 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
                   {status?.name ?? slug}
                 </h2>
               ),
-              items: tasks.filter((t) => t.statusSlug === slug),
+              items: sectionTasksForStatus(tasks, slug),
             }
           })
         : [],
@@ -183,7 +194,7 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
     }
   }, [currentViewSlug])
 
-  if (!currentView) {
+  if (!currentView && !isArchiveView) {
     return (
       <main style={{ minHeight: '100vh' }}>
         <SettingsButton onClick={onNavigateToSettings} />
@@ -338,9 +349,12 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
     </div>
   )
 
+  // The archive view is injected here only - it's a UI-layer construct that's
+  // never written to the views store, so SettingsPage's own view list (which
+  // reads useViews() directly) never shows it.
   const viewModal = viewModalOpen && (
     <ViewModal
-      views={views}
+      views={[...views, ARCHIVE_VIEW]}
       recentViewSlugs={recentViewSlugs}
       currentViewSlug={currentViewSlug}
       onSelect={openView}
@@ -363,27 +377,48 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
       style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}
     >
       {shouldShowViewSelectorButton() && (
-        <ViewSelectorButton viewName={currentView.name} onClick={() => setViewModalOpen(true)} />
+        <ViewSelectorButton
+          viewName={isArchiveView ? ARCHIVE_VIEW.name : currentView!.name}
+          onClick={() => setViewModalOpen(true)}
+        />
       )}
 
-      <DraggableList
-        sections={sections}
-        onReorder={handleReorder}
-        renderItem={(task) => (
-          <TaskRow
-            task={task}
-            onDoneChange={(done) => setDone(task.id, done)}
-            showIndicator={autoTransitionedTaskIds.has(task.id)}
-            isBlocked={blockingRelationships.some((r) => r.toTaskId === task.id)}
-            parentTaskName={parentTaskNameByChildId.get(task.id)}
-          />
-        )}
-        insertSlot={insertSlot}
-        onItemClick={selectedTaskId === null ? handleTaskClick : undefined}
-        itemStyle={itemStyleFn}
-        expandedSlot={expandedSlot}
-        insertButton={{ onRequestInsert: openInput }}
-      />
+      {isArchiveView ? (
+        <ArchiveView
+          tasks={archivedTasks}
+          renderItem={(task) => (
+            <TaskRow
+              task={task}
+              onDoneChange={(done) => setDone(task.id, done)}
+              showIndicator={autoTransitionedTaskIds.has(task.id)}
+              isBlocked={blockingRelationships.some((r) => r.toTaskId === task.id)}
+              parentTaskName={parentTaskNameByChildId.get(task.id)}
+            />
+          )}
+          onItemClick={selectedTaskId === null ? handleTaskClick : undefined}
+          itemStyle={itemStyleFn}
+          expandedSlot={expandedSlot}
+        />
+      ) : (
+        <DraggableList
+          sections={sections}
+          onReorder={handleReorder}
+          renderItem={(task) => (
+            <TaskRow
+              task={task}
+              onDoneChange={(done) => setDone(task.id, done)}
+              showIndicator={autoTransitionedTaskIds.has(task.id)}
+              isBlocked={blockingRelationships.some((r) => r.toTaskId === task.id)}
+              parentTaskName={parentTaskNameByChildId.get(task.id)}
+            />
+          )}
+          insertSlot={insertSlot}
+          onItemClick={selectedTaskId === null ? handleTaskClick : undefined}
+          itemStyle={itemStyleFn}
+          expandedSlot={expandedSlot}
+          insertButton={{ onRequestInsert: openInput }}
+        />
+      )}
 
       <SettingsButton onClick={onNavigateToSettings} />
 

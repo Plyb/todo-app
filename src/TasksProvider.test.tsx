@@ -4,7 +4,8 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { TasksProvider } from './TasksProvider'
 import { useTasks, useViews } from './tasks-context'
-import { setAutoArchiveEnabled } from './storage'
+import { setAutoArchiveEnabled, writeCurrentViewSlug, writeRecentViewSlugs } from './storage'
+import { ARCHIVE_VIEW_SLUG } from './archive-utils'
 import * as db from './db'
 
 // Fresh indexedDB + localStorage per test so view state (seeded one-view-per-status
@@ -82,6 +83,54 @@ describe('deleteView navigation', () => {
 
     expect(result.current.currentViewSlug).toBe(remainingSlugs[0])
     expect(result.current.recentViewSlugs).not.toContain(initialSlug)
+  })
+})
+
+describe('archive sentinel slug persistence', () => {
+  it('restores the archive view as currentViewSlug on mount when it was the last-open view', async () => {
+    // Simulate a reload where the sentinel was persisted as the last-open
+    // view: it's never in the real `views` array (it's a UI-layer-only
+    // construct), so a naive `loadedViews.some(...)` validity check would
+    // wrongly treat it as stale and fall back to the first real view.
+    writeCurrentViewSlug(ARCHIVE_VIEW_SLUG)
+
+    const { result } = renderViews()
+    await waitFor(() => expect(result.current.views.length).toBeGreaterThan(0))
+
+    expect(result.current.currentViewSlug).toBe(ARCHIVE_VIEW_SLUG)
+  })
+
+  it('does not prune the archive sentinel slug out of recentViewSlugs on mount', async () => {
+    writeRecentViewSlugs([ARCHIVE_VIEW_SLUG])
+
+    const { result } = renderViews()
+    await waitFor(() => expect(result.current.views.length).toBeGreaterThan(0))
+
+    expect(result.current.recentViewSlugs).toEqual([ARCHIVE_VIEW_SLUG])
+  })
+
+  it('does not prune the archive sentinel slug out of recentViewSlugs when an unrelated view is deleted', async () => {
+    const { result } = renderViews()
+    await waitFor(() => expect(result.current.views.length).toBeGreaterThan(0))
+
+    // Add a throwaway view to delete, rather than assuming >=2 views already
+    // exist - the db connection (and its view store) is shared across tests
+    // in this file (see openDatabasePromise caching in db/client.ts), so the
+    // ambient view count left over from other tests isn't reliable here.
+    const anchorSlug = result.current.views[0].slug
+    await act(async () => {
+      await result.current.saveView({ slug: 'temp-view-to-delete', name: 'Temp', statusSlugs: [] })
+    })
+
+    act(() => result.current.openView(ARCHIVE_VIEW_SLUG))
+    act(() => result.current.openView(anchorSlug))
+    expect(result.current.recentViewSlugs).toContain(ARCHIVE_VIEW_SLUG)
+
+    await act(async () => {
+      await result.current.deleteView('temp-view-to-delete')
+    })
+
+    expect(result.current.recentViewSlugs).toContain(ARCHIVE_VIEW_SLUG)
   })
 })
 
