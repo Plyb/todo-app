@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { type Status, type View } from './types'
+import { type Status, type UserDefinedView } from './types'
 import { DraggableList } from './DraggableList'
 import { theme } from './theme'
 import { Modal } from './ui/Modal'
@@ -7,9 +7,9 @@ import { PrimaryButton, SecondaryButton } from './ui/Button'
 import { partitionStatuses } from './modal-derivations'
 
 export type ViewEditorModalProps = {
-  view: View
+  view: UserDefinedView
   statuses: Status[]
-  onSave: (view: View) => void
+  onSave: (view: UserDefinedView) => void
   onClose: () => void
 }
 

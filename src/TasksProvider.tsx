@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import * as db from './db'
-import type { Task, Status, View } from './types'
+import type { Task, Status, View, UserDefinedView } from './types'
 import type { StatusUsage } from './db'
 import { byRank, rankAtInsertIndex } from './rank-utils'
 import { isArchiveEligible } from './archive-utils'
@@ -263,7 +263,7 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     })
   }
 
-  async function saveView(view: View): Promise<void> {
+  async function saveView(view: UserDefinedView): Promise<void> {
     await db.saveView(view)
     setViews(prev => prev.some(v => v.slug === view.slug)
       ? prev.map(v => v.slug === view.slug ? view : v)

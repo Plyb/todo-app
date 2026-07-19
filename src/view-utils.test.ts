@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { displayedTasksForView, sectionTasksForStatus, sortArchivedTasks, type ArchivedTask } from './view-utils'
-import type { Task, View } from './types'
+import type { Task, UserDefinedView } from './types'
 
 function makeTask(overrides: Partial<Task> & { id: number; name: string; statusSlug: string }): Task {
   return {
@@ -24,7 +24,7 @@ function makeArchivedTask(overrides: Partial<ArchivedTask> & { id: number; name:
 }
 
 describe('displayedTasksForView', () => {
-  const view: View = { slug: 'view', name: 'View', statusSlugs: ['todo', 'doing'] }
+  const view: UserDefinedView = { slug: 'view', name: 'View', statusSlugs: ['todo', 'doing'] }
 
   it('includes tasks whose status is in the view', () => {
     const task = makeTask({ id: 1, name: 'A', statusSlug: 'todo' })

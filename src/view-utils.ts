@@ -1,6 +1,6 @@
-import type { Task, View } from './types'
+import type { Task, UserDefinedView } from './types'
 
-export function displayedTasksForView(tasks: Task[], view: View): Task[] {
+export function displayedTasksForView(tasks: Task[], view: UserDefinedView): Task[] {
   return tasks.filter((t) => t.archivedAt === null && view.statusSlugs.includes(t.statusSlug))
 }
 

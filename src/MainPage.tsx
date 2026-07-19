@@ -12,7 +12,7 @@ import { useOverscrollGesture } from './useOverscrollGesture'
 import { useTasks, useStatuses, useViews } from './tasks-context'
 import { OverscrollIndicator } from './OverscrollIndicator'
 import { VIEW_SELECTOR_VISIBILITY_KEY } from './storage'
-import { ARCHIVE_VIEW, ARCHIVE_VIEW_SLUG } from './synthetic-view-utils'
+import { ARCHIVE_VIEW, ARCHIVE_VIEW_SLUG, isUserDefinedView } from './synthetic-view-utils'
 import { displayedTasksForView, sectionTasksForStatus, sortArchivedTasks, type ArchivedTask } from './view-utils'
 
 const OVERSCROLL_TRIGGER_DISTANCE = 100
@@ -136,7 +136,7 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
   // no longer part of their status) but not from `tasks` itself - subtask and
   // relationship lookups elsewhere still need to see them.
   const displayedTasks = useMemo(
-    () => (currentView ? displayedTasksForView(tasks, currentView) : []),
+    () => (currentView && isUserDefinedView(currentView) ? displayedTasksForView(tasks, currentView) : []),
     [currentView, tasks]
   )
 
@@ -160,7 +160,7 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
 
   const sections = useMemo(
     () =>
-      currentView
+      currentView && isUserDefinedView(currentView)
         ? currentView.statusSlugs.map((slug) => {
             const status = statuses.find((s) => s.slug === slug)
             return {
@@ -208,7 +208,7 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
   }
 
   function handleReorder(draggedId: number, toSectionIndex: number, insertIndex: number) {
-    if (!currentView) return
+    if (!currentView || !isUserDefinedView(currentView)) return
     const toStatusSlug = currentView.statusSlugs[toSectionIndex]
     const toSectionTasks = tasks.filter((t) => t.statusSlug === toStatusSlug)
     const newRank = rankAtInsertIndex(toSectionTasks, insertIndex, draggedId)
@@ -249,7 +249,7 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
       setNewTaskInput(null)
       return
     }
-    if (!currentView) return
+    if (!currentView || !isUserDefinedView(currentView)) return
     const statusSlug = currentView.statusSlugs[sectionIndex]
     const sectionTasks = tasks.filter((t) => t.statusSlug === statusSlug)
     const rank = rankAtInsertIndex(sectionTasks, insertIndex)
