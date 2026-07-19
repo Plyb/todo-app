@@ -22,8 +22,6 @@ export function TasksProvider({ children }: { children: ReactNode }) {
   const [recentViewSlugs, setRecentViewSlugs] = useState<string[]>(
     () => readRecentViewSlugs()
   )
-  // Auto-archive and rerank both run at most once per calendar day, so they
-  // share a single gate rather than each keeping their own ref + date check.
   const dailyScanDateRef = useRef<string | null>(null)
 
   useEffect(() => {
@@ -42,8 +40,6 @@ export function TasksProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // Rank comparisons only ever happen within a status group, so only the
-    // group(s) that actually grew a too-long rank need to be re-spaced.
     const statusSlugs = Array.from(new Set(tasks.map(t => t.statusSlug)))
     const rerankUpdates = statusSlugs.flatMap(statusSlug => {
       const group = tasks.filter(t => t.statusSlug === statusSlug)
