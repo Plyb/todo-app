@@ -349,9 +349,6 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
     </div>
   )
 
-  // The archive view is injected here only - it's a UI-layer construct that's
-  // never written to the views store, so SettingsPage's own view list (which
-  // reads useViews() directly) never shows it.
   const viewModal = viewModalOpen && (
     <ViewModal
       views={[...views, ARCHIVE_VIEW]}

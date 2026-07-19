@@ -10,9 +10,6 @@ type ArchiveViewProps = {
   expandedSlot?: { afterItemId: number; content: ReactNode }
 }
 
-// The archive view never allows dragging (see issue #91), so unlike the
-// status-based views it doesn't go through DraggableList at all - just a
-// plain list of rows, in the order it's given (sortArchivedTasks upstream).
 export function ArchiveView({ tasks, renderItem, itemStyle, onItemClick, expandedSlot }: ArchiveViewProps) {
   return (
     <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', flex: '1 0 auto' }}>
