@@ -307,6 +307,16 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
     }
   }
 
+  const renderTaskRow = (task: Task) => (
+    <TaskRow
+      task={task}
+      onDoneChange={(done) => setDone(task.id, done)}
+      showIndicator={autoTransitionedTaskIds.has(task.id)}
+      isBlocked={blockingRelationships.some((r) => r.toTaskId === task.id)}
+      parentTaskName={parentTaskNameByChildId.get(task.id)}
+    />
+  )
+
   const insertSlot = newTaskInput !== null
     ? {
         index: newTaskInput.insertIndex,
@@ -329,6 +339,13 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
         content: <QuickSelectPanel {...quickSelectPanelProps} />,
       }
     : undefined
+
+  const sharedListProps = {
+    renderItem: renderTaskRow,
+    onItemClick: selectedTaskId === null ? handleTaskClick : undefined,
+    itemStyle: itemStyleFn,
+    expandedSlot,
+  }
 
   const relatedTaskModal = relatedTaskModalProps && (
     <div
@@ -380,39 +397,14 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
       )}
 
       {!isUserDefinedView(currentView) ? (
-        <ArchiveView
-          tasks={archivedTasks}
-          renderItem={(task) => (
-            <TaskRow
-              task={task}
-              onDoneChange={(done) => setDone(task.id, done)}
-              showIndicator={autoTransitionedTaskIds.has(task.id)}
-              isBlocked={blockingRelationships.some((r) => r.toTaskId === task.id)}
-              parentTaskName={parentTaskNameByChildId.get(task.id)}
-            />
-          )}
-          onItemClick={selectedTaskId === null ? handleTaskClick : undefined}
-          itemStyle={itemStyleFn}
-          expandedSlot={expandedSlot}
-        />
+        <ArchiveView tasks={archivedTasks} {...sharedListProps} />
       ) : (
         <DraggableList
           sections={sections}
           onReorder={handleReorder}
-          renderItem={(task) => (
-            <TaskRow
-              task={task}
-              onDoneChange={(done) => setDone(task.id, done)}
-              showIndicator={autoTransitionedTaskIds.has(task.id)}
-              isBlocked={blockingRelationships.some((r) => r.toTaskId === task.id)}
-              parentTaskName={parentTaskNameByChildId.get(task.id)}
-            />
-          )}
           insertSlot={insertSlot}
-          onItemClick={selectedTaskId === null ? handleTaskClick : undefined}
-          itemStyle={itemStyleFn}
-          expandedSlot={expandedSlot}
           insertButton={{ onRequestInsert: openInput }}
+          {...sharedListProps}
         />
       )}
 
