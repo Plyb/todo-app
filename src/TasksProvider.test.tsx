@@ -85,6 +85,29 @@ describe('deleteView navigation', () => {
   })
 })
 
+describe('setStatus rank', () => {
+  it('recomputes rank so the task does not collide with an existing rank in the destination status', async () => {
+    const { result } = renderTasks()
+    await waitFor(() => expect(result.current.tasks.length).toBeGreaterThan(0))
+
+    const buyGroceries = result.current.tasks.find((t) => t.name === 'Buy groceries')!
+    expect(buyGroceries.statusSlug).toBe('today')
+
+    // Seed a backlog task with the exact same rank 'Buy groceries' already has, so
+    // moving it into backlog without recomputing rank would produce a tie.
+    await act(async () => {
+      await result.current.createTask('Colliding backlog task', buyGroceries.rank, 'backlog')
+    })
+
+    await act(async () => {
+      await result.current.setStatus(buyGroceries.id, 'backlog')
+    })
+
+    const backlogRanks = result.current.tasks.filter((t) => t.statusSlug === 'backlog').map((t) => t.rank)
+    expect(new Set(backlogRanks).size).toBe(backlogRanks.length)
+  })
+})
+
 describe('auto-archive scan effect', () => {
   it('sets archivedAt without changing statusSlug when auto-archive is enabled and a task is eligible', async () => {
     // Seed a task directly in the db, already completed on an earlier calendar

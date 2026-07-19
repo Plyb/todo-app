@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import * as db from './db'
 import type { Task, Status, View } from './types'
 import type { StatusUsage } from './db'
-import { byRank } from './rank-utils'
+import { byRank, rankAtInsertIndex } from './rank-utils'
 import { isArchiveEligible } from './archive-utils'
 import { readCurrentViewSlug, writeCurrentViewSlug, readRecentViewSlugs, writeRecentViewSlugs, getAutoArchiveEnabled } from './storage'
 import { TasksContext, type TasksContextValue } from './tasks-context'
@@ -155,9 +155,17 @@ export function TasksProvider({ children }: { children: ReactNode }) {
   }
 
   async function setStatus(id: number, statusSlug: string): Promise<void> {
+    // Appends to the end of the destination status so the task can't collide
+    // with the rank of a task already sitting there.
+    const destTasks = tasks.filter(t => t.statusSlug === statusSlug)
+    const newRank = rankAtInsertIndex(destTasks, destTasks.length, id)
     try {
       await db.updateTaskStatus(id, statusSlug)
-      setTasks(prev => prev.map(t => t.id === id ? { ...t, statusSlug } : t))
+      await db.updateTaskRank(id, newRank)
+      setTasks(prev => {
+        const updated = prev.map(t => t.id === id ? { ...t, statusSlug, rank: newRank } : t)
+        return updated.sort(byRank)
+      })
     } catch {
       await refetchTasks()
     }
