@@ -43,7 +43,6 @@ describe('loadStatuses (simple read)', () => {
     // STATUSES_STORE is keyed by `slug`, so getAll() returns records in key
     // (alphabetical) order rather than insertion order.
     expect(statuses).toEqual([
-      { slug: 'archived', name: 'Archived' },
       { slug: 'backlog', name: 'Backlog' },
       { slug: 'today', name: 'Today' },
       { slug: 'today-extra', name: 'Today Extra' },
@@ -204,10 +203,10 @@ describe('migration replay', () => {
     expect(legacy?.rank.length).toBeGreaterThan(0)
 
     const statuses = await db.loadStatuses()
-    expect(statuses.map((s) => s.slug).sort()).toEqual(['archived', 'backlog', 'today', 'today-extra'])
+    expect(statuses.map((s) => s.slug).sort()).toEqual(['backlog', 'today', 'today-extra'])
 
     const views = await db.loadViews()
-    expect(views.map((v) => v.slug).sort()).toEqual(['archived', 'backlog', 'today', 'today-extra'])
+    expect(views.map((v) => v.slug).sort()).toEqual(['backlog', 'today', 'today-extra'])
 
     // Confirm the upgrade chain actually landed on version 10 and won't fire another upgrade.
     await new Promise<void>((resolve, reject) => {
