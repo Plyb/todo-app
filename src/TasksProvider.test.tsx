@@ -3,7 +3,7 @@ import { IDBFactory } from 'fake-indexeddb'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { TasksProvider } from './TasksProvider'
-import { useViews } from './tasks-context'
+import { useTasks, useViews } from './tasks-context'
 
 // Fresh indexedDB + localStorage per test so view state (seeded one-view-per-status
 // on migration, see db/client.ts's migrateAddViews) and persisted currentViewSlug/
@@ -16,6 +16,11 @@ beforeEach(() => {
 function renderViews() {
   const wrapper = ({ children }: { children: ReactNode }) => <TasksProvider>{children}</TasksProvider>
   return renderHook(() => useViews(), { wrapper })
+}
+
+function renderTasks() {
+  const wrapper = ({ children }: { children: ReactNode }) => <TasksProvider>{children}</TasksProvider>
+  return renderHook(() => useTasks(), { wrapper })
 }
 
 describe('deleteView navigation', () => {
@@ -75,5 +80,28 @@ describe('deleteView navigation', () => {
 
     expect(result.current.currentViewSlug).toBe(remainingSlugs[0])
     expect(result.current.recentViewSlugs).not.toContain(initialSlug)
+  })
+})
+
+describe('setStatus rank', () => {
+  it('recomputes rank so the task does not collide with an existing rank in the destination status', async () => {
+    const { result } = renderTasks()
+    await waitFor(() => expect(result.current.tasks.length).toBeGreaterThan(0))
+
+    const buyGroceries = result.current.tasks.find((t) => t.name === 'Buy groceries')!
+    expect(buyGroceries.statusSlug).toBe('today')
+
+    // Seed a backlog task with the exact same rank 'Buy groceries' already has, so
+    // moving it into backlog without recomputing rank would produce a tie.
+    await act(async () => {
+      await result.current.createTask('Colliding backlog task', buyGroceries.rank, 'backlog')
+    })
+
+    await act(async () => {
+      await result.current.setStatus(buyGroceries.id, 'backlog')
+    })
+
+    const backlogRanks = result.current.tasks.filter((t) => t.statusSlug === 'backlog').map((t) => t.rank)
+    expect(new Set(backlogRanks).size).toBe(backlogRanks.length)
   })
 })
