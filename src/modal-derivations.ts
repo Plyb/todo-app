@@ -1,9 +1,9 @@
 import type { View, Status } from './types'
 
-export function sortViewsByRecency(views: View[], recentViewSlugs: string[]): View[] {
+export function sortViewsByRecency(views: View[], recentViewIds: string[]): View[] {
   return [...views].sort((a, b) => {
-    const aIndex = recentViewSlugs.indexOf(a.slug)
-    const bIndex = recentViewSlugs.indexOf(b.slug)
+    const aIndex = recentViewIds.indexOf(a.id)
+    const bIndex = recentViewIds.indexOf(b.id)
     if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex
     if (aIndex !== -1) return -1
     if (bIndex !== -1) return 1

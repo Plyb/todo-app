@@ -95,7 +95,7 @@ describe('updateStatus (multi-store write)', () => {
 
     await db.createStatus('Custom', 'custom')
     const task = await db.createTask('Task in custom status', LexoRank.middle().toString(), 'custom')
-    await db.saveView({ slug: 'custom-view', name: 'Custom View', statusSlugs: ['custom', 'backlog'] })
+    await db.saveView({ id: 'custom-view', name: 'Custom View', statusSlugs: ['custom', 'backlog'] })
 
     await db.updateStatus('custom', 'custom-renamed', 'Custom Renamed')
 
@@ -107,7 +107,7 @@ describe('updateStatus (multi-store write)', () => {
     expect(tasks.find((t) => t.id === task.id)?.statusSlug).toBe('custom-renamed')
 
     const views = await db.loadViews()
-    expect(views.find((v) => v.slug === 'custom-view')?.statusSlugs).toEqual(['custom-renamed', 'backlog'])
+    expect(views.find((v) => v.id === 'custom-view')?.statusSlugs).toEqual(['custom-renamed', 'backlog'])
   })
 })
 
@@ -157,7 +157,7 @@ describe('runner abort-on-error (rolls back a partial multi-store write)', () =>
     // A view missing `statusSlugs` makes `view.statusSlugs.includes(...)` throw
     // inside reassignTasksAndViews, after the status delete + task reassignment
     // have been queued in the same transaction.
-    await putRaw('views', { slug: 'malformed', name: 'Malformed' })
+    await putRaw('views', { id: 'malformed', name: 'Malformed' })
 
     await expect(db.updateStatus('custom', 'custom-renamed', 'Custom Renamed')).rejects.toThrow()
 
@@ -172,7 +172,7 @@ describe('runner abort-on-error (rolls back a partial multi-store write)', () =>
 })
 
 describe('migration replay', () => {
-  it('upgrades a v1 database (tasks store only, no completedAt/archivedAt/rank/statusSlug/notes) to v10', async () => {
+  it('upgrades a v1 database (tasks store only, no completedAt/archivedAt/rank/statusSlug/notes) to v11', async () => {
     // Simulate a database left behind by the very first shipped schema: only
     // the tasks store exists, and records predate the completedAt/archivedAt/rank/statusSlug/notes fields.
     await new Promise<void>((resolve, reject) => {
@@ -206,16 +206,74 @@ describe('migration replay', () => {
     expect(statuses.map((s) => s.slug).sort()).toEqual(['backlog', 'today', 'today-extra'])
 
     const views = await db.loadViews()
-    expect(views.map((v) => v.slug).sort()).toEqual(['backlog', 'today', 'today-extra'])
+    expect(views.map((v) => v.id).sort()).toEqual(['backlog', 'today', 'today-extra'])
 
-    // Confirm the upgrade chain actually landed on version 10 and won't fire another upgrade.
+    // Confirm the upgrade chain actually landed on version 11 and won't fire another upgrade.
     await new Promise<void>((resolve, reject) => {
       const verifyRequest = indexedDB.open(DB_NAME)
-      verifyRequest.onupgradeneeded = () => reject(new Error('unexpected upgrade needed; migration did not reach version 10'))
+      verifyRequest.onupgradeneeded = () => reject(new Error('unexpected upgrade needed; migration did not reach version 11'))
       verifyRequest.onsuccess = () => {
-        expect(verifyRequest.result.version).toBe(10)
+        expect(verifyRequest.result.version).toBe(11)
         verifyRequest.result.close()
         resolve()
+      }
+      verifyRequest.onerror = () => reject(verifyRequest.error)
+    })
+  })
+
+  it('upgrades an existing v10 database\'s VIEWS_STORE from slug-keyed to id-keyed records without losing data (issue #248 follow-up)', async () => {
+    // Simulate a v10 database with real user-created views persisted under the
+    // pre-migration `slug` keyPath.
+    await new Promise<void>((resolve, reject) => {
+      const request = indexedDB.open(DB_NAME, 10)
+      request.onupgradeneeded = () => {
+        const upgradeDb = request.result
+        upgradeDb.createObjectStore('tasks', { autoIncrement: true })
+        upgradeDb.createObjectStore('statuses', { keyPath: 'slug' })
+        upgradeDb.createObjectStore('views', { keyPath: 'slug' })
+        upgradeDb.createObjectStore('scheduledTransitions', { autoIncrement: true })
+        upgradeDb.createObjectStore('relationships', { autoIncrement: true })
+        upgradeDb.createObjectStore('subtasks', { keyPath: 'id', autoIncrement: true })
+      }
+      request.onsuccess = () => {
+        const legacyDb = request.result
+        const tx = legacyDb.transaction('views', 'readwrite')
+        tx.objectStore('views').add({ slug: 'today', name: 'Today', statusSlugs: ['today'] })
+        tx.objectStore('views').add({ slug: 'custom-view', name: 'Custom View', statusSlugs: ['backlog', 'today'] })
+        tx.oncomplete = () => {
+          legacyDb.close()
+          resolve()
+        }
+        tx.onerror = () => reject(tx.error)
+      }
+      request.onerror = () => reject(request.error)
+    })
+
+    vi.resetModules()
+    const db = await import('./db')
+
+    const views = await db.loadViews()
+    expect(views).toEqual(
+      expect.arrayContaining([
+        { id: 'today', name: 'Today', statusSlugs: ['today'] },
+        { id: 'custom-view', name: 'Custom View', statusSlugs: ['backlog', 'today'] },
+      ]),
+    )
+    expect(views).toHaveLength(2)
+
+    // Confirm the raw store is actually keyed by `id` now, not `slug`.
+    await new Promise<void>((resolve, reject) => {
+      const verifyRequest = indexedDB.open(DB_NAME)
+      verifyRequest.onsuccess = () => {
+        const openedDb = verifyRequest.result
+        const tx = openedDb.transaction('views', 'readonly')
+        const keysRequest = tx.objectStore('views').getAllKeys()
+        keysRequest.onsuccess = () => {
+          expect(keysRequest.result.sort()).toEqual(['custom-view', 'today'])
+          openedDb.close()
+          resolve()
+        }
+        keysRequest.onerror = () => reject(keysRequest.error)
       }
       verifyRequest.onerror = () => reject(verifyRequest.error)
     })
@@ -359,7 +417,7 @@ describe('remaining-store read validation (Zod schema at the read boundary)', ()
     const db = await import('./db')
     await db.loadViews()
 
-    await putRaw('views', { slug: 'bad', name: 'Bad', statusSlugs: 'not-an-array' })
+    await putRaw('views', { id: 'bad', name: 'Bad', statusSlugs: 'not-an-array' })
 
     await expect(db.loadViews()).rejects.toThrow()
   })

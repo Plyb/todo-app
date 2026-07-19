@@ -105,7 +105,7 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
     clearAutoTransitionIndicator,
   } = useTasks()
   const { statuses } = useStatuses()
-  const { views, currentViewSlug, recentViewSlugs, openView } = useViews()
+  const { views, currentViewId, recentViewIds, openView } = useViews()
   const [newTaskInput, setNewTaskInput] = useState<NewTaskInput | null>(null)
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null)
   const [modalTaskId, setModalTaskId] = useState<number | null>(null)
@@ -127,7 +127,7 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
     onTrigger: () => setViewModalOpen(true),
   })
 
-  const currentView = views.find((v) => v.slug === currentViewSlug)
+  const currentView = views.find((v) => v.id === currentViewId)
 
   // Tasks shown across all sections of the current view, used below so the
   // cleanup effect can clear indicators for whatever was actually on screen
@@ -191,7 +191,7 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
         }
       })
     }
-  }, [currentViewSlug])
+  }, [currentViewId])
 
   if (!currentView) {
     return (
@@ -368,8 +368,8 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
   const viewModal = viewModalOpen && (
     <ViewModal
       views={views}
-      recentViewSlugs={recentViewSlugs}
-      currentViewSlug={currentViewSlug}
+      recentViewIds={recentViewIds}
+      currentViewId={currentViewId}
       onSelect={openView}
       onClose={() => setViewModalOpen(false)}
     />

@@ -20,7 +20,7 @@ export function withDefault<T>(schema: z.ZodType<T>, fallback: () => T): z.ZodTy
 }
 
 export const DB_NAME = 'todo-app'
-export const DB_VERSION = 10
+export const DB_VERSION = 11
 export const TASKS_STORE = 'tasks'
 export const STATUSES_STORE = 'statuses'
 export const VIEWS_STORE = 'views'
@@ -188,6 +188,17 @@ async function migrateAddViews(transaction: IDBTransaction): Promise<void> {
   }
 }
 
+async function migrateViewsToIdKeyPath(db: IDBDatabase, transaction: IDBTransaction): Promise<void> {
+  const oldStore = transaction.objectStore(VIEWS_STORE)
+  const legacyViews = (await requestToPromise(oldStore.getAll())) as { slug: string; name: string; statusSlugs: string[] }[]
+
+  db.deleteObjectStore(VIEWS_STORE)
+  const newStore = db.createObjectStore(VIEWS_STORE, { keyPath: 'id' })
+  for (const { slug, ...rest } of legacyViews) {
+    newStore.put({ id: slug, ...rest })
+  }
+}
+
 type MigrationStep = {
   version: number
   migrate: (db: IDBDatabase, transaction: IDBTransaction, oldVersion: number) => void | Promise<void>
@@ -254,6 +265,10 @@ const MIGRATION_STEPS: MigrationStep[] = [
     version: 10,
     migrate: (_db, transaction, oldVersion) => migrateTaskFields(transaction, oldVersion),
   },
+  {
+    version: 11,
+    migrate: (db, transaction) => migrateViewsToIdKeyPath(db, transaction),
+  },
 ]
 
 export async function openTasksDatabase(): Promise<IDBDatabase> {
@@ -280,22 +295,24 @@ export async function openTasksDatabase(): Promise<IDBDatabase> {
         }
       }
 
-      // Fire the applicable steps synchronously in version order (schema first,
-      // then backfill within each step). We deliberately do NOT `await` between
-      // steps: a non-IDB await could let the versionchange transaction
-      // auto-commit. The pending IDB requests keep the transaction alive, and
-      // synchronous firing preserves cross-step ordering (e.g. status seeds are
-      // queued before migrateAddViews reads them).
-      const pending: Promise<void>[] = []
-      for (const step of MIGRATION_STEPS) {
-        if (event.oldVersion < step.version) {
-          const result = step.migrate(db, transaction, event.oldVersion)
-          if (result) {
-            pending.push(result)
+      // Run applicable steps in version order (schema first, then backfill
+      // within each step), awaiting each step fully before starting the next
+      // so a later step can rely on an earlier step's writes having landed
+      // (e.g. v11's migrateViewsToIdKeyPath reads VIEWS_STORE after v6's
+      // migrateAddViews has finished seeding it, on a brand-new install where
+      // both fire in the same upgrade). This is safe because every step's
+      // internal awaits are themselves on IDB request promises
+      // (requestToPromise/iterateCursor), which keep the versionchange
+      // transaction alive; a non-IDB await (e.g. a timer) would be the thing
+      // that risks letting it auto-commit.
+      async function runMigrationSteps(): Promise<void> {
+        for (const step of MIGRATION_STEPS) {
+          if (event.oldVersion < step.version) {
+            await step.migrate(db, transaction, event.oldVersion)
           }
         }
       }
-      Promise.all(pending).catch(abortOnMigrationError)
+      runMigrationSteps().catch(abortOnMigrationError)
     }
 
     request.onsuccess = () => resolve(request.result)
