@@ -4,13 +4,13 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { TasksProvider } from './TasksProvider'
 import { useTasks, useViews } from './tasks-context'
-import { setAutoArchiveEnabled, writeCurrentViewSlug, writeRecentViewSlugs } from './storage'
-import { ARCHIVE_VIEW_SLUG } from './synthetic-view-utils'
+import { setAutoArchiveEnabled, writeCurrentViewId, writeRecentViewIds } from './storage'
+import { ARCHIVE_VIEW_ID } from './synthetic-view-utils'
 import * as db from './db'
 
 // Fresh indexedDB + localStorage per test so view state (seeded one-view-per-status
-// on migration, see db/client.ts's migrateAddViews) and persisted currentViewSlug/
-// recentViewSlugs don't leak between tests.
+// on migration, see db/client.ts's migrateAddViews) and persisted currentViewId/
+// recentViewIds don't leak between tests.
 beforeEach(() => {
   globalThis.indexedDB = new IDBFactory()
   localStorage.clear()
@@ -31,82 +31,82 @@ describe('deleteView navigation', () => {
     const { result } = renderViews()
     await waitFor(() => expect(result.current.views.length).toBeGreaterThan(0))
 
-    const [viewA, viewB, viewC] = result.current.views.map((v) => v.slug)
+    const [viewA, viewB, viewC] = result.current.views.map((v) => v.id)
 
     act(() => result.current.openView(viewB))
     act(() => result.current.openView(viewC))
-    expect(result.current.currentViewSlug).toBe(viewC)
+    expect(result.current.currentViewId).toBe(viewC)
 
     await act(async () => {
       await result.current.deleteView(viewC)
     })
 
-    expect(result.current.currentViewSlug).toBe(viewB)
-    expect(result.current.recentViewSlugs).not.toContain(viewC)
-    expect(result.current.views.some((v) => v.slug === viewC)).toBe(false)
+    expect(result.current.currentViewId).toBe(viewB)
+    expect(result.current.recentViewIds).not.toContain(viewC)
+    expect(result.current.views.some((v) => v.id === viewC)).toBe(false)
     expect(viewA).toBeDefined()
   })
 
-  it('leaves currentViewSlug untouched when deleting a non-current view', async () => {
+  it('leaves currentViewId untouched when deleting a non-current view', async () => {
     const { result } = renderViews()
     await waitFor(() => expect(result.current.views.length).toBeGreaterThan(0))
 
-    const [viewA, viewB] = result.current.views.map((v) => v.slug)
+    const [viewA, viewB] = result.current.views.map((v) => v.id)
 
     // Put viewB in the recent history, then navigate back to viewA so viewB
     // is a non-current view with recent history of its own.
     act(() => result.current.openView(viewB))
     act(() => result.current.openView(viewA))
-    expect(result.current.currentViewSlug).toBe(viewA)
+    expect(result.current.currentViewId).toBe(viewA)
 
     await act(async () => {
       await result.current.deleteView(viewB)
     })
 
-    expect(result.current.currentViewSlug).toBe(viewA)
-    expect(result.current.recentViewSlugs).not.toContain(viewB)
+    expect(result.current.currentViewId).toBe(viewA)
+    expect(result.current.recentViewIds).not.toContain(viewB)
   })
 
   it('falls back to the first remaining view when there is no other recent history', async () => {
     const { result } = renderViews()
     await waitFor(() => expect(result.current.views.length).toBeGreaterThan(0))
 
-    // Fresh provider: currentViewSlug defaults to the first loaded view, and
-    // recentViewSlugs has no other entries to fall back on.
-    const initialSlug = result.current.currentViewSlug
-    const remainingSlugs = result.current.views.map((v) => v.slug).filter((s) => s !== initialSlug)
-    expect(result.current.recentViewSlugs).toEqual([initialSlug])
+    // Fresh provider: currentViewId defaults to the first loaded view, and
+    // recentViewIds has no other entries to fall back on.
+    const initialId = result.current.currentViewId
+    const remainingIds = result.current.views.map((v) => v.id).filter((s) => s !== initialId)
+    expect(result.current.recentViewIds).toEqual([initialId])
 
     await act(async () => {
-      await result.current.deleteView(initialSlug)
+      await result.current.deleteView(initialId)
     })
 
-    expect(result.current.currentViewSlug).toBe(remainingSlugs[0])
-    expect(result.current.recentViewSlugs).not.toContain(initialSlug)
+    expect(result.current.currentViewId).toBe(remainingIds[0])
+    expect(result.current.recentViewIds).not.toContain(initialId)
   })
 })
 
-describe('archive sentinel slug persistence', () => {
-  it('restores the archive view as currentViewSlug on mount when it was the last-open view', async () => {
+describe('archive sentinel id persistence', () => {
+  it('restores the archive view as currentViewId on mount when it was the last-open view', async () => {
     // Simulate a reload where the sentinel was persisted as the last-open view.
-    writeCurrentViewSlug(ARCHIVE_VIEW_SLUG)
+    writeCurrentViewId(ARCHIVE_VIEW_ID)
 
     const { result } = renderViews()
     await waitFor(() => expect(result.current.views.length).toBeGreaterThan(0))
 
-    expect(result.current.currentViewSlug).toBe(ARCHIVE_VIEW_SLUG)
+    expect(result.current.currentViewId).toBe(ARCHIVE_VIEW_ID)
   })
 
-  it('does not prune the archive sentinel slug out of recentViewSlugs on mount', async () => {
-    writeRecentViewSlugs([ARCHIVE_VIEW_SLUG])
+  it('does not prune the archive sentinel id out of recentViewIds on mount', async () => {
+    writeRecentViewIds([ARCHIVE_VIEW_ID])
 
     const { result } = renderViews()
     await waitFor(() => expect(result.current.views.length).toBeGreaterThan(0))
 
-    expect(result.current.recentViewSlugs).toEqual([ARCHIVE_VIEW_SLUG])
+    expect(result.current.recentViewIds).toEqual([ARCHIVE_VIEW_ID])
   })
 
-  it('does not prune the archive sentinel slug out of recentViewSlugs when an unrelated view is deleted', async () => {
+  it('does not prune the archive sentinel id out of recentViewIds when an unrelated view is deleted', async () => {
     const { result } = renderViews()
     await waitFor(() => expect(result.current.views.length).toBeGreaterThan(0))
 
@@ -114,20 +114,20 @@ describe('archive sentinel slug persistence', () => {
     // exist - the db connection (and its view store) is shared across tests
     // in this file (see openDatabasePromise caching in db/client.ts), so the
     // ambient view count left over from other tests isn't reliable here.
-    const anchorSlug = result.current.views[0].slug
+    const anchorId = result.current.views[0].id
     await act(async () => {
-      await result.current.saveView({ slug: 'temp-view-to-delete', name: 'Temp', statusSlugs: [] })
+      await result.current.saveView({ id: 'temp-view-to-delete', name: 'Temp', statusSlugs: [] })
     })
 
-    act(() => result.current.openView(ARCHIVE_VIEW_SLUG))
-    act(() => result.current.openView(anchorSlug))
-    expect(result.current.recentViewSlugs).toContain(ARCHIVE_VIEW_SLUG)
+    act(() => result.current.openView(ARCHIVE_VIEW_ID))
+    act(() => result.current.openView(anchorId))
+    expect(result.current.recentViewIds).toContain(ARCHIVE_VIEW_ID)
 
     await act(async () => {
       await result.current.deleteView('temp-view-to-delete')
     })
 
-    expect(result.current.recentViewSlugs).toContain(ARCHIVE_VIEW_SLUG)
+    expect(result.current.recentViewIds).toContain(ARCHIVE_VIEW_ID)
   })
 })
 

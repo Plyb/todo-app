@@ -4,7 +4,7 @@ import type { View } from './types'
 
 describe('isUserDefinedView', () => {
   it('is true for a real, user-defined view', () => {
-    const view: View = { slug: 'real-view', name: 'Real View', statusSlugs: [] }
+    const view: View = { id: 'real-view', name: 'Real View', statusSlugs: [] }
     expect(isUserDefinedView(view)).toBe(true)
   })
 

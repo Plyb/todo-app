@@ -96,7 +96,7 @@ describe('updateStatus (multi-store write)', () => {
 
     await db.createStatus('Custom', 'custom')
     const task = await db.createTask('Task in custom status', LexoRank.middle().toString(), 'custom')
-    await db.saveView({ slug: 'custom-view', name: 'Custom View', statusSlugs: ['custom', 'backlog'] })
+    await db.saveView({ id: 'custom-view', name: 'Custom View', statusSlugs: ['custom', 'backlog'] })
 
     await db.updateStatus('custom', 'custom-renamed', 'Custom Renamed')
 
@@ -108,7 +108,7 @@ describe('updateStatus (multi-store write)', () => {
     expect(tasks.find((t) => t.id === task.id)?.statusSlug).toBe('custom-renamed')
 
     const views = await db.loadViews()
-    expect(views.find((v) => v.slug === 'custom-view')?.statusSlugs).toEqual(['custom-renamed', 'backlog'])
+    expect(views.find((v) => v.id === 'custom-view')?.statusSlugs).toEqual(['custom-renamed', 'backlog'])
   })
 })
 
@@ -207,7 +207,7 @@ describe('migration replay', () => {
     expect(statuses.map((s) => s.slug).sort()).toEqual(['archived', 'backlog', 'today', 'today-extra'])
 
     const views = await db.loadViews()
-    expect(views.map((v) => v.slug).sort()).toEqual(['archived', 'backlog', 'today', 'today-extra'])
+    expect(views.map((v) => v.id).sort()).toEqual(['archived', 'backlog', 'today', 'today-extra'])
 
     // Confirm the upgrade chain actually landed on version 10 and won't fire another upgrade.
     await new Promise<void>((resolve, reject) => {

@@ -10,7 +10,8 @@ import {
   withTransaction,
   type StoredTask,
 } from './client'
-import type { Status, UserDefinedView } from '../types'
+import type { Status } from '../types'
+import type { StoredView } from './views'
 
 const statusSchema = z.object({
   slug: z.string(),
@@ -42,7 +43,7 @@ async function reassignTasksAndViews(transaction: IDBTransaction, oldSlug: strin
   })
 
   const viewStore = transaction.objectStore(VIEWS_STORE)
-  const views = (await requestToPromise(viewStore.getAll())) as UserDefinedView[]
+  const views = (await requestToPromise(viewStore.getAll())) as StoredView[]
   for (const view of views) {
     if (view.statusSlugs.includes(oldSlug)) {
       viewStore.put({ ...view, statusSlugs: view.statusSlugs.map((s) => (s === oldSlug ? newSlug : s)) })
@@ -68,7 +69,7 @@ export async function deleteStatus(slug: string): Promise<void> {
   })
 }
 
-export type StatusUsage = { taskIds: number[]; viewSlugs: string[] }
+export type StatusUsage = { taskIds: number[]; viewIds: string[] }
 
 export async function getStatusUsage(slug: string): Promise<StatusUsage> {
   return withTransaction([TASKS_STORE, VIEWS_STORE], 'readonly', async (tx) => {
@@ -76,20 +77,20 @@ export async function getStatusUsage(slug: string): Promise<StatusUsage> {
     const viewStore = tx.objectStore(VIEWS_STORE)
 
     const tasksWithIds = await getAllWithIds<StoredTask>(taskStore)
-    const views = (await requestToPromise(viewStore.getAll())) as UserDefinedView[]
+    const views = (await requestToPromise(viewStore.getAll())) as StoredView[]
 
     const taskIds = tasksWithIds
       .filter((t) => t.statusSlug === slug)
       .map((t) => t.id)
-    const viewSlugs = views.filter((v) => v.statusSlugs.includes(slug)).map((v) => v.slug)
+    const viewIds = views.filter((v) => v.statusSlugs.includes(slug)).map((v) => v.slug)
 
-    return { taskIds, viewSlugs }
+    return { taskIds, viewIds }
   })
 }
 
 export async function isStatusInUse(slug: string): Promise<boolean> {
   const usage = await getStatusUsage(slug)
-  return usage.taskIds.length > 0 || usage.viewSlugs.length > 0
+  return usage.taskIds.length > 0 || usage.viewIds.length > 0
 }
 
 export async function reassignStatus(fromSlug: string, toSlug: string): Promise<void> {

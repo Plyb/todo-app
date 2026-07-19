@@ -15,23 +15,27 @@ export function writeJSON<T>(key: string, value: T): void {
   localStorage.setItem(key, JSON.stringify(value))
 }
 
-const CURRENT_VIEW_SLUG_KEY = 'currentViewSlug'
-const RECENT_VIEW_SLUGS_KEY = 'recentViewSlugs'
+// The raw localStorage key strings are left as `currentViewSlug`/`recentViewSlugs`
+// (unchanged from before issue #248) so an existing user's persisted current-view
+// and recent-views selection isn't dropped on their next load; only the
+// exported function/variable names were renamed to match View.id.
+const CURRENT_VIEW_ID_KEY = 'currentViewSlug'
+const RECENT_VIEW_IDS_KEY = 'recentViewSlugs'
 
-export function readCurrentViewSlug(): string | null {
-  return localStorage.getItem(CURRENT_VIEW_SLUG_KEY)
+export function readCurrentViewId(): string | null {
+  return localStorage.getItem(CURRENT_VIEW_ID_KEY)
 }
 
-export function writeCurrentViewSlug(slug: string): void {
-  localStorage.setItem(CURRENT_VIEW_SLUG_KEY, slug)
+export function writeCurrentViewId(id: string): void {
+  localStorage.setItem(CURRENT_VIEW_ID_KEY, id)
 }
 
-export function readRecentViewSlugs(): string[] {
-  return readJSON<string[]>(RECENT_VIEW_SLUGS_KEY, [])
+export function readRecentViewIds(): string[] {
+  return readJSON<string[]>(RECENT_VIEW_IDS_KEY, [])
 }
 
-export function writeRecentViewSlugs(slugs: string[]): void {
-  writeJSON(RECENT_VIEW_SLUGS_KEY, slugs)
+export function writeRecentViewIds(ids: string[]): void {
+  writeJSON(RECENT_VIEW_IDS_KEY, ids)
 }
 
 const AUTO_ARCHIVE_ENABLED_KEY = 'auto-archive-enabled'
