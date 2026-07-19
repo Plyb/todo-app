@@ -6,6 +6,7 @@ export type TasksApi = {
   tasks: Task[]
   autoTransitionedTaskIds: Set<number>
   setDone: (id: number, done: boolean) => void
+  setArchived: (id: number, archived: boolean) => void
   moveTask: (id: number, toStatusSlug: string, newRank: string, changeStatus: boolean) => void
   setStatus: (id: number, statusSlug: string) => Promise<void>
   renameTask: (id: number, name: string) => void
@@ -49,6 +50,7 @@ export function useTasks(): TasksApi {
     tasks: c.tasks,
     autoTransitionedTaskIds: c.autoTransitionedTaskIds,
     setDone: c.setDone,
+    setArchived: c.setArchived,
     moveTask: c.moveTask,
     setStatus: c.setStatus,
     renameTask: c.renameTask,
