@@ -5,6 +5,7 @@ export type {
   SubtaskLink,
   Task,
   View,
+  UserDefinedView,
 } from '../types'
 export * from './tasks'
 export * from './statuses'

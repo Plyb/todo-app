@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { loadAllBlocks, loadAllSubtaskLinks } from './db'
 import type { BlockingRelationship, SubtaskLink, Task, ViewSelectorVisibility } from './types'
 import { DraggableList } from './DraggableList'
+import { ArchiveView } from './ArchiveView'
 import { NewTaskInputField } from './NewTaskInputField'
 import { rankAtInsertIndex } from './rank-utils'
 import { QuickSelectPanel } from './QuickSelectPanel'
@@ -11,6 +12,8 @@ import { useOverscrollGesture } from './useOverscrollGesture'
 import { useTasks, useStatuses, useViews } from './tasks-context'
 import { OverscrollIndicator } from './OverscrollIndicator'
 import { VIEW_SELECTOR_VISIBILITY_KEY } from './storage'
+import { isUserDefinedView } from './synthetic-view-utils'
+import { displayedTasksForView, sectionTasksForStatus, sortArchivedTasks, type ArchivedTask } from './view-utils'
 
 const OVERSCROLL_TRIGGER_DISTANCE = 100
 
@@ -128,10 +131,17 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
 
   // Tasks shown across all sections of the current view, used below so the
   // cleanup effect can clear indicators for whatever was actually on screen
-  // right before the view changes.
+  // right before the view changes. Archived tasks are excluded here (they're
+  // no longer part of their status) but not from `tasks` itself - subtask and
+  // relationship lookups elsewhere still need to see them.
   const displayedTasks = useMemo(
-    () => (currentView ? tasks.filter((t) => currentView.statusSlugs.includes(t.statusSlug)) : []),
+    () => (currentView && isUserDefinedView(currentView) ? displayedTasksForView(tasks, currentView) : []),
     [currentView, tasks]
+  )
+
+  const archivedTasks = useMemo(
+    () => sortArchivedTasks(tasks.filter((t): t is ArchivedTask => t.archivedAt !== null)),
+    [tasks]
   )
 
   const parentTaskNameByChildId = useMemo(
@@ -149,7 +159,7 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
 
   const sections = useMemo(
     () =>
-      currentView
+      currentView && isUserDefinedView(currentView)
         ? currentView.statusSlugs.map((slug) => {
             const status = statuses.find((s) => s.slug === slug)
             return {
@@ -158,7 +168,7 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
                   {status?.name ?? slug}
                 </h2>
               ),
-              items: tasks.filter((t) => t.statusSlug === slug),
+              items: sectionTasksForStatus(tasks, slug),
             }
           })
         : [],
@@ -197,7 +207,7 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
   }
 
   function handleReorder(draggedId: number, toSectionIndex: number, insertIndex: number) {
-    if (!currentView) return
+    if (!currentView || !isUserDefinedView(currentView)) return
     const toStatusSlug = currentView.statusSlugs[toSectionIndex]
     const toSectionTasks = tasks.filter((t) => t.statusSlug === toStatusSlug)
     const newRank = rankAtInsertIndex(toSectionTasks, insertIndex, draggedId)
@@ -238,7 +248,7 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
       setNewTaskInput(null)
       return
     }
-    if (!currentView) return
+    if (!currentView || !isUserDefinedView(currentView)) return
     const statusSlug = currentView.statusSlugs[sectionIndex]
     const sectionTasks = tasks.filter((t) => t.statusSlug === statusSlug)
     const rank = rankAtInsertIndex(sectionTasks, insertIndex)
@@ -297,6 +307,16 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
     }
   }
 
+  const renderTaskRow = (task: Task) => (
+    <TaskRow
+      task={task}
+      onDoneChange={(done) => setDone(task.id, done)}
+      showIndicator={autoTransitionedTaskIds.has(task.id)}
+      isBlocked={blockingRelationships.some((r) => r.toTaskId === task.id)}
+      parentTaskName={parentTaskNameByChildId.get(task.id)}
+    />
+  )
+
   const insertSlot = newTaskInput !== null
     ? {
         index: newTaskInput.insertIndex,
@@ -319,6 +339,13 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
         content: <QuickSelectPanel {...quickSelectPanelProps} />,
       }
     : undefined
+
+  const sharedListProps = {
+    renderItem: renderTaskRow,
+    onItemClick: selectedTaskId === null ? handleTaskClick : undefined,
+    itemStyle: itemStyleFn,
+    expandedSlot,
+  }
 
   const relatedTaskModal = relatedTaskModalProps && (
     <div
@@ -363,27 +390,23 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
       style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}
     >
       {shouldShowViewSelectorButton() && (
-        <ViewSelectorButton viewName={currentView.name} onClick={() => setViewModalOpen(true)} />
+        <ViewSelectorButton
+          viewName={currentView.name}
+          onClick={() => setViewModalOpen(true)}
+        />
       )}
 
-      <DraggableList
-        sections={sections}
-        onReorder={handleReorder}
-        renderItem={(task) => (
-          <TaskRow
-            task={task}
-            onDoneChange={(done) => setDone(task.id, done)}
-            showIndicator={autoTransitionedTaskIds.has(task.id)}
-            isBlocked={blockingRelationships.some((r) => r.toTaskId === task.id)}
-            parentTaskName={parentTaskNameByChildId.get(task.id)}
-          />
-        )}
-        insertSlot={insertSlot}
-        onItemClick={selectedTaskId === null ? handleTaskClick : undefined}
-        itemStyle={itemStyleFn}
-        expandedSlot={expandedSlot}
-        insertButton={{ onRequestInsert: openInput }}
-      />
+      {!isUserDefinedView(currentView) ? (
+        <ArchiveView tasks={archivedTasks} {...sharedListProps} />
+      ) : (
+        <DraggableList
+          sections={sections}
+          onReorder={handleReorder}
+          insertSlot={insertSlot}
+          insertButton={{ onRequestInsert: openInput }}
+          {...sharedListProps}
+        />
+      )}
 
       <SettingsButton onClick={onNavigateToSettings} />
 

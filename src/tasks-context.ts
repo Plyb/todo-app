@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react'
-import type { Task, Status, View } from './types'
+import type { Task, Status, View, UserDefinedView } from './types'
 import type { StatusUsage } from './db'
 
 export type TasksApi = {
@@ -30,7 +30,7 @@ export type ViewsApi = {
   currentViewSlug: string
   recentViewSlugs: string[]
   openView: (slug: string) => void
-  saveView: (view: View) => Promise<void>
+  saveView: (view: UserDefinedView) => Promise<void>
   deleteView: (slug: string) => Promise<void>
 }
 

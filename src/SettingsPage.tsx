@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { Status, View, ViewSelectorVisibility } from './types'
+import type { Status, UserDefinedView, ViewSelectorVisibility } from './types'
 import { useStatuses, useViews } from './tasks-context'
 import { ViewEditorModal } from './ViewEditorModal'
 import { StatusEditorModal } from './StatusEditorModal'
@@ -7,6 +7,7 @@ import { StatusModal } from './StatusModal'
 import { EditableListSection } from './EditableListSection'
 import { theme } from './theme'
 import { getAutoArchiveEnabled, setAutoArchiveEnabled, useLocalStorageSetting, VIEW_SELECTOR_VISIBILITY_KEY } from './storage'
+import { isUserDefinedView } from './synthetic-view-utils'
 
 type SettingsPageProps = {
   onBack: () => void
@@ -15,7 +16,8 @@ type SettingsPageProps = {
 export default function SettingsPage({ onBack }: SettingsPageProps) {
   const { statuses, createStatus, updateStatus, deleteStatus, reassignAndDeleteStatus, getStatusUsage } = useStatuses()
   const { views, saveView, deleteView } = useViews()
-  const [editingView, setEditingView] = useState<View | null>(null)
+  const userDefinedViews = views.filter(isUserDefinedView)
+  const [editingView, setEditingView] = useState<UserDefinedView | null>(null)
   const [editingStatus, setEditingStatus] = useState<Status | null>(null)
   const [reassignFromSlug, setReassignFromSlug] = useState<string | null>(null)
   const [autoArchiveEnabled, setAutoArchiveEnabledState] = useState(getAutoArchiveEnabled)
@@ -33,11 +35,11 @@ export default function SettingsPage({ onBack }: SettingsPageProps) {
   }
 
   async function handleDeleteView(slug: string) {
-    if (views.length === 1) return
+    if (userDefinedViews.length === 1) return
     await deleteView(slug)
   }
 
-  async function handleSaveView(view: View) {
+  async function handleSaveView(view: UserDefinedView) {
     await saveView(view)
     setEditingView(null)
   }
@@ -87,7 +89,7 @@ export default function SettingsPage({ onBack }: SettingsPageProps) {
       <div style={{ marginTop: 56 }}>
         <EditableListSection
           title="Views"
-          items={views}
+          items={userDefinedViews}
           getKey={(view) => view.slug}
           getLabel={(view) => view.name}
           onEdit={setEditingView}
