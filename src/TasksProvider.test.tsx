@@ -88,10 +88,7 @@ describe('deleteView navigation', () => {
 
 describe('archive sentinel slug persistence', () => {
   it('restores the archive view as currentViewSlug on mount when it was the last-open view', async () => {
-    // Simulate a reload where the sentinel was persisted as the last-open
-    // view: it's never in the real `views` array (it's a UI-layer-only
-    // construct), so a naive `loadedViews.some(...)` validity check would
-    // wrongly treat it as stale and fall back to the first real view.
+    // Simulate a reload where the sentinel was persisted as the last-open view.
     writeCurrentViewSlug(ARCHIVE_VIEW_SLUG)
 
     const { result } = renderViews()

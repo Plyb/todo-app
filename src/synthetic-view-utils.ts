@@ -7,10 +7,6 @@ export const ARCHIVE_VIEW: ArchivedView = {
   name: 'Archive',
 }
 
-export function isKnownViewSlug(slug: string, views: View[]): boolean {
-  return slug === ARCHIVE_VIEW_SLUG || views.some((v) => v.slug === slug)
-}
-
 export function isUserDefinedView(view: View): view is UserDefinedView {
   return view.slug !== ARCHIVE_VIEW_SLUG
 }

@@ -4,7 +4,7 @@ import type { Task, Status, View, UserDefinedView } from './types'
 import type { StatusUsage } from './db'
 import { byRank, rankAtInsertIndex } from './rank-utils'
 import { isArchiveEligible } from './archive-utils'
-import { isKnownViewSlug } from './synthetic-view-utils'
+import { ARCHIVE_VIEW } from './synthetic-view-utils'
 import { needsRerank, rerankStatusGroup } from './rerank-utils'
 import { readCurrentViewSlug, writeCurrentViewSlug, readRecentViewSlugs, writeRecentViewSlugs, getAutoArchiveEnabled } from './storage'
 import { TasksContext, type TasksContextValue } from './tasks-context'
@@ -94,24 +94,28 @@ export function TasksProvider({ children }: { children: ReactNode }) {
       const updatedTasks = await applyDueTransitions(loadedTasks)
       if (!isMounted) return
 
+      // The archive view is a UI-layer construct, not a persisted one - it's
+      // appended here (after the real views, so it's never the default) so
+      // every other consumer of `views` just sees it as a normal member,
+      // rather than each having to special-case a separate sentinel slug.
+      const viewsWithArchive: View[] = [...loadedViews, ARCHIVE_VIEW]
+
       setTasks(updatedTasks)
       setStatuses(loadedStatuses)
-      setViews(loadedViews)
+      setViews(viewsWithArchive)
 
-      if (loadedViews.length > 0) {
-        const storedSlug = readCurrentViewSlug()
-        const validSlug = storedSlug !== null && isKnownViewSlug(storedSlug, loadedViews)
-          ? storedSlug
-          : loadedViews[0].slug
-        setCurrentViewSlug(validSlug)
-        if (validSlug !== storedSlug) {
-          writeCurrentViewSlug(validSlug)
-        }
-
-        const storedRecent = readRecentViewSlugs()
-        const validRecent = storedRecent.filter((s) => isKnownViewSlug(s, loadedViews))
-        setRecentViewSlugs(validRecent.length > 0 ? validRecent : [validSlug])
+      const storedSlug = readCurrentViewSlug()
+      const validSlug = storedSlug !== null && viewsWithArchive.some((v) => v.slug === storedSlug)
+        ? storedSlug
+        : viewsWithArchive[0].slug
+      setCurrentViewSlug(validSlug)
+      if (validSlug !== storedSlug) {
+        writeCurrentViewSlug(validSlug)
       }
+
+      const storedRecent = readRecentViewSlugs()
+      const validRecent = storedRecent.filter((s) => viewsWithArchive.some((v) => v.slug === s))
+      setRecentViewSlugs(validRecent.length > 0 ? validRecent : [validSlug])
     }
 
     init()
@@ -140,7 +144,7 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     const [newStatuses, newTasks, newViews] = await Promise.all([db.loadStatuses(), db.loadTasks(), db.loadViews()])
     setStatuses(newStatuses)
     setTasks(newTasks)
-    setViews(newViews)
+    setViews([...newViews, ARCHIVE_VIEW])
   }
 
   // Refetch (not roll back) on write failure: rolling back to a stale snapshot could erase a concurrently-succeeded edit.
@@ -276,7 +280,7 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     const remainingViews = views.filter(v => v.slug !== slug)
     setViews(remainingViews)
 
-    const prunedRecent = recentViewSlugs.filter((s) => s !== slug && isKnownViewSlug(s, remainingViews))
+    const prunedRecent = recentViewSlugs.filter((s) => s !== slug && remainingViews.some((v) => v.slug === s))
     writeRecentViewSlugs(prunedRecent)
     setRecentViewSlugs(prunedRecent)
 

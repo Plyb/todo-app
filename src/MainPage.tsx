@@ -12,7 +12,7 @@ import { useOverscrollGesture } from './useOverscrollGesture'
 import { useTasks, useStatuses, useViews } from './tasks-context'
 import { OverscrollIndicator } from './OverscrollIndicator'
 import { VIEW_SELECTOR_VISIBILITY_KEY } from './storage'
-import { ARCHIVE_VIEW, ARCHIVE_VIEW_SLUG, isUserDefinedView } from './synthetic-view-utils'
+import { isUserDefinedView } from './synthetic-view-utils'
 import { displayedTasksForView, sectionTasksForStatus, sortArchivedTasks, type ArchivedTask } from './view-utils'
 
 const OVERSCROLL_TRIGGER_DISTANCE = 100
@@ -128,7 +128,6 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
   })
 
   const currentView = views.find((v) => v.slug === currentViewSlug)
-  const isArchiveView = currentViewSlug === ARCHIVE_VIEW_SLUG
 
   // Tasks shown across all sections of the current view, used below so the
   // cleanup effect can clear indicators for whatever was actually on screen
@@ -194,7 +193,7 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
     }
   }, [currentViewSlug])
 
-  if (!currentView && !isArchiveView) {
+  if (!currentView) {
     return (
       <main style={{ minHeight: '100vh' }}>
         <SettingsButton onClick={onNavigateToSettings} />
@@ -351,7 +350,7 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
 
   const viewModal = viewModalOpen && (
     <ViewModal
-      views={[...views, ARCHIVE_VIEW]}
+      views={views}
       recentViewSlugs={recentViewSlugs}
       currentViewSlug={currentViewSlug}
       onSelect={openView}
@@ -375,12 +374,12 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
     >
       {shouldShowViewSelectorButton() && (
         <ViewSelectorButton
-          viewName={isArchiveView ? ARCHIVE_VIEW.name : currentView!.name}
+          viewName={currentView.name}
           onClick={() => setViewModalOpen(true)}
         />
       )}
 
-      {isArchiveView ? (
+      {!isUserDefinedView(currentView) ? (
         <ArchiveView
           tasks={archivedTasks}
           renderItem={(task) => (
