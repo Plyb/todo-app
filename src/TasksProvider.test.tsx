@@ -67,6 +67,14 @@ describe('deleteView navigation', () => {
   })
 
   it('falls back to the first remaining view when there is no other recent history', async () => {
+    // The db connection (and its data) is cached across tests in this describe
+    // block rather than truly reset per test (see beforeEach above), and the
+    // two preceding tests each permanently delete one view from the shared
+    // pool of default views. Seed an extra view so this test always has at
+    // least one to fall back to, regardless of how much the earlier tests
+    // already consumed.
+    await db.saveView({ slug: 'fallback-spare', name: 'Fallback Spare', statusSlugs: ['backlog'] })
+
     const { result } = renderViews()
     await waitFor(() => expect(result.current.views.length).toBeGreaterThan(0))
 
