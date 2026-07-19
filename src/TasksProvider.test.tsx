@@ -4,6 +4,8 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { TasksProvider } from './TasksProvider'
 import { useTasks, useViews } from './tasks-context'
+import { setAutoArchiveEnabled } from './storage'
+import * as db from './db'
 
 // Fresh indexedDB + localStorage per test so view state (seeded one-view-per-status
 // on migration, see db/client.ts's migrateAddViews) and persisted currentViewSlug/
@@ -103,5 +105,37 @@ describe('setStatus rank', () => {
 
     const backlogRanks = result.current.tasks.filter((t) => t.statusSlug === 'backlog').map((t) => t.rank)
     expect(new Set(backlogRanks).size).toBe(backlogRanks.length)
+  })
+})
+
+describe('auto-archive scan effect', () => {
+  it('sets archivedAt without changing statusSlug when auto-archive is enabled and a task is eligible', async () => {
+    // Seed a task directly in the db, already completed on an earlier calendar
+    // day, so it's eligible for archiving as soon as the provider mounts. This
+    // avoids relying on setDone (which always stamps completedAt as today).
+    const seeded = await db.createTask('Eligible task', '0', 'today')
+    await db.updateTaskCompletedAt(seeded.id, '2020-01-01')
+    setAutoArchiveEnabled(true)
+
+    const { result } = renderTasks()
+    await waitFor(() => {
+      const updated = result.current.tasks.find((t) => t.id === seeded.id)
+      expect(updated).toBeDefined()
+      expect(updated!.archivedAt).not.toBeNull()
+    })
+
+    const archivedTask = result.current.tasks.find((t) => t.id === seeded.id)!
+    expect(archivedTask.statusSlug).toBe('today')
+  })
+
+  it('leaves eligible tasks unarchived when auto-archive is disabled', async () => {
+    const seeded = await db.createTask('Eligible task', '0', 'today')
+    await db.updateTaskCompletedAt(seeded.id, '2020-01-01')
+
+    const { result } = renderTasks()
+    await waitFor(() => expect(result.current.tasks.length).toBeGreaterThan(0))
+
+    const stillUnarchived = result.current.tasks.find((t) => t.id === seeded.id)!
+    expect(stillUnarchived.archivedAt).toBeNull()
   })
 })
