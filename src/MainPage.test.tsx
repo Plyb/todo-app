@@ -8,6 +8,7 @@ const task: Task = {
   id: 1,
   name: 'Buy milk',
   completedAt: null,
+  archivedAt: null,
   rank: '0',
   statusSlug: 'todo',
   notes: '',
