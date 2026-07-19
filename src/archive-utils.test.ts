@@ -9,7 +9,7 @@ function makeTask(completedAt: string | null): Task {
 function makeArchivedTask(overrides: Partial<Task> & { id: number; name: string }): Task {
   return {
     completedAt: null,
-    archivedAt: null,
+    archivedAt: '2026-01-01',
     rank: '0',
     statusSlug: 'today',
     notes: '',
