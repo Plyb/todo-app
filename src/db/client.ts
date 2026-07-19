@@ -188,9 +188,6 @@ async function migrateAddViews(transaction: IDBTransaction): Promise<void> {
   }
 }
 
-// VIEWS_STORE was keyPath `slug` (issue #248 renamed the in-memory field to
-// `id`, but a keyPath can't be altered in place). Recreate the store keyed by
-// `id` and copy every existing record across with the field renamed.
 async function migrateViewsToIdKeyPath(db: IDBDatabase, transaction: IDBTransaction): Promise<void> {
   const oldStore = transaction.objectStore(VIEWS_STORE)
   const legacyViews = (await requestToPromise(oldStore.getAll())) as { slug: string; name: string; statusSlugs: string[] }[]

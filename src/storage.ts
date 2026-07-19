@@ -15,12 +15,8 @@ export function writeJSON<T>(key: string, value: T): void {
   localStorage.setItem(key, JSON.stringify(value))
 }
 
-// The raw localStorage key strings are left as `currentViewSlug`/`recentViewSlugs`
-// (unchanged from before issue #248) so an existing user's persisted current-view
-// and recent-views selection isn't dropped on their next load; only the
-// exported function/variable names were renamed to match View.id.
-const CURRENT_VIEW_ID_KEY = 'currentViewSlug'
-const RECENT_VIEW_IDS_KEY = 'recentViewSlugs'
+const CURRENT_VIEW_ID_KEY = 'currentViewId'
+const RECENT_VIEW_IDS_KEY = 'recentViewIds'
 
 export function readCurrentViewId(): string | null {
   return localStorage.getItem(CURRENT_VIEW_ID_KEY)
