@@ -12,9 +12,8 @@ import { useOverscrollGesture } from './useOverscrollGesture'
 import { useTasks, useStatuses, useViews } from './tasks-context'
 import { OverscrollIndicator } from './OverscrollIndicator'
 import { VIEW_SELECTOR_VISIBILITY_KEY } from './storage'
-import { sortArchivedTasks } from './archive-utils'
 import { ARCHIVE_VIEW, ARCHIVE_VIEW_SLUG } from './synthetic-view-utils'
-import { displayedTasksForView, sectionTasksForStatus } from './view-utils'
+import { displayedTasksForView, sectionTasksForStatus, sortArchivedTasks, type ArchivedTask } from './view-utils'
 
 const OVERSCROLL_TRIGGER_DISTANCE = 100
 
@@ -142,7 +141,7 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
   )
 
   const archivedTasks = useMemo(
-    () => sortArchivedTasks(tasks.filter((t) => t.archivedAt !== null)),
+    () => sortArchivedTasks(tasks.filter((t): t is ArchivedTask => t.archivedAt !== null)),
     [tasks]
   )
 
