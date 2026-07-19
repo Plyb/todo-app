@@ -10,8 +10,7 @@ import {
   withTransaction,
   type StoredTask,
 } from './client'
-import type { Status } from '../types'
-import type { StoredView } from './views'
+import type { Status, UserDefinedView } from '../types'
 
 const statusSchema = z.object({
   slug: z.string(),
@@ -43,7 +42,7 @@ async function reassignTasksAndViews(transaction: IDBTransaction, oldSlug: strin
   })
 
   const viewStore = transaction.objectStore(VIEWS_STORE)
-  const views = (await requestToPromise(viewStore.getAll())) as StoredView[]
+  const views = (await requestToPromise(viewStore.getAll())) as UserDefinedView[]
   for (const view of views) {
     if (view.statusSlugs.includes(oldSlug)) {
       viewStore.put({ ...view, statusSlugs: view.statusSlugs.map((s) => (s === oldSlug ? newSlug : s)) })
@@ -77,12 +76,12 @@ export async function getStatusUsage(slug: string): Promise<StatusUsage> {
     const viewStore = tx.objectStore(VIEWS_STORE)
 
     const tasksWithIds = await getAllWithIds<StoredTask>(taskStore)
-    const views = (await requestToPromise(viewStore.getAll())) as StoredView[]
+    const views = (await requestToPromise(viewStore.getAll())) as UserDefinedView[]
 
     const taskIds = tasksWithIds
       .filter((t) => t.statusSlug === slug)
       .map((t) => t.id)
-    const viewIds = views.filter((v) => v.statusSlugs.includes(slug)).map((v) => v.slug)
+    const viewIds = views.filter((v) => v.statusSlugs.includes(slug)).map((v) => v.id)
 
     return { taskIds, viewIds }
   })
