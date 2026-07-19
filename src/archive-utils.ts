@@ -1,19 +1,7 @@
-import type { Task, View } from './types'
+import type { Task } from './types'
 
 export function isArchiveEligible(task: Task, todayDateString: string): boolean {
   return task.completedAt !== null && task.completedAt < todayDateString
-}
-
-export const ARCHIVE_VIEW_SLUG = '__archived__'
-
-export const ARCHIVE_VIEW: View = {
-  slug: ARCHIVE_VIEW_SLUG,
-  name: 'Archive',
-  statusSlugs: [],
-}
-
-export function isKnownViewSlug(slug: string, views: View[]): boolean {
-  return slug === ARCHIVE_VIEW_SLUG || views.some((v) => v.slug === slug)
 }
 
 export function sortArchivedTasks(tasks: Task[]): Task[] {

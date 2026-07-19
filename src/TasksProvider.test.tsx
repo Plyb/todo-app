@@ -5,7 +5,7 @@ import type { ReactNode } from 'react'
 import { TasksProvider } from './TasksProvider'
 import { useTasks, useViews } from './tasks-context'
 import { setAutoArchiveEnabled, writeCurrentViewSlug, writeRecentViewSlugs } from './storage'
-import { ARCHIVE_VIEW_SLUG } from './archive-utils'
+import { ARCHIVE_VIEW_SLUG } from './synthetic-view-utils'
 import * as db from './db'
 
 // Fresh indexedDB + localStorage per test so view state (seeded one-view-per-status

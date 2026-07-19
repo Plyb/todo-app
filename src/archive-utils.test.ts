@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { isArchiveEligible, isKnownViewSlug, sortArchivedTasks, ARCHIVE_VIEW_SLUG } from './archive-utils'
-import type { Task, View } from './types'
+import { isArchiveEligible, sortArchivedTasks } from './archive-utils'
+import type { Task } from './types'
 
 function makeTask(completedAt: string | null): Task {
   return { id: 1, name: 'Task', completedAt, archivedAt: null, rank: '0', statusSlug: 'today', notes: '' }
@@ -32,22 +32,6 @@ describe('isArchiveEligible', () => {
 
   it('is eligible for a task completed many days ago', () => {
     expect(isArchiveEligible(makeTask('2026-01-01'), '2026-07-14')).toBe(true)
-  })
-})
-
-describe('isKnownViewSlug', () => {
-  const views: View[] = [{ slug: 'real-view', name: 'Real View', statusSlugs: [] }]
-
-  it('treats the archive sentinel slug as known even though it is never in the views array', () => {
-    expect(isKnownViewSlug(ARCHIVE_VIEW_SLUG, views)).toBe(true)
-  })
-
-  it('treats a real view slug as known when present in the views array', () => {
-    expect(isKnownViewSlug('real-view', views)).toBe(true)
-  })
-
-  it('treats an unrecognized slug as unknown', () => {
-    expect(isKnownViewSlug('stale-slug', views)).toBe(false)
   })
 })
 

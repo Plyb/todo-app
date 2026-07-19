@@ -12,7 +12,8 @@ import { useOverscrollGesture } from './useOverscrollGesture'
 import { useTasks, useStatuses, useViews } from './tasks-context'
 import { OverscrollIndicator } from './OverscrollIndicator'
 import { VIEW_SELECTOR_VISIBILITY_KEY } from './storage'
-import { ARCHIVE_VIEW, ARCHIVE_VIEW_SLUG, sortArchivedTasks } from './archive-utils'
+import { sortArchivedTasks } from './archive-utils'
+import { ARCHIVE_VIEW, ARCHIVE_VIEW_SLUG } from './synthetic-view-utils'
 import { displayedTasksForView, sectionTasksForStatus } from './view-utils'
 
 const OVERSCROLL_TRIGGER_DISTANCE = 100
