@@ -22,44 +22,38 @@ export function TasksProvider({ children }: { children: ReactNode }) {
   const [recentViewSlugs, setRecentViewSlugs] = useState<string[]>(
     () => readRecentViewSlugs()
   )
-  const archiveLastScannedDateRef = useRef<string | null>(null)
-
-  useEffect(() => {
-    if (tasks.length === 0) return
-    if (!getAutoArchiveEnabled()) return
-
-    const today = getTodayDateString()
-    if (archiveLastScannedDateRef.current === today) return
-    archiveLastScannedDateRef.current = today
-
-    const toArchive = tasks.filter(t => t.archivedAt === null && isArchiveEligible(t, today))
-    if (toArchive.length === 0) return
-    const toArchiveIds = new Set(toArchive.map(t => t.id))
-    setTasks(prev => prev.map(t => toArchiveIds.has(t.id) ? { ...t, archivedAt: today } : t))
-    toArchive.forEach(t => db.updateTaskArchivedAt(t.id, today))
-  }, [tasks])
-
-  const rerankLastScannedDateRef = useRef<string | null>(null)
+  // Auto-archive and rerank both run at most once per calendar day, so they
+  // share a single gate rather than each keeping their own ref + date check.
+  const dailyScanDateRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (tasks.length === 0) return
 
     const today = getTodayDateString()
-    if (rerankLastScannedDateRef.current === today) return
-    rerankLastScannedDateRef.current = today
+    if (dailyScanDateRef.current === today) return
+    dailyScanDateRef.current = today
+
+    if (getAutoArchiveEnabled()) {
+      const toArchive = tasks.filter(t => t.archivedAt === null && isArchiveEligible(t, today))
+      if (toArchive.length > 0) {
+        const toArchiveIds = new Set(toArchive.map(t => t.id))
+        setTasks(prev => prev.map(t => toArchiveIds.has(t.id) ? { ...t, archivedAt: today } : t))
+        toArchive.forEach(t => db.updateTaskArchivedAt(t.id, today))
+      }
+    }
 
     // Rank comparisons only ever happen within a status group, so only the
     // group(s) that actually grew a too-long rank need to be re-spaced.
-    const statusSlugs = new Set(tasks.map(t => t.statusSlug))
-    const updates = Array.from(statusSlugs).flatMap(statusSlug => {
+    const statusSlugs = Array.from(new Set(tasks.map(t => t.statusSlug)))
+    const rerankUpdates = statusSlugs.flatMap(statusSlug => {
       const group = tasks.filter(t => t.statusSlug === statusSlug)
       return needsRerank(group) ? rerankStatusGroup(group) : []
     })
-    if (updates.length === 0) return
-
-    const rankById = new Map(updates.map(u => [u.id, u.rank]))
-    setTasks(prev => prev.map(t => rankById.has(t.id) ? { ...t, rank: rankById.get(t.id)! } : t))
-    updates.forEach(u => db.updateTaskRank(u.id, u.rank))
+    if (rerankUpdates.length > 0) {
+      const rankById = new Map(rerankUpdates.map(u => [u.id, u.rank]))
+      setTasks(prev => prev.map(t => rankById.has(t.id) ? { ...t, rank: rankById.get(t.id)! } : t))
+      rerankUpdates.forEach(u => db.updateTaskRank(u.id, u.rank))
+    }
   }, [tasks])
 
   const [autoTransitionedTaskIds, setAutoTransitionedTaskIds] = useState<Set<number>>(new Set())
