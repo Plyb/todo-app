@@ -34,18 +34,14 @@ export function writeRecentViewSlugs(slugs: string[]): void {
   writeJSON(RECENT_VIEW_SLUGS_KEY, slugs)
 }
 
-const AUTO_ARCHIVE_SLUG_KEY = 'auto-archive-status-slug'
+const AUTO_ARCHIVE_ENABLED_KEY = 'auto-archive-enabled'
 
-export function getAutoArchiveSlug(): string | null {
-  return localStorage.getItem(AUTO_ARCHIVE_SLUG_KEY)
+export function getAutoArchiveEnabled(): boolean {
+  return localStorage.getItem(AUTO_ARCHIVE_ENABLED_KEY) === 'true'
 }
 
-export function setAutoArchiveSlug(slug: string | null): void {
-  if (slug === null) {
-    localStorage.removeItem(AUTO_ARCHIVE_SLUG_KEY)
-  } else {
-    localStorage.setItem(AUTO_ARCHIVE_SLUG_KEY, slug)
-  }
+export function setAutoArchiveEnabled(enabled: boolean): void {
+  localStorage.setItem(AUTO_ARCHIVE_ENABLED_KEY, String(enabled))
 }
 
 export const VIEW_SELECTOR_VISIBILITY_KEY = 'view-selector-button-visibility'
@@ -64,10 +60,9 @@ export function useLocalStorageSetting<T extends string>(key: string): [T | null
 }
 
 export function selectableTasks(allTasks: Task[], opts: { currentTaskId: number; excludedIds?: Set<number> }): Task[] {
-  const autoArchiveSlug = getAutoArchiveSlug()
   return allTasks.filter((t) =>
     t.id !== opts.currentTaskId &&
     !opts.excludedIds?.has(t.id) &&
-    t.statusSlug !== autoArchiveSlug
+    t.archivedAt === null
   )
 }
