@@ -53,10 +53,6 @@ export function QuickSelectPanel({ task, statuses, allTasks, onClose, onChangeSt
   }, [task.id])
 
   function handleClose() {
-    // Commit the archive toggle now, at the start of the close sequence, rather than
-    // after the collapse animation finishes: the deferred-commit contract only requires
-    // not writing while the panel is open, so firing here lets the write run alongside
-    // the animation instead of adding extra delay after it.
     if (archivedDraft !== (task.archivedAt !== null)) {
       setArchived(task.id, archivedDraft)
     }
