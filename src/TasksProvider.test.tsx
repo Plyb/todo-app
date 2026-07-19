@@ -116,3 +116,49 @@ describe('auto-archive scan effect', () => {
     expect(stillUnarchived.archivedAt).toBeNull()
   })
 })
+
+describe('daily rerank scan effect', () => {
+  it('shortens a too-long rank and persists it, without touching a normal-length rank in another status', async () => {
+    const longRank = 'a'.repeat(30)
+    const long = await db.createTask('Long rank task', longRank, 'today')
+    const short = await db.createTask('Short rank task', '0', 'backlog')
+
+    const { result } = renderTasks()
+    await waitFor(() => {
+      const updated = result.current.tasks.find((t) => t.id === long.id)
+      expect(updated).toBeDefined()
+      expect(updated!.rank.length).toBeLessThan(30)
+    })
+
+    const rerankedLong = result.current.tasks.find((t) => t.id === long.id)!
+    expect(rerankedLong.statusSlug).toBe('today')
+
+    const untouchedShort = result.current.tasks.find((t) => t.id === short.id)!
+    expect(untouchedShort.rank).toBe('0')
+
+    const persisted = await db.loadTasks()
+    expect(persisted.find((t) => t.id === long.id)!.rank).toBe(rerankedLong.rank)
+  })
+
+  it('leaves ranks untouched when no task has an over-threshold rank', async () => {
+    const seeded = await db.createTask('Normal task', '0', 'today')
+
+    const { result } = renderTasks()
+    await waitFor(() => expect(result.current.tasks.length).toBeGreaterThan(0))
+
+    const unchanged = result.current.tasks.find((t) => t.id === seeded.id)!
+    expect(unchanged.rank).toBe('0')
+  })
+
+  it('excludes archived tasks from being reassigned a rank', async () => {
+    const longRank = 'a'.repeat(30)
+    const archived = await db.createTask('Archived task', longRank, 'today')
+    await db.updateTaskArchivedAt(archived.id, '2020-01-01')
+
+    const { result } = renderTasks()
+    await waitFor(() => expect(result.current.tasks.length).toBeGreaterThan(0))
+
+    const stillLong = result.current.tasks.find((t) => t.id === archived.id)!
+    expect(stillLong.rank).toBe(longRank)
+  })
+})

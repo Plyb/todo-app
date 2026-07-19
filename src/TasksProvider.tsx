@@ -4,6 +4,7 @@ import type { Task, Status, View } from './types'
 import type { StatusUsage } from './db'
 import { byRank } from './rank-utils'
 import { isArchiveEligible } from './archive-utils'
+import { needsRerank, rerankStatusGroup } from './rerank-utils'
 import { readCurrentViewSlug, writeCurrentViewSlug, readRecentViewSlugs, writeRecentViewSlugs, getAutoArchiveEnabled } from './storage'
 import { TasksContext, type TasksContextValue } from './tasks-context'
 
@@ -36,6 +37,29 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     const toArchiveIds = new Set(toArchive.map(t => t.id))
     setTasks(prev => prev.map(t => toArchiveIds.has(t.id) ? { ...t, archivedAt: today } : t))
     toArchive.forEach(t => db.updateTaskArchivedAt(t.id, today))
+  }, [tasks])
+
+  const rerankLastScannedDateRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (tasks.length === 0) return
+
+    const today = getTodayDateString()
+    if (rerankLastScannedDateRef.current === today) return
+    rerankLastScannedDateRef.current = today
+
+    // Rank comparisons only ever happen within a status group, so only the
+    // group(s) that actually grew a too-long rank need to be re-spaced.
+    const statusSlugs = new Set(tasks.map(t => t.statusSlug))
+    const updates = Array.from(statusSlugs).flatMap(statusSlug => {
+      const group = tasks.filter(t => t.statusSlug === statusSlug)
+      return needsRerank(group) ? rerankStatusGroup(group) : []
+    })
+    if (updates.length === 0) return
+
+    const rankById = new Map(updates.map(u => [u.id, u.rank]))
+    setTasks(prev => prev.map(t => rankById.has(t.id) ? { ...t, rank: rankById.get(t.id)! } : t))
+    updates.forEach(u => db.updateTaskRank(u.id, u.rank))
   }, [tasks])
 
   const [autoTransitionedTaskIds, setAutoTransitionedTaskIds] = useState<Set<number>>(new Set())
