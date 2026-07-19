@@ -2,8 +2,9 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import * as db from './db'
 import type { Task, Status, View } from './types'
 import type { StatusUsage } from './db'
-import { byRank } from './rank-utils'
+import { byRank, rankAtInsertIndex } from './rank-utils'
 import { isArchiveEligible, isKnownViewSlug } from './archive-utils'
+import { needsRerank, rerankStatusGroup } from './rerank-utils'
 import { readCurrentViewSlug, writeCurrentViewSlug, readRecentViewSlugs, writeRecentViewSlugs, getAutoArchiveEnabled } from './storage'
 import { TasksContext, type TasksContextValue } from './tasks-context'
 
@@ -21,21 +22,34 @@ export function TasksProvider({ children }: { children: ReactNode }) {
   const [recentViewSlugs, setRecentViewSlugs] = useState<string[]>(
     () => readRecentViewSlugs()
   )
-  const archiveLastScannedDateRef = useRef<string | null>(null)
+  const dailyScanDateRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (tasks.length === 0) return
-    if (!getAutoArchiveEnabled()) return
 
     const today = getTodayDateString()
-    if (archiveLastScannedDateRef.current === today) return
-    archiveLastScannedDateRef.current = today
+    if (dailyScanDateRef.current === today) return
+    dailyScanDateRef.current = today
 
-    const toArchive = tasks.filter(t => t.archivedAt === null && isArchiveEligible(t, today))
-    if (toArchive.length === 0) return
-    const toArchiveIds = new Set(toArchive.map(t => t.id))
-    setTasks(prev => prev.map(t => toArchiveIds.has(t.id) ? { ...t, archivedAt: today } : t))
-    toArchive.forEach(t => db.updateTaskArchivedAt(t.id, today))
+    if (getAutoArchiveEnabled()) {
+      const toArchive = tasks.filter(t => t.archivedAt === null && isArchiveEligible(t, today))
+      if (toArchive.length > 0) {
+        const toArchiveIds = new Set(toArchive.map(t => t.id))
+        setTasks(prev => prev.map(t => toArchiveIds.has(t.id) ? { ...t, archivedAt: today } : t))
+        toArchive.forEach(t => db.updateTaskArchivedAt(t.id, today))
+      }
+    }
+
+    const statusSlugs = Array.from(new Set(tasks.map(t => t.statusSlug)))
+    const rerankUpdates = statusSlugs.flatMap(statusSlug => {
+      const group = tasks.filter(t => t.statusSlug === statusSlug)
+      return needsRerank(group) ? rerankStatusGroup(group) : []
+    })
+    if (rerankUpdates.length > 0) {
+      const rankById = new Map(rerankUpdates.map(u => [u.id, u.rank]))
+      setTasks(prev => prev.map(t => rankById.has(t.id) ? { ...t, rank: rankById.get(t.id)! } : t))
+      rerankUpdates.forEach(u => db.updateTaskRank(u.id, u.rank))
+    }
   }, [tasks])
 
   const [autoTransitionedTaskIds, setAutoTransitionedTaskIds] = useState<Set<number>>(new Set())
@@ -155,9 +169,17 @@ export function TasksProvider({ children }: { children: ReactNode }) {
   }
 
   async function setStatus(id: number, statusSlug: string): Promise<void> {
+    // Appends to the end of the destination status so the task can't collide
+    // with the rank of a task already sitting there.
+    const destTasks = tasks.filter(t => t.statusSlug === statusSlug)
+    const newRank = rankAtInsertIndex(destTasks, destTasks.length, id)
     try {
       await db.updateTaskStatus(id, statusSlug)
-      setTasks(prev => prev.map(t => t.id === id ? { ...t, statusSlug } : t))
+      await db.updateTaskRank(id, newRank)
+      setTasks(prev => {
+        const updated = prev.map(t => t.id === id ? { ...t, statusSlug, rank: newRank } : t)
+        return updated.sort(byRank)
+      })
     } catch {
       await refetchTasks()
     }
