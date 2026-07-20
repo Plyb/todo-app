@@ -310,6 +310,11 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  /**
+   * 
+   * @param sectionKey either a section slug or a synthetic view id (such as __archive__)
+   * @returns 
+   */
   function requestTaskPage(sectionKey: string): void {
     const current = sectionPagingRef.current[sectionKey] ?? DEFAULT_SECTION_PAGING
     if (current.isLoading || !current.hasMore) return

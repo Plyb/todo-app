@@ -149,7 +149,7 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
     if (isUserDefinedView(currentView)) {
       currentView.statusSlugs.forEach((slug) => requestTaskPageRef.current(slug))
     } else {
-      requestTaskPageRef.current(ARCHIVE_VIEW_ID) // TODO: slug -> id (might want to indicate this isn't actually a slug somehow in the function)
+      requestTaskPageRef.current(ARCHIVE_VIEW_ID) 
     }
   }, [currentView])
 
