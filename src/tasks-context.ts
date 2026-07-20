@@ -1,7 +1,14 @@
 import { createContext, useContext } from 'react'
 import type { Task, Status, View, UserDefinedView } from './types'
 import type { StatusUsage } from './db'
+import type { TaskSource } from './sources'
 import type { SectionPagingInfo } from './view-utils'
+
+export type SourcesApi = {
+  defaultSource: TaskSource
+  getSource: (id: string) => TaskSource
+  allSources: TaskSource[]
+}
 
 export type TasksApi = {
   tasks: Task[]
@@ -37,7 +44,7 @@ export type ViewsApi = {
   deleteView: (id: string) => Promise<void>
 }
 
-export type TasksContextValue = TasksApi & StatusesApi & ViewsApi
+export type TasksContextValue = TasksApi & StatusesApi & ViewsApi & SourcesApi
 
 export const TasksContext = createContext<TasksContextValue | null>(null)
 
@@ -88,4 +95,16 @@ export function useViews(): ViewsApi {
     saveView: c.saveView,
     deleteView: c.deleteView,
   }
+}
+
+export function useDefaultSource(): TaskSource {
+  return useTasksContext().defaultSource
+}
+
+export function useSource(id: string): TaskSource {
+  return useTasksContext().getSource(id)
+}
+
+export function useAllSources(): TaskSource[] {
+  return useTasksContext().allSources
 }

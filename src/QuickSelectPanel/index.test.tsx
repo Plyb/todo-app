@@ -10,15 +10,26 @@ const setArchived = vi.fn()
 // The archive toggle's deferred-commit contract is what's under test here, so the
 // rest of the tasks-context API is stubbed out - other QuickSelectPanel subsections
 // call these on mount/render but their behavior isn't the concern of this test.
-vi.mock('../tasks-context', () => ({
-  useTasks: () => ({
-    setDone: vi.fn(),
-    renameTask: vi.fn(),
-    updateNotes: vi.fn(),
-    createTask: vi.fn(),
-    setArchived,
-  }),
-}))
+vi.mock('../tasks-context', () => {
+  // A single stable stub so the subsections' load-on-mount effects don't re-fire
+  // on every render (an unstable source identity would loop).
+  const source = {
+    loadSubtaskLinks: () => Promise.resolve([]),
+    loadParentLink: () => Promise.resolve(undefined),
+    loadBlocks: () => Promise.resolve([]),
+    loadScheduledTransitions: () => Promise.resolve([]),
+  }
+  return {
+    useTasks: () => ({
+      setDone: vi.fn(),
+      renameTask: vi.fn(),
+      updateNotes: vi.fn(),
+      createTask: vi.fn(),
+      setArchived,
+    }),
+    useSource: () => source,
+  }
+})
 
 function makeTask(overrides: Partial<Task> = {}): Task {
   return {
@@ -29,6 +40,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
     rank: '0',
     statusSlug: 'today',
     notes: '',
+    sourceId: 'indexeddb',
     ...overrides,
   }
 }

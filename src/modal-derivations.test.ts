@@ -43,9 +43,9 @@ describe('sortViewsByRecency', () => {
 })
 
 describe('partitionStatuses', () => {
-  const backlog: Status = { slug: 'backlog', name: 'Backlog' }
-  const doing: Status = { slug: 'doing', name: 'Doing' }
-  const done: Status = { slug: 'done', name: 'Done' }
+  const backlog: Status = { slug: 'backlog', name: 'Backlog', sourceId: 'indexeddb' }
+  const doing: Status = { slug: 'doing', name: 'Doing', sourceId: 'indexeddb' }
+  const done: Status = { slug: 'done', name: 'Done', sourceId: 'indexeddb' }
   const statuses = [backlog, doing, done]
 
   it('puts everything in unselected when slugs is empty', () => {

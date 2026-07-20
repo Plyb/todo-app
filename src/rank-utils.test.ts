@@ -75,6 +75,7 @@ describe('rankAtInsertIndex', () => {
     archivedAt: null,
     statusSlug: 'backlog',
     notes: '',
+    sourceId: 'indexeddb',
   })
 
   const tasks = [

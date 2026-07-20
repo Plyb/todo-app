@@ -1,6 +1,7 @@
 export type Status = {
   slug: string
   name: string
+  sourceId: string
 }
 
 export type Task = {
@@ -11,6 +12,7 @@ export type Task = {
   rank: string
   statusSlug: string
   notes: string
+  sourceId: string
 }
 
 export type SubtaskLink = { id: number; parentTaskId: number; childTaskId: number; rank: string }
@@ -35,6 +37,7 @@ export type ScheduledTransition = {
   taskId: number
   date: string  // ISO date string 'YYYY-MM-DD'
   statusSlug: string
+  sourceId: string
 }
 
 export type ViewSelectorVisibility = 'always-show' | 'always-hide' | null

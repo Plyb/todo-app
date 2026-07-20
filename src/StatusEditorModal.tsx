@@ -64,7 +64,7 @@ export function StatusEditorModal({ status, onSave, onClose }: StatusEditorModal
           Cancel
         </SecondaryButton>
         <PrimaryButton
-          onClick={() => onSave({ slug: slug.trim(), name: name.trim() })}
+          onClick={() => onSave({ slug: slug.trim(), name: name.trim(), sourceId: status.sourceId })}
           disabled={!canSave}
         >
           Save

@@ -12,7 +12,7 @@ export function archivedTasksOf(tasks: Task[]): ArchivedTask[] {
   return tasks.filter(isArchivedTask)
 }
 
-export function sortArchivedTasks(tasks: ArchivedTask[]): ArchivedTask[] {
+export function sortArchivedTasks<T extends { archivedAt: string; completedAt: string | null; name: string }>(tasks: T[]): T[] {
   return [...tasks].sort((a, b) => {
     if (a.archivedAt !== b.archivedAt) return b.archivedAt.localeCompare(a.archivedAt)
     if (a.completedAt !== b.completedAt) return (b.completedAt ?? '').localeCompare(a.completedAt ?? '')

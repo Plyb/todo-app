@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { Task } from './types'
-import { addBlock } from './db'
+import { useSource } from './tasks-context'
 import { theme } from './theme'
 import { BottomSheet } from './ui/Modal'
 import { CloseButton } from './ui/CloseButton'
@@ -81,6 +81,8 @@ type RelationshipModalProps = {
 
 export function RelationshipModal({ currentTaskId, allTasks, onClose, onBlockingRelationshipAdded }: RelationshipModalProps) {
   const [state, setState] = useState<RelationshipModalState>({ view: 'search' })
+  const currentTask = allTasks.find((t) => t.id === currentTaskId)!
+  const source = useSource(currentTask.sourceId)
 
   const otherTasks = selectableTasks(allTasks, { currentTaskId })
 
@@ -114,7 +116,7 @@ export function RelationshipModal({ currentTaskId, allTasks, onClose, onBlocking
             label="Blocks"
             description={<>this task blocks <strong>{state.selectedTask.name}</strong></>}
             onClick={async () => {
-              await addBlock(currentTaskId, state.selectedTask.id, 'blocks')
+              await source.addBlock(currentTaskId, state.selectedTask.id, 'blocks')
               onBlockingRelationshipAdded?.()
               onClose()
             }}
@@ -123,7 +125,7 @@ export function RelationshipModal({ currentTaskId, allTasks, onClose, onBlocking
             label="Blocked By"
             description={<><strong>{state.selectedTask.name}</strong> blocks this task</>}
             onClick={async () => {
-              await addBlock(state.selectedTask.id, currentTaskId, 'blocks')
+              await source.addBlock(state.selectedTask.id, currentTaskId, 'blocks')
               onBlockingRelationshipAdded?.()
               onClose()
             }}

@@ -2,7 +2,12 @@ import { LexoRank } from 'lexorank'
 import { z } from 'zod'
 import type { BlockingRelationship, ScheduledTransition, Status, SubtaskLink, Task } from '../types'
 
-export type Stored<T extends { id: number }> = Omit<T, 'id'>
+export type Stored<T extends { id: number }> = Omit<T, 'id' | 'sourceId'>
+
+// The DB only ever holds the default source's own records, so sourceId is
+// attached to reads / stripped from writes at the TaskSource adapter layer
+// (see src/sources/source-utils.ts) rather than persisted here.
+export type WithoutSource<T> = Omit<T, 'sourceId'>
 
 export type StoredTask = Stored<Task>
 export type StoredBlockingRelationship = Stored<BlockingRelationship>
@@ -20,15 +25,18 @@ export function withDefault<T>(schema: z.ZodType<T>, fallback: () => T): z.ZodTy
 }
 
 export const DB_NAME = 'todo-app'
-export const DB_VERSION = 12
+export const DB_VERSION = 13
 export const TASKS_STORE = 'tasks'
 export const STATUSES_STORE = 'statuses'
 export const VIEWS_STORE = 'views'
 export const SCHEDULED_TRANSITIONS_STORE = 'scheduledTransitions'
 export const RELATIONSHIPS_STORE = 'relationships'
 export const SUBTASKS_STORE = 'subtasks'
+export const SOURCE_CONFIGURATIONS_STORE = 'sourceConfigurations'
 
-const DEFAULT_STATUSES: Status[] = [
+export const DEFAULT_SOURCE_ID = 'indexeddb'
+
+const DEFAULT_STATUSES: WithoutSource<Status>[] = [
   { slug: 'today', name: 'Today' },
   { slug: 'today-extra', name: 'Today Extra' },
   { slug: 'backlog', name: 'Backlog' },
@@ -200,7 +208,7 @@ async function migrateAddViews(transaction: IDBTransaction): Promise<void> {
   // Seed one default view per existing status, so users start with views but
   // can freely delete them afterward without them being regenerated.
   const statusStore = transaction.objectStore(STATUSES_STORE)
-  const statuses = (await requestToPromise(statusStore.getAll())) as Status[]
+  const statuses = (await requestToPromise(statusStore.getAll())) as WithoutSource<Status>[]
   const viewStore = transaction.objectStore(VIEWS_STORE)
   for (const status of statuses) {
     viewStore.put({ slug: status.slug, name: status.name, statusSlugs: [status.slug] })
@@ -307,6 +315,15 @@ const MIGRATION_STEPS: MigrationStep[] = [
     version: 12,
     migrate: (_db, transaction) => migrateAddTaskIndices(transaction),
   },
+  {
+    version: 13,
+    migrate: (db) => {
+      if (!db.objectStoreNames.contains(SOURCE_CONFIGURATIONS_STORE)) {
+        const store = db.createObjectStore(SOURCE_CONFIGURATIONS_STORE, { keyPath: 'id' })
+        store.put({ kind: 'indexeddb', id: DEFAULT_SOURCE_ID })
+      }
+    },
+  },
 ]
 
 export async function openTasksDatabase(): Promise<IDBDatabase> {
@@ -379,6 +396,7 @@ type StoreName =
   | typeof SCHEDULED_TRANSITIONS_STORE
   | typeof RELATIONSHIPS_STORE
   | typeof SUBTASKS_STORE
+  | typeof SOURCE_CONFIGURATIONS_STORE
 
 export async function withStore<T>(
   name: StoreName,

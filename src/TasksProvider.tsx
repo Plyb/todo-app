@@ -1,7 +1,15 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import * as db from './db'
 import type { Task, Status, View, UserDefinedView } from './types'
 import type { StatusUsage } from './db'
+import {
+  DEFAULT_SOURCE_CONFIG,
+  buildSource,
+  buildSourceRegistry,
+  loadSourceConfigurations,
+  type TaskSource,
+} from './sources'
+import { groupBySourceId, loadAcrossSources, sourceOf } from './sources/source-utils'
 import { byRank, rankAtInsertIndex } from './rank-utils'
 import { isArchiveEligible } from './archive-utils'
 import { ARCHIVE_VIEW, ARCHIVE_VIEW_ID } from './synthetic-view-utils'
@@ -38,6 +46,21 @@ export function TasksProvider({ children }: { children: ReactNode }) {
   )
   const dailyScanDateRef = useRef<string | null>(null)
 
+  const defaultSource = useMemo(() => buildSource(DEFAULT_SOURCE_CONFIG), [])
+  const [allSources, setAllSources] = useState<TaskSource[]>([defaultSource])
+  const sourceRegistryRef = useRef<Map<string, TaskSource>>(new Map([[defaultSource.id, defaultSource]]))
+  const getSource = useCallback(
+    (id: string): TaskSource => sourceRegistryRef.current.get(id) ?? defaultSource,
+    [defaultSource],
+  )
+  const getStatusSource = useCallback(
+    (slug: string): TaskSource => {
+      const status = statuses.find((s) => s.slug === slug)
+      return status ? getSource(status.sourceId) : defaultSource
+    },
+    [statuses, getSource, defaultSource],
+  )
+
   useEffect(() => {
     if (tasks.length === 0) return
 
@@ -50,7 +73,7 @@ export function TasksProvider({ children }: { children: ReactNode }) {
       if (toArchive.length > 0) {
         const toArchiveIds = new Set(toArchive.map(t => t.id))
         setTasks(prev => prev.map(t => toArchiveIds.has(t.id) ? { ...t, archivedAt: today } : t))
-        toArchive.forEach(t => db.updateTaskArchivedAt(t.id, today))
+        toArchive.forEach(t => sourceOf(t, getSource).updateTaskArchivedAt(t.id, today))
       }
     }
 
@@ -61,10 +84,14 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     })
     if (rerankUpdates.length > 0) {
       const rankById = new Map(rerankUpdates.map(u => [u.id, u.rank]))
+      const taskById = new Map(tasks.map(t => [t.id, t]))
       setTasks(prev => prev.map(t => rankById.has(t.id) ? { ...t, rank: rankById.get(t.id)! } : t))
-      rerankUpdates.forEach(u => db.updateTaskRank(u.id, u.rank))
+      rerankUpdates.forEach(u => {
+        const task = taskById.get(u.id)
+        if (task) sourceOf(task, getSource).updateTaskRank(u.id, u.rank)
+      })
     }
-  }, [tasks])
+  }, [tasks, getSource])
 
   const [autoTransitionedTaskIds, setAutoTransitionedTaskIds] = useState<Set<number>>(new Set())
 
@@ -73,10 +100,18 @@ export function TasksProvider({ children }: { children: ReactNode }) {
   const lastCheckedDateRef = useRef(getTodayDateString())
 
   const applyDueTransitions = useCallback(async (currentTasks: Task[]): Promise<Task[]> => {
-    const dueTransitions = await db.loadAllDueTransitions()
+    const sources = Array.from(sourceRegistryRef.current.values())
+    const dueTransitions = await loadAcrossSources(sources, (s) => s.loadAllDueTransitions())
     if (dueTransitions.length === 0) return currentTasks
 
-    const existingTasks = await db.loadTasksByIds(dueTransitions.map((t) => t.taskId))
+    const transitionsBySource = groupBySourceId(dueTransitions)
+    const existingTasks = (
+      await Promise.all(
+        Array.from(transitionsBySource.entries()).map(([sourceId, transitions]) =>
+          getSource(sourceId).loadTasksByIds(transitions.map((t) => t.taskId)),
+        ),
+      )
+    ).flat()
     const existingIds = new Set(existingTasks.map((t) => t.id))
 
     const transitionedIds = new Set<number>()
@@ -84,8 +119,9 @@ export function TasksProvider({ children }: { children: ReactNode }) {
       dueTransitions
         .filter((transition) => existingIds.has(transition.taskId))
         .map(async (transition) => {
-          await db.updateTaskStatus(transition.taskId, transition.statusSlug)
-          await db.deleteScheduledTransition(transition.id)
+          const source = sourceOf(transition, getSource)
+          await source.updateTaskStatus(transition.taskId, transition.statusSlug)
+          await source.deleteScheduledTransition(transition.id)
           transitionedIds.add(transition.taskId)
         })
     )
@@ -99,13 +135,23 @@ export function TasksProvider({ children }: { children: ReactNode }) {
       const transition = dueTransitions.find((tr) => tr.taskId === t.id && transitionedIds.has(tr.taskId))
       return transition ? { ...t, statusSlug: transition.statusSlug } : t
     })
-  }, [])
+  }, [getSource])
 
   useEffect(() => {
     let isMounted = true
 
     async function init() {
-      const [loadedStatuses, loadedViews] = await Promise.all([db.loadStatuses(), db.loadViews()])
+      const [loadedViews, configs] = await Promise.all([
+        db.loadViews(),
+        loadSourceConfigurations(),
+      ])
+      if (!isMounted) return
+
+      sourceRegistryRef.current = buildSourceRegistry(configs)
+      const sources = Array.from(sourceRegistryRef.current.values())
+      setAllSources(sources)
+
+      const loadedStatuses = await loadAcrossSources(sources, (s) => s.loadStatuses())
       if (!isMounted) return
 
       const updatedTasks = await applyDueTransitions([])
@@ -117,7 +163,10 @@ export function TasksProvider({ children }: { children: ReactNode }) {
       // rather than each having to special-case a separate sentinel id.
       const viewsWithArchive: View[] = [...loadedViews, ARCHIVE_VIEW]
 
-      setTasks(updatedTasks)
+      // Merge rather than overwrite: loading statuses from every source added
+      // an extra await before this resolves, giving a section page requested
+      // right after mount (see requestTaskPage) a real chance to land first.
+      setTasks(prev => mergeTasks(prev, updatedTasks))
       setStatuses(loadedStatuses)
       setViews(viewsWithArchive)
 
@@ -157,10 +206,18 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
   }, [applyDueTransitions, tasks])
 
+  function loadTasksBySourceGroups(): Promise<Task[]> {
+    const tasksBySource = groupBySourceId(tasks)
+    return Promise.all(
+      Array.from(tasksBySource.entries()).map(([sourceId, ts]) => getSource(sourceId).loadTasksByIds(ts.map((t) => t.id))),
+    ).then((results) => results.flat())
+  }
+
   async function refetchAll(): Promise<void> {
+    const sources = Array.from(sourceRegistryRef.current.values())
     const [newStatuses, newTasks, newViews] = await Promise.all([
-      db.loadStatuses(),
-      db.loadTasksByIds(tasks.map((t) => t.id)),
+      loadAcrossSources(sources, (s) => s.loadStatuses()),
+      loadTasksBySourceGroups(),
       db.loadViews(),
     ])
     setStatuses(newStatuses)
@@ -170,24 +227,30 @@ export function TasksProvider({ children }: { children: ReactNode }) {
 
   // Refetch (not roll back) on write failure: rolling back to a stale snapshot could erase a concurrently-succeeded edit.
   async function refetchTasks(): Promise<void> {
-    setTasks(await db.loadTasksByIds(tasks.map((t) => t.id)))
+    setTasks(await loadTasksBySourceGroups())
   }
 
   function setDone(id: number, done: boolean): void {
     const completedAt = done ? getTodayDateString() : null
-    db.updateTaskCompletedAt(id, completedAt).catch(() => refetchTasks())
+    const task = tasks.find(t => t.id === id)
+    if (task) sourceOf(task, getSource).updateTaskCompletedAt(id, completedAt).catch(() => refetchTasks())
     setTasks(prev => prev.map(t => t.id === id ? { ...t, completedAt } : t))
   }
 
   function setArchived(id: number, archived: boolean): void {
     const archivedAt = archived ? getTodayDateString() : null
-    db.updateTaskArchivedAt(id, archivedAt).catch(() => refetchTasks())
+    const task = tasks.find(t => t.id === id)
+    if (task) sourceOf(task, getSource).updateTaskArchivedAt(id, archivedAt).catch(() => refetchTasks())
     setTasks(prev => prev.map(t => t.id === id ? { ...t, archivedAt } : t))
   }
 
   function moveTask(id: number, toStatusSlug: string, newRank: string, changeStatus: boolean): void {
-    if (changeStatus) db.updateTaskStatus(id, toStatusSlug).catch(() => refetchTasks())
-    db.updateTaskRank(id, newRank).catch(() => refetchTasks())
+    const task = tasks.find(t => t.id === id)
+    if (task) {
+      const source = sourceOf(task, getSource)
+      if (changeStatus) source.updateTaskStatus(id, toStatusSlug).catch(() => refetchTasks())
+      source.updateTaskRank(id, newRank).catch(() => refetchTasks())
+    }
     setTasks(prev => {
       const updated = prev.map(t => t.id === id ? { ...t, rank: newRank, statusSlug: toStatusSlug } : t)
       return updated.sort(byRank)
@@ -199,9 +262,12 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     // with the rank of a task already sitting there.
     const destTasks = tasks.filter(t => t.statusSlug === statusSlug)
     const newRank = rankAtInsertIndex(destTasks, destTasks.length, id)
+    const task = tasks.find(t => t.id === id)
+    if (!task) return
     try {
-      await db.updateTaskStatus(id, statusSlug)
-      await db.updateTaskRank(id, newRank)
+      const source = sourceOf(task, getSource)
+      await source.updateTaskStatus(id, statusSlug)
+      await source.updateTaskRank(id, newRank)
       setTasks(prev => {
         const updated = prev.map(t => t.id === id ? { ...t, statusSlug, rank: newRank } : t)
         return updated.sort(byRank)
@@ -212,18 +278,22 @@ export function TasksProvider({ children }: { children: ReactNode }) {
   }
 
   function renameTask(id: number, name: string): void {
-    db.updateTaskName(id, name).catch(() => refetchTasks())
+    const task = tasks.find(t => t.id === id)
+    if (task) sourceOf(task, getSource).updateTaskName(id, name).catch(() => refetchTasks())
     setTasks(prev => prev.map(t => t.id === id ? { ...t, name } : t))
   }
 
   function updateNotes(id: number, notes: string): void {
-    db.updateTaskNotes(id, notes).catch(() => refetchTasks())
+    const task = tasks.find(t => t.id === id)
+    if (task) sourceOf(task, getSource).updateTaskNotes(id, notes).catch(() => refetchTasks())
     setTasks(prev => prev.map(t => t.id === id ? { ...t, notes } : t))
   }
 
   async function deleteTask(id: number): Promise<void> {
+    const task = tasks.find(t => t.id === id)
+    if (!task) return
     try {
-      await db.deleteTask(id)
+      await sourceOf(task, getSource).deleteTask(id)
       setTasks(prev => prev.filter(t => t.id !== id))
     } catch {
       await refetchTasks()
@@ -232,7 +302,7 @@ export function TasksProvider({ children }: { children: ReactNode }) {
 
   async function createTask(name: string, rank: string, statusSlug: string): Promise<Task> {
     try {
-      const task = await db.createTask(name, rank, statusSlug)
+      const task = await defaultSource.createTask(name, rank, statusSlug)
       setTasks(prev => [...prev, task].sort(byRank))
       return task
     } catch (err) {
@@ -249,29 +319,33 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     })
   }
 
+  // Every status created today lands in the default source. Letting the
+  // caller pick a source on creation, and guarding cross-source status
+  // changes/reassignment, is tracked as a follow-up (see issue #9).
   async function createStatus(name: string, slug: string): Promise<void> {
-    await db.createStatus(name, slug)
+    await defaultSource.createStatus(name, slug)
     await refetchAll()
   }
 
   async function updateStatus(oldSlug: string, newSlug: string, name: string): Promise<void> {
-    await db.updateStatus(oldSlug, newSlug, name)
+    await getStatusSource(oldSlug).updateStatus(oldSlug, newSlug, name)
     await refetchAll()
   }
 
   async function deleteStatus(slug: string): Promise<void> {
-    await db.deleteStatus(slug)
+    await getStatusSource(slug).deleteStatus(slug)
     await refetchAll()
   }
 
   async function reassignAndDeleteStatus(fromSlug: string, toSlug: string): Promise<void> {
-    await db.reassignStatus(fromSlug, toSlug)
-    await db.deleteStatus(fromSlug)
+    const source = getStatusSource(fromSlug)
+    await source.reassignStatus(fromSlug, toSlug)
+    await source.deleteStatus(fromSlug)
     await refetchAll()
   }
 
   function getStatusUsage(slug: string): Promise<StatusUsage> {
-    return db.getStatusUsage(slug)
+    return getStatusSource(slug).getStatusUsage(slug)
   }
 
   function setActiveViewId(id: string): void {
@@ -311,9 +385,9 @@ export function TasksProvider({ children }: { children: ReactNode }) {
   }
 
   /**
-   * 
+   *
    * @param sectionKey either a section slug or a synthetic view id (such as __archive__)
-   * @returns 
+   * @returns
    */
   function requestTaskPage(sectionKey: string): void {
     const current = sectionPagingRef.current[sectionKey] ?? DEFAULT_SECTION_PAGING
@@ -322,8 +396,8 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     setSectionPaging(prev => ({ ...prev, [sectionKey]: { ...current, isLoading: true } }))
 
     const pageRequest = sectionKey === ARCHIVE_VIEW_ID
-      ? db.loadArchivedTaskPage(current.offset)
-      : db.loadTaskPageForStatus(sectionKey, current.offset)
+      ? defaultSource.loadArchivedTaskPage(current.offset)
+      : defaultSource.loadTaskPageForStatus(sectionKey, current.offset)
 
     pageRequest
       .then((page) => {
@@ -364,6 +438,9 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     openView,
     saveView,
     deleteView,
+    defaultSource,
+    getSource,
+    allSources,
   }
 
   return <TasksContext.Provider value={value}>{children}</TasksContext.Provider>

@@ -2,7 +2,6 @@ import { LexoRank } from 'lexorank'
 import { z } from 'zod'
 import { byRank } from '../rank-utils'
 import { sortArchivedTasks } from '../view-utils'
-import type { ArchivedTask } from '../types'
 import {
   RELATIONSHIPS_STORE,
   SUBTASKS_STORE,
@@ -18,14 +17,18 @@ import {
   withStore,
   withTransaction,
   type StoredTask,
+  type WithoutSource,
 } from './client'
-import type { Task } from '../types'
+import type { ArchivedTask, Task } from '../types'
 import { deleteBlocksByTaskInStore } from './blocks'
 import { deleteSubtaskLinksByChildInStore, deleteSubtaskLinksByParentInStore } from './subtasks'
 
 export const TASK_PAGE_SIZE = 20
 
 export type TaskPage<T> = { tasks: T[]; hasMore: boolean }
+
+type StoredTaskWithId = WithoutSource<Task>
+type StoredArchivedTaskWithId = WithoutSource<ArchivedTask>
 
 const storedTaskSchema = z.object({
   name: z.string(),
@@ -36,14 +39,14 @@ const storedTaskSchema = z.object({
   notes: withDefault(z.string(), () => ''),
 }) satisfies z.ZodType<StoredTask>
 
-async function readTasks(): Promise<Task[]> {
+async function readTasks(): Promise<StoredTaskWithId[]> {
   return withStore(TASKS_STORE, 'readonly', async (store) => {
     const tasks = await getAllWithIds<Record<string, unknown>>(store)
     return tasks.map(({ id, ...raw }) => ({ id, ...storedTaskSchema.parse(raw) }))
   })
 }
 
-function parseTaskAt(cursor: IDBCursorWithValue): Task {
+function parseTaskAt(cursor: IDBCursorWithValue): StoredTaskWithId {
   return { id: keyToTaskId(cursor.primaryKey), ...storedTaskSchema.parse(cursor.value) }
 }
 
@@ -56,7 +59,7 @@ async function ensureSeeded(): Promise<void> {
 }
 
 // Only used in tests. May refactor the tests later to not use it.
-export async function loadTasks(): Promise<Task[]> {
+export async function loadTasks(): Promise<StoredTaskWithId[]> {
   await ensureSeeded()
   const tasks = await readTasks()
   tasks.sort(byRank)
@@ -67,11 +70,11 @@ export async function loadTaskPageForStatus(
   statusSlug: string,
   offset: number,
   limit: number = TASK_PAGE_SIZE
-): Promise<TaskPage<Task>> {
+): Promise<TaskPage<StoredTaskWithId>> {
   await ensureSeeded()
   return withStore(TASKS_STORE, 'readonly', async (store) => {
     const range = IDBKeyRange.bound([statusSlug, ''], [statusSlug, '\uffff'])
-    const gathered: Task[] = []
+    const gathered: StoredTaskWithId[] = []
     let skipped = 0
 
     await iterateCursor(
@@ -103,11 +106,11 @@ export async function loadTaskPageForStatus(
 export async function loadArchivedTaskPage(
   offset: number,
   limit: number = TASK_PAGE_SIZE
-): Promise<TaskPage<ArchivedTask>> {
+): Promise<TaskPage<StoredArchivedTaskWithId>> {
   await ensureSeeded()
   return withStore(TASKS_STORE, 'readonly', async (store) => {
     const needed = offset + limit + 1
-    const gathered: ArchivedTask[] = []
+    const gathered: StoredArchivedTaskWithId[] = []
     // Same-archivedAt tasks are buffered per cohort and only flushed (sorted
     // by completedAt/name, counted toward the page) once a different
     // archivedAt confirms the cohort is complete. This can't just be a
@@ -115,7 +118,7 @@ export async function loadArchivedTaskPage(
     // null for a manually-archived-but-incomplete task (see setArchived), and
     // IndexedDB drops a record entirely when any component of a compound key
     // is invalid - so that index would silently omit such tasks.
-    let cohort: ArchivedTask[] = []
+    let cohort: StoredArchivedTaskWithId[] = []
     let cohortKey: string | null = null
 
     function flushCohort(): void {
@@ -127,7 +130,7 @@ export async function loadArchivedTaskPage(
     await iterateCursor(
       store,
       (cursor) => {
-        cohort.push(parseTaskAt(cursor) as ArchivedTask)
+        cohort.push(parseTaskAt(cursor) as StoredArchivedTaskWithId)
       },
       {
         index: 'by_archivedAt',
@@ -148,9 +151,9 @@ export async function loadArchivedTaskPage(
   })
 }
 
-export async function loadTasksByIds(ids: number[]): Promise<Task[]> {
+export async function loadTasksByIds(ids: number[]): Promise<StoredTaskWithId[]> {
   return withStore(TASKS_STORE, 'readonly', async (store) => {
-    const results: Task[] = []
+    const results: StoredTaskWithId[] = []
     for (const id of ids) {
       const raw = (await requestToPromise(store.get(id))) as Record<string, unknown> | undefined
       if (raw !== undefined) results.push({ id, ...storedTaskSchema.parse(raw) })
@@ -159,14 +162,14 @@ export async function loadTasksByIds(ids: number[]): Promise<Task[]> {
   })
 }
 
-export async function createTask(name: string, rank: string, statusSlug: string = 'backlog'): Promise<Task> {
+export async function createTask(name: string, rank: string, statusSlug: string = 'backlog'): Promise<StoredTaskWithId> {
   const key = await withStore(TASKS_STORE, 'readwrite', (store) =>
     requestToPromise(store.add({ name, completedAt: null, archivedAt: null, rank, statusSlug, notes: '' })),
   )
   return { id: keyToTaskId(key), name, completedAt: null, archivedAt: null, rank, statusSlug, notes: '' }
 }
 
-export async function saveTask(task: Task): Promise<void> {
+export async function saveTask(task: StoredTaskWithId): Promise<void> {
   await withStore(TASKS_STORE, 'readwrite', (store) => {
     store.put(
       { name: task.name, completedAt: task.completedAt, archivedAt: task.archivedAt, rank: task.rank, statusSlug: task.statusSlug, notes: task.notes },

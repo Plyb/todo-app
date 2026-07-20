@@ -7,7 +7,7 @@ beforeEach(() => {
 })
 
 function makeTask(id: number, archivedAt: string | null): Task {
-  return { id, name: `Task ${id}`, completedAt: null, archivedAt, rank: '0', statusSlug: 'today', notes: '' }
+  return { id, name: `Task ${id}`, completedAt: null, archivedAt, rank: '0', statusSlug: 'today', notes: '', sourceId: 'indexeddb' }
 }
 
 describe('getAutoArchiveEnabled / setAutoArchiveEnabled', () => {
