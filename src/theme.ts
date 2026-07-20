@@ -53,6 +53,7 @@ export const zIndex = {
 export const durations = {
   panelExpand: 200,
   panelBackdropArm: 350,
+  longPress: 500,
 } as const
 
 export const theme = {

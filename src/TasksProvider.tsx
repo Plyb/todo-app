@@ -302,8 +302,6 @@ export function TasksProvider({ children }: { children: ReactNode }) {
 
   async function createTask(name: string, rank: string, statusSlug: string): Promise<Task> {
     try {
-      // Falls back to defaultSource when nothing is persisted, or the persisted
-      // id no longer names a registered source (e.g. it was removed).
       const selectedSourceId = readSelectedSourceId()
       const source = selectedSourceId !== null && allSources.some((s) => s.id === selectedSourceId)
         ? getSource(selectedSourceId)
