@@ -1,4 +1,4 @@
-import type { Task, UserDefinedView } from './types'
+import { isArchivedTask, type ArchivedTask, type Task, type UserDefinedView } from './types'
 
 export function displayedTasksForView(tasks: Task[], view: UserDefinedView): Task[] {
   return tasks.filter((t) => t.archivedAt === null && view.statusSlugs.includes(t.statusSlug))
@@ -8,10 +8,8 @@ export function sectionTasksForStatus(tasks: Task[], statusSlug: string): Task[]
   return tasks.filter((t) => t.archivedAt === null && t.statusSlug === statusSlug)
 }
 
-export type ArchivedTask = Task & { archivedAt: string }
-
 export function archivedTasksOf(tasks: Task[]): ArchivedTask[] {
-  return tasks.filter((t): t is ArchivedTask => t.archivedAt !== null) // TODO: already a guard for this?
+  return tasks.filter(isArchivedTask)
 }
 
 export function sortArchivedTasks(tasks: ArchivedTask[]): ArchivedTask[] {

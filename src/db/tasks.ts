@@ -1,7 +1,8 @@
 import { LexoRank } from 'lexorank'
 import { z } from 'zod'
 import { byRank } from '../rank-utils'
-import { archivedTasksOf, sortArchivedTasks, type ArchivedTask } from '../view-utils'
+import { archivedTasksOf, sortArchivedTasks } from '../view-utils'
+import { isArchivedTask, type ArchivedTask } from '../types'
 import {
   RELATIONSHIPS_STORE,
   SUBTASKS_STORE,
@@ -65,7 +66,8 @@ async function ensureSeeded(): Promise<void> {
   await seedDemoTasks(db)
 }
 
-export async function loadTasks(): Promise<Task[]> { // TODO: looks unused
+// Only used in tests. May refactor the tests later to not use it.
+export async function loadTasks(): Promise<Task[]> {
   await ensureSeeded()
   const tasks = await readTasks()
   tasks.sort(byRank)
@@ -90,7 +92,7 @@ export async function loadArchivedTaskPage( // TODO: might be worth factoring ou
   limit: number = TASK_PAGE_SIZE
 ): Promise<TaskPage<ArchivedTask>> {
   await ensureSeeded()
-  const matching = await readMatchingTasks((t) => t.archivedAt !== null) // TODO: I think there's a guard for this
+  const matching = await readMatchingTasks(isArchivedTask)
   const sorted = sortArchivedTasks(archivedTasksOf(matching))
   return paginate(sorted, offset, limit)
 }
