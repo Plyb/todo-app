@@ -61,7 +61,7 @@ export function StatusScheduleSection({ task, statuses, onChangeStatus }: Status
 
       {statusModalOpen && (
         <StatusModal
-          statuses={statuses}
+          statuses={statuses.filter((s) => s.sourceId === task.sourceId)}
           currentStatusSlug={task.statusSlug}
           onSelect={(slug) => onChangeStatus(task.id, slug)}
           onClose={() => setStatusModalOpen(false)}

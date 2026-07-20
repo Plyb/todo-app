@@ -3,16 +3,20 @@ import { type Status } from './types'
 import { theme } from './theme'
 import { Modal } from './ui/Modal'
 import { PrimaryButton, SecondaryButton } from './ui/Button'
+import { useAllSources } from './tasks-context'
 
 export type StatusEditorModalProps = {
   status: Status
+  isNewStatus: boolean
   onSave: (status: Status) => void
   onClose: () => void
 }
 
-export function StatusEditorModal({ status, onSave, onClose }: StatusEditorModalProps) {
+export function StatusEditorModal({ status, isNewStatus, onSave, onClose }: StatusEditorModalProps) {
   const [name, setName] = useState(status.name)
   const [slug, setSlug] = useState(status.slug)
+  const [sourceId, setSourceId] = useState(status.sourceId)
+  const sources = useAllSources()
 
   const canSave = name.trim() !== '' && slug.trim() !== ''
 
@@ -59,12 +63,38 @@ export function StatusEditorModal({ status, onSave, onClose }: StatusEditorModal
         />
       </label>
 
+      {isNewStatus && (
+        <label style={{ display: 'block', marginBottom: 16 }}>
+          <span style={{ fontSize: theme.fontSizes.md, color: '#555' }}>Source</span>
+          <select
+            value={sourceId}
+            onChange={(e) => setSourceId(e.target.value)}
+            style={{
+              display: 'block',
+              width: '100%',
+              marginTop: 4,
+              boxSizing: 'border-box',
+              padding: '8px 10px',
+              border: `1px solid ${theme.colors.border}`,
+              borderRadius: theme.radii.md,
+              fontSize: theme.fontSizes.lg,
+            }}
+          >
+            {sources.map((source) => (
+              <option key={source.id} value={source.id}>
+                {source.id}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: theme.space.sm, marginTop: 20 }}>
         <SecondaryButton onClick={onClose}>
           Cancel
         </SecondaryButton>
         <PrimaryButton
-          onClick={() => onSave({ slug: slug.trim(), name: name.trim(), sourceId: status.sourceId })}
+          onClick={() => onSave({ slug: slug.trim(), name: name.trim(), sourceId })}
           disabled={!canSave}
         >
           Save

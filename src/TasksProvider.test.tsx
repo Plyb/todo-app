@@ -1,13 +1,90 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { IDBFactory } from 'fake-indexeddb'
 import { LexoRank } from 'lexorank'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { TasksProvider } from './TasksProvider'
-import { useTasks, useViews } from './tasks-context'
+import { useTasks, useViews, useStatuses } from './tasks-context'
 import { SELECTED_SOURCE_ID_KEY, setAutoArchiveEnabled, writeCurrentViewId, writeRecentViewIds } from './storage'
 import { ARCHIVE_VIEW_ID } from './synthetic-view-utils'
 import * as db from './db'
+import type { Status } from './types'
+import type { SourceConfiguration, TaskSource } from './sources'
+
+// A second registered source, entirely separate from the real (indexeddb-backed)
+// default source, so cross-source guard tests have a genuinely different source
+// to reject moves/reassignments into. Opt-in per test (otherSourceEnabled) rather
+// than always-on, so every other test in this file still sees the single-source
+// world its comments/assertions (e.g. "createTask source selection") assume.
+// Seeded fresh per TasksProvider mount via otherSourceSeed.
+const OTHER_SOURCE_ID = 'other-source'
+let otherSourceEnabled = false
+let otherSourceSeed: Status[] = []
+
+function createFakeSource(id: string, seed: Status[]): TaskSource {
+  let statuses = seed
+  const notImplemented = (): never => { throw new Error(`fake source "${id}" does not implement this method`) }
+  return {
+    id,
+    loadTaskPageForStatus: async () => ({ tasks: [], hasMore: false }),
+    loadArchivedTaskPage: async () => ({ tasks: [], hasMore: false }),
+    loadTasksByIds: async () => [],
+    createTask: notImplemented,
+    saveTask: notImplemented,
+    updateTaskCompletedAt: notImplemented,
+    updateTaskArchivedAt: notImplemented,
+    updateTaskRank: async () => {},
+    updateTaskName: notImplemented,
+    updateTaskNotes: notImplemented,
+    updateTaskStatus: async () => {},
+    deleteTask: notImplemented,
+    loadStatuses: async () => statuses,
+    createStatus: async (name, slug) => {
+      const created: Status = { name, slug, sourceId: id }
+      statuses = [...statuses, created]
+      return created
+    },
+    updateStatus: async () => {},
+    deleteStatus: async (slug) => { statuses = statuses.filter((s) => s.slug !== slug) },
+    getStatusUsage: async () => ({ taskIds: [], viewIds: [] }),
+    isStatusInUse: async () => false,
+    reassignStatus: notImplemented,
+    loadBlocks: async () => [],
+    loadAllBlocks: async () => [],
+    addBlock: notImplemented,
+    deleteBlock: notImplemented,
+    deleteBlocksByTask: notImplemented,
+    loadSubtaskLinks: async () => [],
+    loadParentLink: async () => undefined,
+    loadAllSubtaskLinks: async () => [],
+    createSubtaskLink: notImplemented,
+    updateSubtaskLinkRank: notImplemented,
+    deleteSubtaskLinksByParent: notImplemented,
+    deleteSubtaskLinksByChild: notImplemented,
+    loadScheduledTransitions: async () => [],
+    addScheduledTransition: notImplemented,
+    deleteScheduledTransition: notImplemented,
+    loadAllDueTransitions: async () => [],
+  }
+}
+
+vi.mock('./sources', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./sources')>()
+  return {
+    ...actual,
+    loadSourceConfigurations: async (): Promise<SourceConfiguration[]> => {
+      const configs = await actual.loadSourceConfigurations()
+      return otherSourceEnabled ? [...configs, { kind: 'indexeddb', id: OTHER_SOURCE_ID }] : configs
+    },
+    buildSourceRegistry: (configs: SourceConfiguration[]): Map<string, TaskSource> =>
+      new Map(
+        configs.map((config) => [
+          config.id,
+          config.id === OTHER_SOURCE_ID ? createFakeSource(OTHER_SOURCE_ID, otherSourceSeed) : actual.buildSource(config),
+        ]),
+      ),
+  }
+})
 
 // Fresh indexedDB + localStorage per test so view state (seeded one-view-per-status
 // on migration, see db/client.ts's migrateAddViews) and persisted currentViewId/
@@ -15,6 +92,8 @@ import * as db from './db'
 beforeEach(() => {
   globalThis.indexedDB = new IDBFactory()
   localStorage.clear()
+  otherSourceEnabled = false
+  otherSourceSeed = []
 })
 
 function renderViews() {
@@ -25,6 +104,11 @@ function renderViews() {
 function renderTasks() {
   const wrapper = ({ children }: { children: ReactNode }) => <TasksProvider>{children}</TasksProvider>
   return renderHook(() => useTasks(), { wrapper })
+}
+
+function renderTasksAndStatuses() {
+  const wrapper = ({ children }: { children: ReactNode }) => <TasksProvider>{children}</TasksProvider>
+  return renderHook(() => ({ ...useTasks(), ...useStatuses() }), { wrapper })
 }
 
 describe('deleteView navigation', () => {
@@ -375,5 +459,54 @@ describe('lazy section pagination (issue #249)', () => {
     // tasks of their own in this shared db) to check their relative order.
     const orderedIds = result.current.tasks.map((t) => t.id).filter((id) => id === olderArchived.id || id === newerArchived.id)
     expect(orderedIds).toEqual([newerArchived.id, olderArchived.id])
+  })
+})
+
+describe('createStatus source selection (issue #261)', () => {
+  it('creates the new status in the source passed by the caller, not always the default source', async () => {
+    otherSourceEnabled = true
+    const { result } = renderTasksAndStatuses()
+    await waitFor(() => expect(result.current.statuses.length).toBeGreaterThan(0))
+
+    await act(async () => {
+      await result.current.createStatus('Custom Other', 'custom-other', OTHER_SOURCE_ID)
+    })
+
+    expect(result.current.statuses).toContainEqual({ name: 'Custom Other', slug: 'custom-other', sourceId: OTHER_SOURCE_ID })
+    // Confirms it never landed in the real (indexeddb) source's own store.
+    const persisted = await db.loadStatuses()
+    expect(persisted.some((s) => s.slug === 'custom-other')).toBe(false)
+  })
+})
+
+describe('cross-source status guards (issue #261)', () => {
+  it('rejects reassigning a status to a status backed by a different source', async () => {
+    otherSourceEnabled = true
+    otherSourceSeed = [{ name: 'Other Status', slug: 'other-status', sourceId: OTHER_SOURCE_ID }]
+    const { result } = renderTasksAndStatuses()
+    await waitFor(() => expect(result.current.statuses.some((s) => s.slug === 'other-status')).toBe(true))
+
+    await expect(act(async () => {
+      await result.current.reassignAndDeleteStatus('backlog', 'other-status')
+    })).rejects.toThrow()
+
+    // The guard fires before any mutation - 'backlog' must still be intact.
+    expect(result.current.statuses.some((s) => s.slug === 'backlog')).toBe(true)
+  })
+
+  it('rejects setting a task to a status backed by a different source', async () => {
+    otherSourceEnabled = true
+    otherSourceSeed = [{ name: 'Other Status', slug: 'other-status', sourceId: OTHER_SOURCE_ID }]
+    const { result } = renderTasksAndStatuses()
+    act(() => result.current.requestTaskPage('today'))
+    await waitFor(() => expect(result.current.tasks.length).toBeGreaterThan(0))
+
+    const task = result.current.tasks.find((t) => t.statusSlug === 'today')!
+
+    await expect(act(async () => {
+      await result.current.setStatus(task.id, 'other-status')
+    })).rejects.toThrow()
+
+    expect(result.current.tasks.find((t) => t.id === task.id)!.statusSlug).toBe('today')
   })
 })
