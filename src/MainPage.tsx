@@ -7,12 +7,13 @@ import { NewTaskInputField } from './NewTaskInputField'
 import { rankAtInsertIndex } from './rank-utils'
 import { QuickSelectPanel } from './QuickSelectPanel'
 import { ViewModal } from './ViewModal'
+import { SourceModal } from './SourceModal'
 import { theme } from './theme'
 import { useOverscrollGesture } from './useOverscrollGesture'
-import { useTasks, useStatuses, useViews, useAllSources } from './tasks-context'
+import { useTasks, useStatuses, useViews, useAllSources, useDefaultSource } from './tasks-context'
 import { loadAcrossSources } from './sources/source-utils'
 import { OverscrollIndicator } from './OverscrollIndicator'
-import { VIEW_SELECTOR_VISIBILITY_KEY } from './storage'
+import { VIEW_SELECTOR_VISIBILITY_KEY, SELECTED_SOURCE_ID_KEY, useLocalStorageSetting } from './storage'
 import { ARCHIVE_VIEW_ID, isUserDefinedView } from './synthetic-view-utils'
 import {
   archivedTasksOf,
@@ -116,10 +117,13 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
   const { statuses } = useStatuses()
   const { views, currentViewId, recentViewIds, openView } = useViews()
   const allSources = useAllSources()
+  const defaultSource = useDefaultSource()
+  const [selectedSourceId, setSelectedSourceId] = useLocalStorageSetting<string>(SELECTED_SOURCE_ID_KEY)
   const [newTaskInput, setNewTaskInput] = useState<NewTaskInput | null>(null)
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null)
   const [modalTaskId, setModalTaskId] = useState<number | null>(null)
   const [viewModalOpen, setViewModalOpen] = useState(false)
+  const [sourceModalOpen, setSourceModalOpen] = useState(false)
   const [blockingRelationships, setBlockingRelationships] = useState<BlockingRelationship[]>([])
   const [subtaskLinks, setSubtaskLinks] = useState<SubtaskLink[]>([])
 
@@ -133,7 +137,7 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
 
   const inputKeyRef = useRef(0)
 
-  const noModalOpen = selectedTaskId === null && !viewModalOpen && modalTaskId === null
+  const noModalOpen = selectedTaskId === null && !viewModalOpen && !sourceModalOpen && modalTaskId === null
   const { pullDistance, isTouching } = useOverscrollGesture({
     enabled: noModalOpen,
     threshold: OVERSCROLL_TRIGGER_DISTANCE,
@@ -409,6 +413,15 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
     />
   )
 
+  const sourceModal = sourceModalOpen && (
+    <SourceModal
+      sources={allSources}
+      currentSourceId={selectedSourceId ?? defaultSource.id}
+      onSelect={setSelectedSourceId}
+      onClose={() => setSourceModalOpen(false)}
+    />
+  )
+
   const overscrollPct = Math.min(1, pullDistance / OVERSCROLL_TRIGGER_DISTANCE)
   // "Armed" means releasing right now would open the view selector - full pie alone
   // isn't enough, since a bounce-back after the finger already lifted can still read
@@ -438,6 +451,7 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
           onReorder={handleReorder}
           insertSlot={insertSlot}
           insertButton={{ onRequestInsert: openInput }}
+          onFabLongPress={() => setSourceModalOpen(true)}
           {...sharedListProps}
         />
       )}
@@ -446,6 +460,7 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
 
       {overscrollIndicator}
       {viewModal}
+      {sourceModal}
       {relatedTaskModal}
     </main>
   )

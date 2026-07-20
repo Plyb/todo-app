@@ -46,6 +46,12 @@ export function setAutoArchiveEnabled(enabled: boolean): void {
 
 export const VIEW_SELECTOR_VISIBILITY_KEY = 'view-selector-button-visibility'
 
+export const SELECTED_SOURCE_ID_KEY = 'selected-source-id'
+
+export function readSelectedSourceId(): string | null {
+  return localStorage.getItem(SELECTED_SOURCE_ID_KEY)
+}
+
 export function useLocalStorageSetting<T extends string>(key: string): [T | null, (value: T | null) => void] {
   const [value, setValue] = useState<T | null>(() => localStorage.getItem(key) as T | null)
   const setAndPersist = (next: T | null) => {

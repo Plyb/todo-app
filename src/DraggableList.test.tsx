@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom/vitest'
 import React from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, render } from '@testing-library/react'
+import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { CollisionPriority } from '@dnd-kit/abstract'
 import { DraggableList } from './DraggableList'
 import { INSERT_BUTTON_ID, LIST_DROPPABLE_ID } from './drag-utils'
@@ -199,5 +199,64 @@ describe('insert button', () => {
     })
 
     expect(onRequestInsert).toHaveBeenCalledWith(0, 1)
+  })
+})
+
+describe('FAB long-press', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  function renderWithLongPress(onFabLongPress: () => void) {
+    return render(
+      <DraggableList
+        sections={[{ header: <h2>Section A</h2>, items: [{ id: 1 }] }]}
+        onReorder={() => {}}
+        renderItem={(item: Item) => <span>Item {item.id}</span>}
+        insertButton={{ onRequestInsert: () => {} }}
+        onFabLongPress={onFabLongPress}
+      />
+    )
+  }
+
+  it('fires after the pointer holds still on the FAB past the long-press duration', () => {
+    vi.useFakeTimers()
+    const onFabLongPress = vi.fn()
+    const { container } = renderWithLongPress(onFabLongPress)
+    const button = container.querySelector('button[aria-label="Add task"]')!
+
+    fireEvent.pointerDown(button, { clientX: 100, clientY: 100 })
+    vi.advanceTimersByTime(500)
+
+    expect(onFabLongPress).toHaveBeenCalledTimes(1)
+  })
+
+  // Regression for "long-press without dragging": a press that travels past
+  // the same 8px distance that activates a real FAB drag must not also open
+  // the source picker.
+  it('does not fire when the pointer travels past the 8px drag activation threshold first', () => {
+    vi.useFakeTimers()
+    const onFabLongPress = vi.fn()
+    const { container } = renderWithLongPress(onFabLongPress)
+    const button = container.querySelector('button[aria-label="Add task"]')!
+
+    fireEvent.pointerDown(button, { clientX: 100, clientY: 100 })
+    fireEvent.pointerMove(button, { clientX: 110, clientY: 100 })
+    vi.advanceTimersByTime(500)
+
+    expect(onFabLongPress).not.toHaveBeenCalled()
+  })
+
+  it('does not fire when the pointer is released before the long-press duration elapses', () => {
+    vi.useFakeTimers()
+    const onFabLongPress = vi.fn()
+    const { container } = renderWithLongPress(onFabLongPress)
+    const button = container.querySelector('button[aria-label="Add task"]')!
+
+    fireEvent.pointerDown(button, { clientX: 100, clientY: 100 })
+    fireEvent.pointerUp(button, { clientX: 100, clientY: 100 })
+    vi.advanceTimersByTime(500)
+
+    expect(onFabLongPress).not.toHaveBeenCalled()
   })
 })

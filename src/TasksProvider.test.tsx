@@ -5,7 +5,7 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { TasksProvider } from './TasksProvider'
 import { useTasks, useViews } from './tasks-context'
-import { setAutoArchiveEnabled, writeCurrentViewId, writeRecentViewIds } from './storage'
+import { SELECTED_SOURCE_ID_KEY, setAutoArchiveEnabled, writeCurrentViewId, writeRecentViewIds } from './storage'
 import { ARCHIVE_VIEW_ID } from './synthetic-view-utils'
 import * as db from './db'
 
@@ -161,6 +161,43 @@ describe('setStatus rank', () => {
 
     const backlogRanks = result.current.tasks.filter((t) => t.statusSlug === 'backlog').map((t) => t.rank)
     expect(new Set(backlogRanks).size).toBe(backlogRanks.length)
+  })
+})
+
+describe('createTask source selection (issue #255)', () => {
+  it('creates the task in the persisted source id when it names a registered source', async () => {
+    localStorage.setItem(SELECTED_SOURCE_ID_KEY, 'indexeddb')
+
+    const { result } = renderTasks()
+    await act(async () => {
+      await result.current.createTask('Into selected source', '0', 'issue255-source-selection')
+    })
+
+    expect(result.current.tasks.find((t) => t.name === 'Into selected source')?.sourceId).toBe('indexeddb')
+  })
+
+  // Only one source (indexeddb) is registered today, so this can't yet prove a
+  // *second* source is skipped - it proves the fallback path doesn't throw and
+  // still lands the task in defaultSource, which is what matters once a second
+  // source exists (see issues #10/#11).
+  it('falls back to the default source when the persisted id is not a registered source', async () => {
+    localStorage.setItem(SELECTED_SOURCE_ID_KEY, 'not-a-registered-source')
+
+    const { result } = renderTasks()
+    await act(async () => {
+      await result.current.createTask('Into fallback source', '0', 'issue255-source-selection')
+    })
+
+    expect(result.current.tasks.find((t) => t.name === 'Into fallback source')?.sourceId).toBe('indexeddb')
+  })
+
+  it('falls back to the default source when nothing is persisted', async () => {
+    const { result } = renderTasks()
+    await act(async () => {
+      await result.current.createTask('No selection made', '0', 'issue255-source-selection')
+    })
+
+    expect(result.current.tasks.find((t) => t.name === 'No selection made')?.sourceId).toBe('indexeddb')
   })
 })
 

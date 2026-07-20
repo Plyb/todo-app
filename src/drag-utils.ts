@@ -41,6 +41,10 @@ type ExpandedRow = {
   content: ReactNode
 }
 
+// Shared with DraggableInsertButton's long-press detection, so a press that
+// travels far enough to activate a real drag also cancels the long-press timer.
+export const DRAG_ACTIVATION_PX = 8
+
 export const INSERT_BUTTON_ID = 'insert-button' as const
 
 // The wrapping <ul>, registered as a plain droppable so a drag released in the

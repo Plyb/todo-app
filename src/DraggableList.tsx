@@ -9,13 +9,13 @@ import {
   resolveCommit,
   resolveInsertTarget,
   resolveEndDrop,
+  DRAG_ACTIVATION_PX,
   INSERT_BUTTON_ID,
   LIST_DROPPABLE_ID,
   type Row,
 } from './drag-utils'
 import { DraggableInsertButton, FabDragPreview, FAB_SIZE } from './DraggableInsertButton'
 
-const DRAG_ACTIVATION_PX = 8
 const TOUCH_DRAG_DELAY_MS = 400
 const TOUCH_DRAG_TOLERANCE_PX = 8
 // 1.5x the FAB's own radius gives a comfortable dead zone around its resting corner.
@@ -75,6 +75,7 @@ type DraggableListProps<T extends { id: number }> = {
   insertSlot?: { index: number; sectionIndex: number; content: React.ReactNode }
   expandedSlot?: { afterItemId: number; content: React.ReactNode }
   insertButton?: { onRequestInsert: (sectionIndex: number, insertIndex: number) => void }
+  onFabLongPress?: () => void
   onDragStart?: () => void
   onDragEnd?: () => void
 }
@@ -86,6 +87,7 @@ function ListRow<T extends { id: number }>({
   itemStyle,
   onItemClick,
   onTapInsert,
+  onFabLongPress,
   fabShowPlaceholder,
 }: {
   row: Row<T>
@@ -94,6 +96,7 @@ function ListRow<T extends { id: number }>({
   itemStyle?: (item: T) => React.CSSProperties
   onItemClick?: (id: number) => void
   onTapInsert?: () => void
+  onFabLongPress?: () => void
   fabShowPlaceholder?: boolean
 }) {
   const isInsertButton = row.kind === 'insert-button'
@@ -127,6 +130,7 @@ function ListRow<T extends { id: number }>({
           isDragging={isDragging}
           showPlaceholder={fabShowPlaceholder}
           onTap={onTapInsert}
+          onLongPress={onFabLongPress}
         />
       )
 
@@ -248,6 +252,7 @@ export function DraggableList<T extends { id: number }>({
   insertSlot,
   expandedSlot,
   insertButton,
+  onFabLongPress,
   onDragStart,
   onDragEnd,
 }: DraggableListProps<T>) {
@@ -358,6 +363,7 @@ export function DraggableList<T extends { id: number }>({
             itemStyle={itemStyle}
             onItemClick={onItemClick}
             onTapInsert={() => insertButton?.onRequestInsert(0, 0)}
+            onFabLongPress={onFabLongPress}
             fabShowPlaceholder={isFabDragging && !fabInDeadZone}
           />
         ))}

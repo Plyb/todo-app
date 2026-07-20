@@ -1,9 +1,14 @@
-import React from 'react'
+import React, { useEffect, useRef } from 'react'
 import { theme, fabPlaceholder } from './theme'
+import { DRAG_ACTIVATION_PX } from './drag-utils'
 
 export const FAB_BOTTOM = 24
 export const FAB_RIGHT = 24
 export const FAB_SIZE = 56
+
+// How long the pointer has to stay within the drag activation threshold
+// before a press counts as a long-press.
+const LONG_PRESS_MS = 500
 
 export function FabGlyph() {
   return <span style={{ fontSize: 28, lineHeight: 1 }}>+</span>
@@ -56,6 +61,10 @@ type DraggableInsertButtonProps = {
   // caused a one-frame placeholder flash when releasing inside the dead zone.
   showPlaceholder?: boolean
   onTap?: () => void
+  // Fires when the pointer holds still (within DRAG_ACTIVATION_PX) for
+  // LONG_PRESS_MS. Distinct from a drag, which is the same press traveling
+  // past that threshold instead of dwelling.
+  onLongPress?: () => void
 }
 
 // The FAB, folded into the same DragDropProvider as task drags as a real
@@ -70,7 +79,48 @@ export function DraggableInsertButton({
   isDragging,
   showPlaceholder,
   onTap,
+  onLongPress,
 }: DraggableInsertButtonProps) {
+  // Where the current press started, so a move can be measured against the
+  // same DRAG_ACTIVATION_PX distance dnd-kit uses to activate a real drag.
+  const pressOrigin = useRef<{ x: number; y: number } | null>(null)
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function clearLongPressTimer() {
+    if (longPressTimer.current !== null) {
+      clearTimeout(longPressTimer.current)
+      longPressTimer.current = null
+    }
+  }
+
+  // Unmounting mid-press never happens in practice (the button is always
+  // rendered, see below), but this guards against a pending timer firing
+  // after teardown regardless.
+  useEffect(() => clearLongPressTimer, [])
+
+  function handlePointerDown(e: React.PointerEvent) {
+    pressOrigin.current = { x: e.clientX, y: e.clientY }
+    clearLongPressTimer()
+    longPressTimer.current = setTimeout(() => {
+      longPressTimer.current = null
+      onLongPress?.()
+    }, LONG_PRESS_MS)
+  }
+
+  // Moving past the same threshold that activates a real drag means this
+  // press is a drag, not a long-press - cancel the timer so both can't fire.
+  function handlePointerMove(e: React.PointerEvent) {
+    const origin = pressOrigin.current
+    if (!origin) return
+    const traveled = Math.hypot(e.clientX - origin.x, e.clientY - origin.y)
+    if (traveled >= DRAG_ACTIVATION_PX) clearLongPressTimer()
+  }
+
+  function handlePointerEnd() {
+    clearLongPressTimer()
+    pressOrigin.current = null
+  }
+
   // The <li> (the sortable source/row) and the fixed-corner button are ALWAYS
   // rendered so the button never unmounts - unmounting it on drag start made
   // it blink out of existence for a frame around the drop. While dragging, the
@@ -100,6 +150,10 @@ export function DraggableInsertButton({
         // tracking - so onClick only fires on a genuine tap. onTap inserts at
         // the top of the first section (onRequestInsert(0, 0)).
         onClick={onTap}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerEnd}
+        onPointerCancel={handlePointerEnd}
         style={{
           ...fabCircleStyle,
           position: 'fixed',
