@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { BlockingRelationship, SubtaskLink, Task, ViewSelectorVisibility } from './types'
+import type { Task, ViewSelectorVisibility } from './types'
 import { DraggableList } from './DraggableList'
 import { ArchiveView } from './ArchiveView'
 import { LoadMoreSentinel } from './LoadMoreSentinel'
@@ -11,7 +11,6 @@ import { SourceModal } from './SourceModal'
 import { theme } from './theme'
 import { useOverscrollGesture } from './useOverscrollGesture'
 import { useTasks, useStatuses, useViews, useAllSources, useDefaultSource } from './tasks-context'
-import { loadAcrossSources } from './sources/source-utils'
 import { OverscrollIndicator } from './OverscrollIndicator'
 import { VIEW_SELECTOR_VISIBILITY_KEY, SELECTED_SOURCE_ID_KEY, useLocalStorageSetting } from './storage'
 import { ARCHIVE_VIEW_ID, isUserDefinedView } from './synthetic-view-utils'
@@ -78,7 +77,7 @@ function ViewSelectorButton({ viewName, onClick }: { viewName: string; onClick: 
   )
 }
 
-export function TaskRow({ task, onDoneChange, showIndicator, isBlocked, parentTaskName }: { task: Task; onDoneChange: (done: boolean) => void; showIndicator?: boolean; isBlocked: boolean; parentTaskName?: string }) {
+export function TaskRow({ task, onDoneChange, showIndicator, isBlocked, parentTaskName }: { task: Task; onDoneChange: (done: boolean) => void; showIndicator?: boolean; isBlocked?: boolean; parentTaskName?: string }) {
   return (
     <>
       <input
@@ -124,16 +123,6 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
   const [modalTaskId, setModalTaskId] = useState<number | null>(null)
   const [viewModalOpen, setViewModalOpen] = useState(false)
   const [sourceModalOpen, setSourceModalOpen] = useState(false)
-  const [blockingRelationships, setBlockingRelationships] = useState<BlockingRelationship[]>([])
-  const [subtaskLinks, setSubtaskLinks] = useState<SubtaskLink[]>([])
-
-  useEffect(() => {
-    // Blocks/subtasks are loaded across every source rather than lazily per
-    // task; scoping this to just what's needed (in step with the pagination
-    // added for tasks) is tracked as a follow-up (see issue #9).
-    loadAcrossSources(allSources, (s) => s.loadAllBlocks()).then(setBlockingRelationships)
-    loadAcrossSources(allSources, (s) => s.loadAllSubtaskLinks()).then(setSubtaskLinks)
-  }, [allSources])
 
   const inputKeyRef = useRef(0)
 
@@ -177,19 +166,6 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
   const archiveFooter = archivedPaging.isLoading || archivedPaging.hasMore
     ? <LoadMoreSentinel isLoading={archivedPaging.isLoading} onVisible={() => requestTaskPageRef.current(ARCHIVE_VIEW_ID)} />
     : undefined // TODO: this is duplicated below for standard pages. maybe put in shared prop list
-
-  const parentTaskNameByChildId = useMemo(
-    () =>
-      new Map(
-        subtaskLinks
-          .map((link) => {
-            const parentTask = tasks.find((t) => t.id === link.parentTaskId)
-            return parentTask ? [link.childTaskId, parentTask.name] as const : undefined
-          })
-          .filter((entry): entry is [number, string] => entry !== undefined)
-      ),
-    [subtaskLinks, tasks]
-  )
 
   const sections = useMemo(
     () =>
@@ -275,8 +251,12 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
         onAfterDelete()
       },
       onOpenTask: (id: number) => setModalTaskId(id),
-      onBlockingRelationshipAdded: () => loadAcrossSources(allSources, (s) => s.loadAllBlocks()).then(setBlockingRelationships),
-      onSubtaskLinkAdded: () => loadAcrossSources(allSources, (s) => s.loadAllSubtaskLinks()).then(setSubtaskLinks),
+      // The panel already reloads its own task-scoped relationships/subtasks
+      // after an add (see RelatedTasksSection/ParentSection/SubtasksSection),
+      // so there's nothing left for MainPage to refresh here - it no longer
+      // keeps a global, eagerly-loaded copy of this data (see issue #260).
+      onBlockingRelationshipAdded: () => {},
+      onSubtaskLinkAdded: () => {},
     }
   }
 
@@ -345,13 +325,16 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
     }
   }
 
+  // isBlocked/parentTaskName previously came from a full-table scan across every
+  // source on mount; showing them list-wide without that eager load would mean
+  // fetching relationship data for tasks whose panel was never opened, so this
+  // list-level indicator is dropped as a deliberate compromise (see issue #260).
+  // The panel itself still surfaces both, scoped to the task it's open for.
   const renderTaskRow = (task: Task) => (
     <TaskRow
       task={task}
       onDoneChange={(done) => setDone(task.id, done)}
       showIndicator={autoTransitionedTaskIds.has(task.id)}
-      isBlocked={blockingRelationships.some((r) => r.toTaskId === task.id)}
-      parentTaskName={parentTaskNameByChildId.get(task.id)}
     />
   )
 
