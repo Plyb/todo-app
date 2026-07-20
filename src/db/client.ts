@@ -20,7 +20,7 @@ export function withDefault<T>(schema: z.ZodType<T>, fallback: () => T): z.ZodTy
 }
 
 export const DB_NAME = 'todo-app'
-export const DB_VERSION = 11
+export const DB_VERSION = 12
 export const TASKS_STORE = 'tasks'
 export const STATUSES_STORE = 'statuses'
 export const VIEWS_STORE = 'views'
@@ -76,13 +76,32 @@ function abortTransaction(transaction: IDBTransaction): void {
   }
 }
 
-export function iterateCursor(store: IDBObjectStore, visit: (cursor: IDBCursorWithValue) => void): Promise<void> {
+export type IterateCursorOptions = {
+  index?: string
+  range?: IDBKeyRange
+  direction?: IDBCursorDirection
+  shouldBreak?: (cursor: IDBCursorWithValue) => boolean
+}
+
+export function iterateCursor(
+  store: IDBObjectStore,
+  visit: (cursor: IDBCursorWithValue) => void,
+  options: IterateCursorOptions = {},
+): Promise<void> {
+  const { index, range, direction, shouldBreak } = options
+  const source: IDBObjectStore | IDBIndex = index ? store.index(index) : store
+
   return new Promise((resolve, reject) => {
-    const cursorRequest = store.openCursor()
+    const cursorRequest = source.openCursor(range, direction)
 
     cursorRequest.onsuccess = () => {
       const cursor = cursorRequest.result
       if (!cursor) {
+        resolve()
+        return
+      }
+
+      if (shouldBreak?.(cursor)) {
         resolve()
         return
       }
@@ -188,6 +207,21 @@ async function migrateAddViews(transaction: IDBTransaction): Promise<void> {
   }
 }
 
+function migrateAddTaskIndices(transaction: IDBTransaction): void {
+  const store = transaction.objectStore(TASKS_STORE)
+
+  // Ascending by rank within a statusSlug, matching byRank.
+  if (!store.indexNames.contains('by_status_rank')) {
+    store.createIndex('by_status_rank', ['statusSlug', 'rank'], { unique: false })
+  }
+
+  // archivedAt is null for active tasks - an invalid IndexedDB key - so this
+  // index naturally excludes them. Read descending (most-recent-first).
+  if (!store.indexNames.contains('by_archivedAt')) {
+    store.createIndex('by_archivedAt', 'archivedAt', { unique: false })
+  }
+}
+
 async function migrateViewsToIdKeyPath(db: IDBDatabase, transaction: IDBTransaction): Promise<void> {
   const oldStore = transaction.objectStore(VIEWS_STORE)
   const legacyViews = (await requestToPromise(oldStore.getAll())) as { slug: string; name: string; statusSlugs: string[] }[]
@@ -268,6 +302,10 @@ const MIGRATION_STEPS: MigrationStep[] = [
   {
     version: 11,
     migrate: (db, transaction) => migrateViewsToIdKeyPath(db, transaction),
+  },
+  {
+    version: 12,
+    migrate: (_db, transaction) => migrateAddTaskIndices(transaction),
   },
 ]
 

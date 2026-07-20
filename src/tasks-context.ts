@@ -1,10 +1,13 @@
 import { createContext, useContext } from 'react'
 import type { Task, Status, View, UserDefinedView } from './types'
 import type { StatusUsage } from './db'
+import type { SectionPagingInfo } from './view-utils'
 
 export type TasksApi = {
   tasks: Task[]
   autoTransitionedTaskIds: Set<number>
+  sectionPaging: Record<string, SectionPagingInfo>
+  requestTaskPage: (sectionKey: string) => void
   setDone: (id: number, done: boolean) => void
   setArchived: (id: number, archived: boolean) => void
   moveTask: (id: number, toStatusSlug: string, newRank: string, changeStatus: boolean) => void
@@ -49,6 +52,8 @@ export function useTasks(): TasksApi {
   return {
     tasks: c.tasks,
     autoTransitionedTaskIds: c.autoTransitionedTaskIds,
+    sectionPaging: c.sectionPaging,
+    requestTaskPage: c.requestTaskPage,
     setDone: c.setDone,
     setArchived: c.setArchived,
     moveTask: c.moveTask,

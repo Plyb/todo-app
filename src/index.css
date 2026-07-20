@@ -22,3 +22,9 @@ textarea,
   -webkit-user-select: text;
   -webkit-touch-callout: default;
 }
+
+@keyframes load-more-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

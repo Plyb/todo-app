@@ -4,19 +4,32 @@ import type { Task, Status, View, UserDefinedView } from './types'
 import type { StatusUsage } from './db'
 import { byRank, rankAtInsertIndex } from './rank-utils'
 import { isArchiveEligible } from './archive-utils'
-import { ARCHIVE_VIEW } from './synthetic-view-utils'
+import { ARCHIVE_VIEW, ARCHIVE_VIEW_ID } from './synthetic-view-utils'
 import { needsRerank, rerankStatusGroup } from './rerank-utils'
 import { readCurrentViewId, writeCurrentViewId, readRecentViewIds, writeRecentViewIds, getAutoArchiveEnabled } from './storage'
 import { TasksContext, type TasksContextValue } from './tasks-context'
+import { DEFAULT_SECTION_PAGING, type SectionPagingInfo } from './view-utils'
 
 function getTodayDateString(): string {
   return new Date().toISOString().slice(0, 10)
+}
+
+// Adds tasks the caller doesn't already hold, without disturbing any that are
+// already in memory (e.g. an in-flight optimistic edit for an id also present
+// in a freshly-fetched page).
+function mergeTasks(existing: Task[], fetched: Task[]): Task[] {
+  const knownIds = new Set(existing.map((t) => t.id))
+  const additions = fetched.filter((t) => !knownIds.has(t.id))
+  return additions.length > 0 ? [...existing, ...additions] : existing
 }
 
 export function TasksProvider({ children }: { children: ReactNode }) {
   const [tasks, setTasks] = useState<Task[]>([])
   const [statuses, setStatuses] = useState<Status[]>([])
   const [views, setViews] = useState<View[]>([])
+  const [sectionPaging, setSectionPaging] = useState<Record<string, SectionPagingInfo>>({})
+  const sectionPagingRef = useRef(sectionPaging)
+  sectionPagingRef.current = sectionPaging
   const [currentViewId, setCurrentViewId] = useState<string>(
     () => readCurrentViewId() ?? ''
   )
@@ -63,21 +76,25 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     const dueTransitions = await db.loadAllDueTransitions()
     if (dueTransitions.length === 0) return currentTasks
 
+    const existingTasks = await db.loadTasksByIds(dueTransitions.map((t) => t.taskId))
+    const existingIds = new Set(existingTasks.map((t) => t.id))
+
     const transitionedIds = new Set<number>()
     await Promise.all(
-      dueTransitions.map(async (transition) => {
-        const hasTask = currentTasks.some((t) => t.id === transition.taskId)
-        if (hasTask) {
+      dueTransitions
+        .filter((transition) => existingIds.has(transition.taskId))
+        .map(async (transition) => {
           await db.updateTaskStatus(transition.taskId, transition.statusSlug)
           await db.deleteScheduledTransition(transition.id)
           transitionedIds.add(transition.taskId)
-        }
-      })
+        })
     )
 
     if (transitionedIds.size === 0) return currentTasks
 
     setAutoTransitionedTaskIds((prev) => new Set([...prev, ...transitionedIds]))
+    // Tasks not already in currentTasks pick up their new statusSlug from the
+    // db directly once they're paginated in, so only in-memory tasks need patching here.
     return currentTasks.map((t) => {
       const transition = dueTransitions.find((tr) => tr.taskId === t.id && transitionedIds.has(tr.taskId))
       return transition ? { ...t, statusSlug: transition.statusSlug } : t
@@ -88,10 +105,10 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     let isMounted = true
 
     async function init() {
-      const [loadedTasks, loadedStatuses, loadedViews] = await Promise.all([db.loadTasks(), db.loadStatuses(), db.loadViews()])
+      const [loadedStatuses, loadedViews] = await Promise.all([db.loadStatuses(), db.loadViews()])
       if (!isMounted) return
 
-      const updatedTasks = await applyDueTransitions(loadedTasks)
+      const updatedTasks = await applyDueTransitions([])
       if (!isMounted) return
 
       // The archive view is a UI-layer construct, not a persisted one - it's
@@ -141,7 +158,11 @@ export function TasksProvider({ children }: { children: ReactNode }) {
   }, [applyDueTransitions, tasks])
 
   async function refetchAll(): Promise<void> {
-    const [newStatuses, newTasks, newViews] = await Promise.all([db.loadStatuses(), db.loadTasks(), db.loadViews()])
+    const [newStatuses, newTasks, newViews] = await Promise.all([
+      db.loadStatuses(),
+      db.loadTasksByIds(tasks.map((t) => t.id)),
+      db.loadViews(),
+    ])
     setStatuses(newStatuses)
     setTasks(newTasks)
     setViews([...newViews, ARCHIVE_VIEW])
@@ -149,7 +170,7 @@ export function TasksProvider({ children }: { children: ReactNode }) {
 
   // Refetch (not roll back) on write failure: rolling back to a stale snapshot could erase a concurrently-succeeded edit.
   async function refetchTasks(): Promise<void> {
-    setTasks(await db.loadTasks())
+    setTasks(await db.loadTasksByIds(tasks.map((t) => t.id)))
   }
 
   function setDone(id: number, done: boolean): void {
@@ -289,6 +310,34 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  /**
+   * 
+   * @param sectionKey either a section slug or a synthetic view id (such as __archive__)
+   * @returns 
+   */
+  function requestTaskPage(sectionKey: string): void {
+    const current = sectionPagingRef.current[sectionKey] ?? DEFAULT_SECTION_PAGING
+    if (current.isLoading || !current.hasMore) return
+
+    setSectionPaging(prev => ({ ...prev, [sectionKey]: { ...current, isLoading: true } }))
+
+    const pageRequest = sectionKey === ARCHIVE_VIEW_ID
+      ? db.loadArchivedTaskPage(current.offset)
+      : db.loadTaskPageForStatus(sectionKey, current.offset)
+
+    pageRequest
+      .then((page) => {
+        setTasks(prev => mergeTasks(prev, page.tasks))
+        setSectionPaging(prev => ({
+          ...prev,
+          [sectionKey]: { offset: current.offset + page.tasks.length, isLoading: false, hasMore: page.hasMore },
+        }))
+      })
+      .catch(() => {
+        setSectionPaging(prev => ({ ...prev, [sectionKey]: { ...current, isLoading: false } }))
+      })
+  }
+
   const value: TasksContextValue = {
     tasks,
     statuses,
@@ -296,6 +345,8 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     currentViewId,
     recentViewIds,
     autoTransitionedTaskIds,
+    sectionPaging,
+    requestTaskPage,
     setDone,
     setArchived,
     moveTask,

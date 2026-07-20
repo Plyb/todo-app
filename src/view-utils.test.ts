@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { displayedTasksForView, sectionTasksForStatus, sortArchivedTasks, type ArchivedTask } from './view-utils'
+import { displayedTasksForView, sectionTasksForStatus, sortArchivedTasks } from './view-utils'
+import { type ArchivedTask } from './types';
 import type { Task, UserDefinedView } from './types'
 
 function makeTask(overrides: Partial<Task> & { id: number; name: string; statusSlug: string }): Task {

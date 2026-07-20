@@ -100,6 +100,29 @@ describe('buildRows', () => {
 
     expect(rows.some((r) => r.kind === 'insert-button')).toBe(false)
   })
+
+  it('appends a section-footer row (issue #249 loading placeholder) after a section\'s items', () => {
+    const withFooters = [
+      { header: 'A', items: [{ id: 1 }, { id: 2 }], footer: 'A-footer' },
+      { header: 'B', items: [{ id: 3 }] },
+    ]
+    const rows = buildRows(withFooters)
+
+    expect(rows.map((r) => [r.kind, r.id])).toEqual([
+      ['header', 'header:0'],
+      ['item', 1],
+      ['item', 2],
+      ['section-footer', 'footer:0'],
+      ['header', 'header:1'],
+      ['item', 3],
+    ])
+  })
+
+  it('omits the section-footer row for a section with no footer', () => {
+    const rows = buildRows(sections())
+
+    expect(rows.some((r) => r.kind === 'section-footer')).toBe(false)
+  })
 })
 
 describe('locateRow', () => {
@@ -227,6 +250,33 @@ describe('resolveCommit', () => {
       // slot is where the expanded item sits, so item1 lands after item2 and
       // item3, at insert index 2.
       expect(resolveCommit(rows(), 1, 4)).toEqual({ toSectionIndex: 0, insertIndex: 2 })
+    })
+  })
+
+  describe('with a section-footer row present', () => {
+    // A loading placeholder (issue #249) sits after a section's items, before
+    // the next header - it must not count as an item or confuse section
+    // membership. Positions: header:0=0, item1=1, item2=2, footer:0=3, header:1=4, item3=5.
+    function rows(): Row<Item>[] {
+      return [
+        { kind: 'header', id: 'header:0', sectionIndex: 0, content: null },
+        { kind: 'item', id: 1, item: { id: 1 } },
+        { kind: 'item', id: 2, item: { id: 2 } },
+        { kind: 'section-footer', id: 'footer:0', content: null },
+        { kind: 'header', id: 'header:1', sectionIndex: 1, content: null },
+        { kind: 'item', id: 3, item: { id: 3 } },
+      ]
+    }
+
+    it('does not count the footer as an item when landing just past it', () => {
+      // item3 (id 3, at row index 5) settling at index 3.
+      expect(resolveCommit(rows(), 3, 3)).toEqual({ toSectionIndex: 0, insertIndex: 2 })
+    })
+
+    it('still attributes a landing spot right after the footer to section 0', () => {
+      // Settling at index 3 (the footer's own slot) with item2 moving there:
+      // item2 already sits right before the footer, so this is a no-op.
+      expect(resolveCommit(rows(), 2, 3)).toBeNull()
     })
   })
 })

@@ -45,7 +45,7 @@ vi.mock('@dnd-kit/react/sortable', async (importOriginal) => {
 afterEach(cleanup)
 
 type Item = { id: number }
-type TestSection = { header?: React.ReactNode; items: Item[] }
+type TestSection = { header?: React.ReactNode; items: Item[]; footer?: React.ReactNode }
 
 function renderList(sections: TestSection[]) {
   return render(
@@ -101,6 +101,22 @@ describe('DraggableList flat row rendering', () => {
 
     const rows = Array.from(container.querySelectorAll('li'))
     expect(rows.map((li) => li.textContent)).toEqual(['Section A', 'Item 1', 'Panel'])
+  })
+
+  it('renders a section footer (issue #249 loading placeholder) after that section\'s items', () => {
+    const { container } = renderList([
+      { header: <h2>Section A</h2>, items: [{ id: 1 }], footer: <span>Loading A...</span> },
+      { header: <h2>Section B</h2>, items: [{ id: 2 }] },
+    ])
+
+    const rows = Array.from(container.querySelectorAll('li'))
+    expect(rows.map((li) => li.textContent)).toEqual(['Section A', 'Item 1', 'Loading A...', 'Section B', 'Item 2'])
+  })
+
+  it('omits the section footer row for a section with no footer', () => {
+    const { container } = renderList([{ header: <h2>Section A</h2>, items: [{ id: 1 }] }])
+
+    expect(Array.from(container.querySelectorAll('li')).map((li) => li.textContent)).toEqual(['Section A', 'Item 1'])
   })
 
   it('registers the list container with the lowest collision priority so a hovered item wins the tie-break near the container center', () => {

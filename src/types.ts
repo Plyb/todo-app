@@ -38,3 +38,8 @@ export type ScheduledTransition = {
 }
 
 export type ViewSelectorVisibility = 'always-show' | 'always-hide' | null
+
+export type ArchivedTask = Task & { archivedAt: string} 
+export function isArchivedTask(task: Task): task is ArchivedTask {
+  return task.archivedAt !== null
+}

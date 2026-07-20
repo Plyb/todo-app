@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { IDBFactory } from 'fake-indexeddb'
+import { IDBFactory, IDBCursor } from 'fake-indexeddb'
 import { LexoRank } from 'lexorank'
 
 const DB_NAME = 'todo-app'
@@ -172,7 +172,7 @@ describe('runner abort-on-error (rolls back a partial multi-store write)', () =>
 })
 
 describe('migration replay', () => {
-  it('upgrades a v1 database (tasks store only, no completedAt/archivedAt/rank/statusSlug/notes) to v11', async () => {
+  it('upgrades a v1 database (tasks store only, no completedAt/archivedAt/rank/statusSlug/notes) to v12', async () => {
     // Simulate a database left behind by the very first shipped schema: only
     // the tasks store exists, and records predate the completedAt/archivedAt/rank/statusSlug/notes fields.
     await new Promise<void>((resolve, reject) => {
@@ -208,14 +208,18 @@ describe('migration replay', () => {
     const views = await db.loadViews()
     expect(views.map((v) => v.id).sort()).toEqual(['backlog', 'today', 'today-extra'])
 
-    // Confirm the upgrade chain actually landed on version 11 and won't fire another upgrade.
+    // Confirm the upgrade chain actually landed on version 12 and won't fire another upgrade.
     await new Promise<void>((resolve, reject) => {
       const verifyRequest = indexedDB.open(DB_NAME)
-      verifyRequest.onupgradeneeded = () => reject(new Error('unexpected upgrade needed; migration did not reach version 11'))
+      verifyRequest.onupgradeneeded = () => reject(new Error('unexpected upgrade needed; migration did not reach version 12'))
       verifyRequest.onsuccess = () => {
-        expect(verifyRequest.result.version).toBe(11)
-        verifyRequest.result.close()
-        resolve()
+        try {
+          expect(verifyRequest.result.version).toBe(12)
+          verifyRequest.result.close()
+          resolve()
+        } catch (error) {
+          reject(error)
+        }
       }
       verifyRequest.onerror = () => reject(verifyRequest.error)
     })
@@ -277,6 +281,124 @@ describe('migration replay', () => {
       }
       verifyRequest.onerror = () => reject(verifyRequest.error)
     })
+  })
+
+  it('adds by_status_rank and by_archivedAt indices to an existing v11 database without losing data (issue #249 follow-up)', async () => {
+    // Simulate a v11 database (all stores present, tasks store not yet indexed).
+    await new Promise<void>((resolve, reject) => {
+      const request = indexedDB.open(DB_NAME, 11)
+      request.onupgradeneeded = () => {
+        const upgradeDb = request.result
+        upgradeDb.createObjectStore('tasks', { autoIncrement: true })
+        upgradeDb.createObjectStore('statuses', { keyPath: 'slug' })
+        upgradeDb.createObjectStore('views', { keyPath: 'id' })
+        upgradeDb.createObjectStore('scheduledTransitions', { autoIncrement: true })
+        upgradeDb.createObjectStore('relationships', { autoIncrement: true })
+        upgradeDb.createObjectStore('subtasks', { keyPath: 'id', autoIncrement: true })
+      }
+      request.onsuccess = () => {
+        const legacyDb = request.result
+        const tx = legacyDb.transaction('tasks', 'readwrite')
+        tx.objectStore('tasks').add({ name: 'Pre-existing active', completedAt: null, archivedAt: null, rank: 'a', statusSlug: 'today', notes: '' })
+        tx.objectStore('tasks').add({ name: 'Pre-existing archived', completedAt: '2026-01-01', archivedAt: '2026-01-02', rank: 'b', statusSlug: 'today', notes: '' })
+        tx.oncomplete = () => {
+          legacyDb.close()
+          resolve()
+        }
+        tx.onerror = () => reject(tx.error)
+      }
+      request.onerror = () => reject(request.error)
+    })
+
+    vi.resetModules()
+    const db = await import('./db')
+
+    // The pre-existing records must be readable through both new indexed paths.
+    const statusPage = await db.loadTaskPageForStatus('today', 0)
+    expect(statusPage.tasks.map((t) => t.name)).toEqual(['Pre-existing active'])
+
+    const archivedPage = await db.loadArchivedTaskPage(0)
+    expect(archivedPage.tasks.map((t) => t.name)).toEqual(['Pre-existing archived'])
+
+    await new Promise<void>((resolve, reject) => {
+      const verifyRequest = indexedDB.open(DB_NAME)
+      verifyRequest.onsuccess = () => {
+        const openedDb = verifyRequest.result
+        const tx = openedDb.transaction('tasks', 'readonly')
+        const indexNames = Array.from(tx.objectStore('tasks').indexNames)
+        expect(indexNames).toEqual(expect.arrayContaining(['by_status_rank', 'by_archivedAt']))
+        openedDb.close()
+        resolve()
+      }
+      verifyRequest.onerror = () => reject(verifyRequest.error)
+    })
+  })
+})
+
+describe('loadTaskPageForStatus / loadArchivedTaskPage bounded reads (issue #249 follow-up)', () => {
+  // Counts every cursor step (continue + advance) taken while `run` is in
+  // flight, so a test can assert a page load touches roughly a page's worth
+  // of records - not the whole store - without depending on wall-clock
+  // timing. Reads mock.calls.length before mockRestore(), which (like
+  // mockReset()) clears recorded calls as part of restoring the original implementation.
+  async function countCursorSteps(run: () => Promise<void>): Promise<number> {
+    const continueSpy = vi.spyOn(IDBCursor.prototype, 'continue')
+    const advanceSpy = vi.spyOn(IDBCursor.prototype, 'advance')
+    await run()
+    const count = continueSpy.mock.calls.length + advanceSpy.mock.calls.length
+    continueSpy.mockRestore()
+    advanceSpy.mockRestore()
+    return count
+  }
+
+  it('loadTaskPageForStatus only walks the requested page, not every task in every other status', async () => {
+    const db = await import('./db')
+    // A large, unrelated status the page request must never touch the bulk of.
+    let noise = LexoRank.middle()
+    for (let i = 0; i < 500; i++) {
+      await db.createTask(`Noise ${i}`, noise.toString(), 'noise-status')
+      noise = noise.genNext()
+    }
+    let rank = LexoRank.middle()
+    for (let i = 0; i < 5; i++) {
+      await db.createTask(`Today ${i}`, rank.toString(), 'today')
+      rank = rank.genNext()
+    }
+
+    let page: Awaited<ReturnType<typeof db.loadTaskPageForStatus>> | undefined
+    const steps = await countCursorSteps(async () => {
+      page = await db.loadTaskPageForStatus('today', 0, db.TASK_PAGE_SIZE)
+    })
+
+    expect(page!.tasks).toHaveLength(5)
+    // Also asserts > 0 - a spy that silently failed to intercept anything
+    // (e.g. pointed at the wrong cursor class) would otherwise pass vacuously.
+    expect(steps).toBeGreaterThan(0)
+    // A full-store scan would need 505+ cursor steps; a bounded, indexed read
+    // of just the 5-task 'today' range needs only a handful.
+    expect(steps).toBeLessThan(20)
+  })
+
+  it('loadArchivedTaskPage only walks up to the requested page, not every task in the store', async () => {
+    const db = await import('./db')
+    let noise = LexoRank.middle()
+    for (let i = 0; i < 500; i++) {
+      await db.createTask(`Noise ${i}`, noise.toString(), 'noise-status')
+      noise = noise.genNext()
+    }
+    for (let i = 0; i < 5; i++) {
+      const task = await db.createTask(`Archived ${i}`, LexoRank.middle().toString(), 'today')
+      await db.updateTaskArchivedAt(task.id, `2026-02-${String(i + 1).padStart(2, '0')}`)
+    }
+
+    let page: Awaited<ReturnType<typeof db.loadArchivedTaskPage>> | undefined
+    const steps = await countCursorSteps(async () => {
+      page = await db.loadArchivedTaskPage(0, db.TASK_PAGE_SIZE)
+    })
+
+    expect(page!.tasks).toHaveLength(5)
+    expect(steps).toBeGreaterThan(0)
+    expect(steps).toBeLessThan(20)
   })
 })
 
@@ -451,5 +573,110 @@ describe('remaining-store read validation (Zod schema at the read boundary)', ()
     await putRaw('scheduledTransitions', { taskId: task.id, date: 20200101, statusSlug: 'backlog' })
 
     await expect(db.loadAllDueTransitions()).rejects.toThrow()
+  })
+})
+
+describe('loadTaskPageForStatus (issue #249 lazy pagination)', () => {
+  it('defaults to a page of TASK_PAGE_SIZE tasks, sorted by rank, and reports more are available', async () => {
+    const db = await import('./db')
+    let rank = LexoRank.middle()
+    const created = []
+    for (let i = 0; i < db.TASK_PAGE_SIZE + 5; i++) {
+      created.push(await db.createTask(`Task ${i}`, rank.toString(), 'today'))
+      rank = rank.genNext()
+    }
+
+    const page = await db.loadTaskPageForStatus('today', 0)
+
+    expect(page.tasks).toHaveLength(db.TASK_PAGE_SIZE)
+    expect(page.tasks.map((t) => t.id)).toEqual(created.slice(0, db.TASK_PAGE_SIZE).map((t) => t.id))
+    expect(page.hasMore).toBe(true)
+  })
+
+  it('returns the remainder with hasMore false once the offset reaches the end', async () => {
+    const db = await import('./db')
+    let rank = LexoRank.middle()
+    const created = []
+    for (let i = 0; i < db.TASK_PAGE_SIZE + 5; i++) {
+      created.push(await db.createTask(`Task ${i}`, rank.toString(), 'today'))
+      rank = rank.genNext()
+    }
+
+    const page = await db.loadTaskPageForStatus('today', db.TASK_PAGE_SIZE)
+
+    expect(page.tasks.map((t) => t.id)).toEqual(created.slice(db.TASK_PAGE_SIZE).map((t) => t.id))
+    expect(page.hasMore).toBe(false)
+  })
+
+  it('excludes tasks from other statuses and archived tasks from both the count and the page', async () => {
+    const db = await import('./db')
+    const inToday = await db.createTask('In today', LexoRank.middle().toString(), 'today')
+    await db.createTask('In backlog', LexoRank.middle().genNext().toString(), 'backlog')
+    const archived = await db.createTask('Archived but today status', LexoRank.middle().genNext().genNext().toString(), 'today')
+    await db.updateTaskArchivedAt(archived.id, '2020-01-01')
+
+    const page = await db.loadTaskPageForStatus('today', 0)
+
+    expect(page.tasks.map((t) => t.id)).toEqual([inToday.id])
+    expect(page.hasMore).toBe(false)
+  })
+})
+
+describe('loadArchivedTaskPage (issue #249 lazy pagination, archived view sort order)', () => {
+  it('sorts by archivedAt (most recent first) rather than rank, defaulting to a page of TASK_PAGE_SIZE', async () => {
+    const db = await import('./db')
+    const older = await db.createTask('Older', LexoRank.middle().toString(), 'today')
+    await db.updateTaskArchivedAt(older.id, '2026-01-01')
+    const newer = await db.createTask('Newer', LexoRank.middle().genNext().toString(), 'today')
+    await db.updateTaskArchivedAt(newer.id, '2026-06-01')
+
+    const page = await db.loadArchivedTaskPage(0)
+
+    expect(page.tasks.map((t) => t.id)).toEqual([newer.id, older.id])
+    expect(page.hasMore).toBe(false)
+  })
+
+  it('paginates at TASK_PAGE_SIZE and reports hasMore for a second page', async () => {
+    const db = await import('./db')
+    const created = []
+    for (let i = 0; i < db.TASK_PAGE_SIZE + 3; i++) {
+      const task = await db.createTask(`Archived ${i}`, LexoRank.middle().toString(), 'today')
+      // Distinct archivedAt per task, ascending, so sort order (most-recent-first) is well-defined.
+      await db.updateTaskArchivedAt(task.id, `2026-01-${String(i + 1).padStart(2, '0')}`)
+      created.push(task)
+    }
+    const mostRecentFirst = [...created].reverse()
+
+    const firstPage = await db.loadArchivedTaskPage(0)
+    expect(firstPage.tasks.map((t) => t.id)).toEqual(mostRecentFirst.slice(0, db.TASK_PAGE_SIZE).map((t) => t.id))
+    expect(firstPage.hasMore).toBe(true)
+
+    const secondPage = await db.loadArchivedTaskPage(db.TASK_PAGE_SIZE)
+    expect(secondPage.tasks.map((t) => t.id)).toEqual(mostRecentFirst.slice(db.TASK_PAGE_SIZE).map((t) => t.id))
+    expect(secondPage.hasMore).toBe(false)
+  })
+
+  it('excludes non-archived tasks', async () => {
+    const db = await import('./db')
+    await db.createTask('Not archived', LexoRank.middle().toString(), 'today')
+    const archived = await db.createTask('Archived', LexoRank.middle().genNext().toString(), 'today')
+    await db.updateTaskArchivedAt(archived.id, '2026-01-01')
+
+    const page = await db.loadArchivedTaskPage(0)
+
+    expect(page.tasks.map((t) => t.id)).toEqual([archived.id])
+  })
+})
+
+describe('loadTasksByIds (targeted point-lookup re-read)', () => {
+  it('returns only the requested tasks, ignoring ids that do not exist', async () => {
+    const db = await import('./db')
+    const a = await db.createTask('A', LexoRank.middle().toString(), 'backlog')
+    const b = await db.createTask('B', LexoRank.middle().genNext().toString(), 'backlog')
+    await db.createTask('C (not requested)', LexoRank.middle().genNext().genNext().toString(), 'backlog')
+
+    const tasks = await db.loadTasksByIds([a.id, b.id, 999])
+
+    expect(tasks.map((t) => t.id).sort((x, y) => x - y)).toEqual([a.id, b.id].sort((x, y) => x - y))
   })
 })

@@ -63,6 +63,7 @@ const fabNoDropAnimation = Feedback.configure({ dropAnimation: null })
 type Section<T> = {
   header?: React.ReactNode
   items: T[]
+  footer?: React.ReactNode
 }
 
 type DraggableListProps<T extends { id: number }> = {
@@ -130,6 +131,7 @@ function ListRow<T extends { id: number }>({
       )
 
     case 'header':
+    case 'section-footer':
       return (
         <li ref={ref} style={{ listStyle: 'none' }}>
           {row.content}
