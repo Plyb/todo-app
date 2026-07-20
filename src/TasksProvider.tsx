@@ -27,9 +27,6 @@ export function TasksProvider({ children }: { children: ReactNode }) {
   const [tasks, setTasks] = useState<Task[]>([])
   const [statuses, setStatuses] = useState<Status[]>([])
   const [views, setViews] = useState<View[]>([])
-  // Lazy per-section loading (issue #249): each section (a status's tasks, or
-  // the archived view) is paged in TASK_PAGE_SIZE at a time rather than
-  // loading every task up front. Keyed by statusSlug, or ARCHIVE_VIEW_SLUG.
   const [sectionPaging, setSectionPaging] = useState<Record<string, SectionPagingInfo>>({})
   const sectionPagingRef = useRef(sectionPaging)
   sectionPagingRef.current = sectionPaging
@@ -79,9 +76,6 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     const dueTransitions = await db.loadAllDueTransitions()
     if (dueTransitions.length === 0) return currentTasks
 
-    // A point-lookup existence check rather than scanning currentTasks: tasks
-    // aren't all loaded up front anymore, so a due task may not be in memory
-    // yet even though it still exists in the db.
     const existingTasks = await db.loadTasksByIds(dueTransitions.map((t) => t.taskId))
     const existingIds = new Set(existingTasks.map((t) => t.id))
 
@@ -111,11 +105,6 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     let isMounted = true
 
     async function init() {
-      // Tasks are no longer loaded in bulk at startup (issue #249) - each
-      // view's sections page themselves in via requestTaskPage once they're
-      // actually shown. applyDueTransitions still runs against whatever's
-      // already in memory (nothing, this early), since it checks the db
-      // directly for each due transition's task rather than scanning this list.
       const [loadedStatuses, loadedViews] = await Promise.all([db.loadStatuses(), db.loadViews()])
       if (!isMounted) return
 
@@ -169,10 +158,6 @@ export function TasksProvider({ children }: { children: ReactNode }) {
   }, [applyDueTransitions, tasks])
 
   async function refetchAll(): Promise<void> {
-    // Only re-reads the tasks already in memory (not the whole store) - a
-    // status rename/delete can bulk-reassign many tasks' statusSlug, but any
-    // task not yet paginated in will already read the post-reassign value
-    // whenever its section does load.
     const [newStatuses, newTasks, newViews] = await Promise.all([
       db.loadStatuses(),
       db.loadTasksByIds(tasks.map((t) => t.id)),
@@ -184,7 +169,6 @@ export function TasksProvider({ children }: { children: ReactNode }) {
   }
 
   // Refetch (not roll back) on write failure: rolling back to a stale snapshot could erase a concurrently-succeeded edit.
-  // Only resyncs the tasks already in memory - see refetchAll.
   async function refetchTasks(): Promise<void> {
     setTasks(await db.loadTasksByIds(tasks.map((t) => t.id)))
   }
@@ -326,11 +310,6 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  // Loads a section's next page (its first, if never requested) - a no-op
-  // while that section is already loading or has no more pages. `sectionKey`
-  // is a statusSlug for a normal view's section, or ARCHIVE_VIEW_SLUG for the
-  // archived view. Safe to call redundantly (e.g. from both a mount effect
-  // and a scroll-triggered sentinel).
   function requestTaskPage(sectionKey: string): void {
     const current = sectionPagingRef.current[sectionKey] ?? DEFAULT_SECTION_PAGING
     if (current.isLoading || !current.hasMore) return

@@ -22,8 +22,6 @@ import type { Task } from '../types'
 import { deleteBlocksByTaskInStore } from './blocks'
 import { deleteSubtaskLinksByChildInStore, deleteSubtaskLinksByParentInStore } from './subtasks'
 
-// The default page size for lazily-loaded sections (issue #249): a section
-// loads this many tasks initially, then this many more per scroll-triggered page.
 export const TASK_PAGE_SIZE = 20
 
 export type TaskPage<T> = { tasks: T[]; hasMore: boolean }
@@ -44,10 +42,7 @@ async function readTasks(): Promise<Task[]> {
   })
 }
 
-// Cursor pass (rather than getAllWithIds's bulk getAll+getAllKeys) so a
-// section's paginated read only materializes the tasks it actually needs,
-// not every record in the store.
-async function readMatchingTasks(matches: (task: Task) => boolean): Promise<Task[]> {
+async function readMatchingTasks(matches: (task: Task) => boolean): Promise<Task[]> { // TODO: this looks like it's still loading all tasks every time?
   return withStore(TASKS_STORE, 'readonly', async (store) => {
     const results: Task[] = []
     await iterateCursor(store, (cursor) => {
@@ -62,9 +57,6 @@ function paginate<T>(sorted: T[], offset: number, limit: number): TaskPage<T> {
   return { tasks: sorted.slice(offset, offset + limit), hasMore: offset + limit < sorted.length }
 }
 
-// A brand-new database has no tasks at all; every reader (the full load and
-// every paginated section read) needs the demo tasks seeded before it runs,
-// not just the old startup-only loadTasks path.
 async function ensureSeeded(): Promise<void> {
   const count = await withStore(TASKS_STORE, 'readonly', (store) => requestToPromise(store.count()))
   if (count > 0) return
@@ -73,7 +65,7 @@ async function ensureSeeded(): Promise<void> {
   await seedDemoTasks(db)
 }
 
-export async function loadTasks(): Promise<Task[]> {
+export async function loadTasks(): Promise<Task[]> { // TODO: looks unused
   await ensureSeeded()
   const tasks = await readTasks()
   tasks.sort(byRank)
@@ -93,21 +85,16 @@ export async function loadTaskPageForStatus(
   return paginate(matching, offset, limit)
 }
 
-// The archived view's page, sorted by sortArchivedTasks (archivedAt, then
-// completedAt, then name) rather than byRank - the archive view's own order.
-export async function loadArchivedTaskPage(
+export async function loadArchivedTaskPage( // TODO: might be worth factoring out the shared between this and the previous func
   offset: number,
   limit: number = TASK_PAGE_SIZE
 ): Promise<TaskPage<ArchivedTask>> {
   await ensureSeeded()
-  const matching = await readMatchingTasks((t) => t.archivedAt !== null)
+  const matching = await readMatchingTasks((t) => t.archivedAt !== null) // TODO: I think there's a guard for this
   const sorted = sortArchivedTasks(archivedTasksOf(matching))
   return paginate(sorted, offset, limit)
 }
 
-// Targeted point-lookup re-read, used to resync only the tasks a caller
-// already holds in memory (e.g. after a failed write, or to check a scheduled
-// transition's task still exists) without loading the rest of the store.
 export async function loadTasksByIds(ids: number[]): Promise<Task[]> {
   return withStore(TASKS_STORE, 'readonly', async (store) => {
     const results: Task[] = []

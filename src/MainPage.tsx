@@ -138,9 +138,6 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
 
   const currentView = views.find((v) => v.slug === currentViewSlug)
 
-  // requestTaskPage is re-created every render (it closes over the latest
-  // sectionPaging/tasks state); the ref lets the priming effect below always
-  // call the current version without re-subscribing on every render.
   const requestTaskPageRef = useRef(requestTaskPage)
   requestTaskPageRef.current = requestTaskPage
 
@@ -152,7 +149,7 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
     if (isUserDefinedView(currentView)) {
       currentView.statusSlugs.forEach((slug) => requestTaskPageRef.current(slug))
     } else {
-      requestTaskPageRef.current(ARCHIVE_VIEW_SLUG)
+      requestTaskPageRef.current(ARCHIVE_VIEW_SLUG) // TODO: slug -> id (might want to indicate this isn't actually a slug somehow in the function)
     }
   }, [currentView])
 
@@ -171,7 +168,7 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
   const archivedPaging = sectionPaging[ARCHIVE_VIEW_SLUG] ?? DEFAULT_SECTION_PAGING
   const archiveFooter = archivedPaging.isLoading || archivedPaging.hasMore
     ? <LoadMoreSentinel isLoading={archivedPaging.isLoading} onVisible={() => requestTaskPageRef.current(ARCHIVE_VIEW_SLUG)} />
-    : undefined
+    : undefined // TODO: this is duplicated below for standard pages. maybe put in shared prop list
 
   const parentTaskNameByChildId = useMemo(
     () =>

@@ -15,9 +15,6 @@ type HeaderRow = {
   content: ReactNode
 }
 
-// A section's lazy-loading footer (spinner or scroll sentinel, see
-// LoadMoreSentinel) - non-draggable and excluded from item-index math exactly
-// like a header, just anchored to the end of its section instead of the start.
 type SectionFooterRow = {
   kind: 'section-footer'
   id: `footer:${number}`

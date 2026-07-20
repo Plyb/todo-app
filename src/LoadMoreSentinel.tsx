@@ -6,10 +6,6 @@ type LoadMoreSentinelProps = {
   onVisible: () => void
 }
 
-// Renders at the bottom of a paginated section: an invisible sentinel that
-// requests the next page once it scrolls into view, replaced by a spinner
-// while that page is in flight. Unmounted entirely by the caller once a
-// section has no more pages, so there's nothing left to observe or show.
 export function LoadMoreSentinel({ isLoading, onVisible }: LoadMoreSentinelProps) {
   const onVisibleRef = useRef(onVisible)
   onVisibleRef.current = onVisible
