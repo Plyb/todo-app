@@ -63,9 +63,6 @@ export async function loadTasks(): Promise<Task[]> {
   return tasks
 }
 
-// One status section's page, sorted the same way as the rest of the app
-// (byRank), reading only this status's own share of TASKS_STORE via the
-// by_status_rank index rather than every task in the store.
 export async function loadTaskPageForStatus(
   statusSlug: string,
   offset: number,
@@ -73,10 +70,6 @@ export async function loadTaskPageForStatus(
 ): Promise<TaskPage<Task>> {
   await ensureSeeded()
   return withStore(TASKS_STORE, 'readonly', async (store) => {
-    // The standard IndexedDB idiom for "every compound key starting with
-    // statusSlug": a shorter array key sorts before any longer one sharing the
-    // same prefix, and '\uffff' sorts after any realistic rank string, so this
-    // bounds the walk to exactly this status's rank-ordered range.
     const range = IDBKeyRange.bound([statusSlug, ''], [statusSlug, '\uffff'])
     const gathered: Task[] = []
     let skipped = 0
@@ -85,11 +78,8 @@ export async function loadTaskPageForStatus(
       store,
       (cursor) => {
         const task = parseTaskAt(cursor)
-        // Archived tasks keep their statusSlug (see isArchiveEligible/setArchived),
-        // so they still fall in this range - skipped here rather than via the
-        // index itself, since a compound key can't exclude them without also
-        // excluding every active task (their archivedAt is null, an invalid
-        // IDB key, which invalidates the whole compound key if included in it).
+        // archivedAt is null here too, so a compound key can't use it to
+        // exclude archived tasks without excluding every active one as well.
         if (task.archivedAt !== null) return
         if (skipped < offset) {
           skipped++
@@ -110,9 +100,6 @@ export async function loadTaskPageForStatus(
   })
 }
 
-// The archived view's page, sorted by sortArchivedTasks (archivedAt desc, then
-// completedAt desc, then name) via the by_archivedAt index, which already
-// contains only archived tasks (see migrateAddTaskIndices) in archivedAt order.
 export async function loadArchivedTaskPage(
   offset: number,
   limit: number = TASK_PAGE_SIZE
@@ -121,12 +108,13 @@ export async function loadArchivedTaskPage(
   return withStore(TASKS_STORE, 'readonly', async (store) => {
     const needed = offset + limit + 1
     const gathered: ArchivedTask[] = []
-    // Same-archivedAt tasks (e.g. a batch the daily auto-archive scan
-    // archives together) need every one of that day's records present to
-    // tie-break correctly by completedAt/name - so they're buffered per
-    // same-key cohort and only flushed (sorted, counted toward the page) once
-    // a *different* archivedAt confirms the cohort is complete, rather than
-    // sorting the whole archived set up front.
+    // Same-archivedAt tasks are buffered per cohort and only flushed (sorted
+    // by completedAt/name, counted toward the page) once a different
+    // archivedAt confirms the cohort is complete. This can't just be a
+    // compound [archivedAt, completedAt, name] index instead: completedAt is
+    // null for a manually-archived-but-incomplete task (see setArchived), and
+    // IndexedDB drops a record entirely when any component of a compound key
+    // is invalid - so that index would silently omit such tasks.
     let cohort: ArchivedTask[] = []
     let cohortKey: string | null = null
 

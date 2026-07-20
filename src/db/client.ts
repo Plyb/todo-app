@@ -77,15 +77,9 @@ function abortTransaction(transaction: IDBTransaction): void {
 }
 
 export type IterateCursorOptions = {
-  // Opens the cursor on this index instead of the store directly, so a range
-  // walk can be bounded to (and ordered by) an index rather than every record.
   index?: string
   range?: IDBKeyRange
   direction?: IDBCursorDirection
-  // Checked before each record would be visited; returning true stops the
-  // walk immediately (without visiting or continuing past that record). Lets
-  // a bounded, indexed read stop as soon as it has what it needs (e.g. a
-  // page's worth) instead of walking the rest of the index/store.
   shouldBreak?: (cursor: IDBCursorWithValue) => boolean
 }
 
@@ -213,25 +207,16 @@ async function migrateAddViews(transaction: IDBTransaction): Promise<void> {
   }
 }
 
-// Indices the paginated section readers (loadTaskPageForStatus,
-// loadArchivedTaskPage - issue #249 follow-up) need to fetch just a page from
-// TASKS_STORE instead of walking every record. Purely additive (createIndex on
-// an already-populated store backfills the index from existing records
-// natively), so no cursor pass of our own is needed here.
 function migrateAddTaskIndices(transaction: IDBTransaction): void {
   const store = transaction.objectStore(TASKS_STORE)
 
-  // Compound key ['statusSlug', 'rank'] matches loadTaskPageForStatus's own
-  // sort order (rank ascending within a statusSlug) via IndexedDB's builtin
-  // string comparison, which agrees with byRank's comparator.
+  // Ascending by rank within a statusSlug, matching byRank.
   if (!store.indexNames.contains('by_status_rank')) {
     store.createIndex('by_status_rank', ['statusSlug', 'rank'], { unique: false })
   }
 
-  // Single-property index: `null` isn't a valid IndexedDB key, so IndexedDB
-  // silently omits every non-archived task (archivedAt: null) from this index
-  // rather than erroring - it ends up containing exactly the archived tasks,
-  // in archivedAt order, matching loadArchivedTaskPage's primary sort key.
+  // archivedAt is null for active tasks - an invalid IndexedDB key - so this
+  // index naturally excludes them. Read descending (most-recent-first).
   if (!store.indexNames.contains('by_archivedAt')) {
     store.createIndex('by_archivedAt', 'archivedAt', { unique: false })
   }
