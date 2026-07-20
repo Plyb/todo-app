@@ -20,7 +20,7 @@ export function withDefault<T>(schema: z.ZodType<T>, fallback: () => T): z.ZodTy
 }
 
 export const DB_NAME = 'todo-app'
-export const DB_VERSION = 11
+export const DB_VERSION = 12
 export const TASKS_STORE = 'tasks'
 export const STATUSES_STORE = 'statuses'
 export const VIEWS_STORE = 'views'
@@ -76,13 +76,38 @@ function abortTransaction(transaction: IDBTransaction): void {
   }
 }
 
-export function iterateCursor(store: IDBObjectStore, visit: (cursor: IDBCursorWithValue) => void): Promise<void> {
+export type IterateCursorOptions = {
+  // Opens the cursor on this index instead of the store directly, so a range
+  // walk can be bounded to (and ordered by) an index rather than every record.
+  index?: string
+  range?: IDBKeyRange
+  direction?: IDBCursorDirection
+  // Checked before each record would be visited; returning true stops the
+  // walk immediately (without visiting or continuing past that record). Lets
+  // a bounded, indexed read stop as soon as it has what it needs (e.g. a
+  // page's worth) instead of walking the rest of the index/store.
+  shouldBreak?: (cursor: IDBCursorWithValue) => boolean
+}
+
+export function iterateCursor(
+  store: IDBObjectStore,
+  visit: (cursor: IDBCursorWithValue) => void,
+  options: IterateCursorOptions = {},
+): Promise<void> {
+  const { index, range, direction, shouldBreak } = options
+  const source: IDBObjectStore | IDBIndex = index ? store.index(index) : store
+
   return new Promise((resolve, reject) => {
-    const cursorRequest = store.openCursor()
+    const cursorRequest = source.openCursor(range, direction)
 
     cursorRequest.onsuccess = () => {
       const cursor = cursorRequest.result
       if (!cursor) {
+        resolve()
+        return
+      }
+
+      if (shouldBreak?.(cursor)) {
         resolve()
         return
       }
@@ -188,6 +213,30 @@ async function migrateAddViews(transaction: IDBTransaction): Promise<void> {
   }
 }
 
+// Indices the paginated section readers (loadTaskPageForStatus,
+// loadArchivedTaskPage - issue #249 follow-up) need to fetch just a page from
+// TASKS_STORE instead of walking every record. Purely additive (createIndex on
+// an already-populated store backfills the index from existing records
+// natively), so no cursor pass of our own is needed here.
+function migrateAddTaskIndices(transaction: IDBTransaction): void {
+  const store = transaction.objectStore(TASKS_STORE)
+
+  // Compound key ['statusSlug', 'rank'] matches loadTaskPageForStatus's own
+  // sort order (rank ascending within a statusSlug) via IndexedDB's builtin
+  // string comparison, which agrees with byRank's comparator.
+  if (!store.indexNames.contains('by_status_rank')) {
+    store.createIndex('by_status_rank', ['statusSlug', 'rank'], { unique: false })
+  }
+
+  // Single-property index: `null` isn't a valid IndexedDB key, so IndexedDB
+  // silently omits every non-archived task (archivedAt: null) from this index
+  // rather than erroring - it ends up containing exactly the archived tasks,
+  // in archivedAt order, matching loadArchivedTaskPage's primary sort key.
+  if (!store.indexNames.contains('by_archivedAt')) {
+    store.createIndex('by_archivedAt', 'archivedAt', { unique: false })
+  }
+}
+
 async function migrateViewsToIdKeyPath(db: IDBDatabase, transaction: IDBTransaction): Promise<void> {
   const oldStore = transaction.objectStore(VIEWS_STORE)
   const legacyViews = (await requestToPromise(oldStore.getAll())) as { slug: string; name: string; statusSlugs: string[] }[]
@@ -268,6 +317,10 @@ const MIGRATION_STEPS: MigrationStep[] = [
   {
     version: 11,
     migrate: (db, transaction) => migrateViewsToIdKeyPath(db, transaction),
+  },
+  {
+    version: 12,
+    migrate: (_db, transaction) => migrateAddTaskIndices(transaction),
   },
 ]
 

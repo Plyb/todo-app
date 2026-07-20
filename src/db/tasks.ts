@@ -2,7 +2,7 @@ import { LexoRank } from 'lexorank'
 import { z } from 'zod'
 import { byRank } from '../rank-utils'
 import { sortArchivedTasks } from '../view-utils'
-import { isArchivedTask, type ArchivedTask } from '../types'
+import type { ArchivedTask } from '../types'
 import {
   RELATIONSHIPS_STORE,
   SUBTASKS_STORE,
@@ -43,19 +43,8 @@ async function readTasks(): Promise<Task[]> {
   })
 }
 
-async function readMatchingTasks<T extends Task>(matches: (task: Task) => task is T): Promise<T[]> { // TODO: this looks like it's still loading all tasks every time?
-  return withStore(TASKS_STORE, 'readonly', async (store) => {
-    const results: T[] = []
-    await iterateCursor(store, (cursor) => {
-      const task = { id: keyToTaskId(cursor.key), ...storedTaskSchema.parse(cursor.value) }
-      if (matches(task)) results.push(task)
-    })
-    return results
-  })
-}
-
-function paginate<T>(sorted: T[], offset: number, limit: number): TaskPage<T> {
-  return { tasks: sorted.slice(offset, offset + limit), hasMore: offset + limit < sorted.length }
+function parseTaskAt(cursor: IDBCursorWithValue): Task {
+  return { id: keyToTaskId(cursor.primaryKey), ...storedTaskSchema.parse(cursor.value) }
 }
 
 async function ensureSeeded(): Promise<void> {
@@ -75,37 +64,100 @@ export async function loadTasks(): Promise<Task[]> {
 }
 
 // One status section's page, sorted the same way as the rest of the app
-// (byRank) - matches sectionTasksForStatus's filtering, just bounded to a page.
+// (byRank), reading only this status's own share of TASKS_STORE via the
+// by_status_rank index rather than every task in the store.
 export async function loadTaskPageForStatus(
   statusSlug: string,
   offset: number,
   limit: number = TASK_PAGE_SIZE
 ): Promise<TaskPage<Task>> {
-  return loadTaskPage(
-    (t): t is Task => t.archivedAt === null && t.statusSlug === statusSlug,
-    tasks => tasks.sort(byRank),
-    offset,
-    limit
-  )
+  await ensureSeeded()
+  return withStore(TASKS_STORE, 'readonly', async (store) => {
+    // The standard IndexedDB idiom for "every compound key starting with
+    // statusSlug": a shorter array key sorts before any longer one sharing the
+    // same prefix, and '\uffff' sorts after any realistic rank string, so this
+    // bounds the walk to exactly this status's rank-ordered range.
+    const range = IDBKeyRange.bound([statusSlug, ''], [statusSlug, '\uffff'])
+    const gathered: Task[] = []
+    let skipped = 0
+
+    await iterateCursor(
+      store,
+      (cursor) => {
+        const task = parseTaskAt(cursor)
+        // Archived tasks keep their statusSlug (see isArchiveEligible/setArchived),
+        // so they still fall in this range - skipped here rather than via the
+        // index itself, since a compound key can't exclude them without also
+        // excluding every active task (their archivedAt is null, an invalid
+        // IDB key, which invalidates the whole compound key if included in it).
+        if (task.archivedAt !== null) return
+        if (skipped < offset) {
+          skipped++
+          return
+        }
+        gathered.push(task)
+      },
+      {
+        index: 'by_status_rank',
+        range,
+        // Stop one record past the page: enough to know whether there's a
+        // next page, without a second query or reading past this range.
+        shouldBreak: () => gathered.length > limit,
+      },
+    )
+
+    return { tasks: gathered.slice(0, limit), hasMore: gathered.length > limit }
+  })
 }
 
+// The archived view's page, sorted by sortArchivedTasks (archivedAt desc, then
+// completedAt desc, then name) via the by_archivedAt index, which already
+// contains only archived tasks (see migrateAddTaskIndices) in archivedAt order.
 export async function loadArchivedTaskPage(
   offset: number,
   limit: number = TASK_PAGE_SIZE
 ): Promise<TaskPage<ArchivedTask>> {
-  return loadTaskPage(isArchivedTask, sortArchivedTasks, offset, limit)
-}
-
-async function loadTaskPage<T extends Task>(
-  filter: (task: Task) => task is T,
-  sort: (tasks: T[]) => T[],
-  offset: number,
-  limit: number = TASK_PAGE_SIZE,
-): Promise<TaskPage<T>> {
   await ensureSeeded()
-  const matching = await readMatchingTasks(filter)
-  const sorted = sort(matching)
-  return paginate(sorted, offset, limit)
+  return withStore(TASKS_STORE, 'readonly', async (store) => {
+    const needed = offset + limit + 1
+    const gathered: ArchivedTask[] = []
+    // Same-archivedAt tasks (e.g. a batch the daily auto-archive scan
+    // archives together) need every one of that day's records present to
+    // tie-break correctly by completedAt/name - so they're buffered per
+    // same-key cohort and only flushed (sorted, counted toward the page) once
+    // a *different* archivedAt confirms the cohort is complete, rather than
+    // sorting the whole archived set up front.
+    let cohort: ArchivedTask[] = []
+    let cohortKey: string | null = null
+
+    function flushCohort(): void {
+      if (cohort.length === 0) return
+      gathered.push(...sortArchivedTasks(cohort))
+      cohort = []
+    }
+
+    await iterateCursor(
+      store,
+      (cursor) => {
+        cohort.push(parseTaskAt(cursor) as ArchivedTask)
+      },
+      {
+        index: 'by_archivedAt',
+        direction: 'prev',
+        shouldBreak: (cursor) => {
+          const nextKey = cursor.key as string
+          if (cohortKey !== null && nextKey !== cohortKey) {
+            flushCohort()
+          }
+          cohortKey = nextKey
+          return gathered.length >= needed
+        },
+      },
+    )
+    flushCohort()
+
+    return { tasks: gathered.slice(offset, offset + limit), hasMore: gathered.length > offset + limit }
+  })
 }
 
 export async function loadTasksByIds(ids: number[]): Promise<Task[]> {
