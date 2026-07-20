@@ -1,7 +1,7 @@
 import { LexoRank } from 'lexorank'
 import { z } from 'zod'
 import { byRank } from '../rank-utils'
-import { archivedTasksOf, sortArchivedTasks } from '../view-utils'
+import { sortArchivedTasks } from '../view-utils'
 import { isArchivedTask, type ArchivedTask } from '../types'
 import {
   RELATIONSHIPS_STORE,
@@ -43,9 +43,9 @@ async function readTasks(): Promise<Task[]> {
   })
 }
 
-async function readMatchingTasks(matches: (task: Task) => boolean): Promise<Task[]> { // TODO: this looks like it's still loading all tasks every time?
+async function readMatchingTasks<T extends Task>(matches: (task: Task) => task is T): Promise<T[]> { // TODO: this looks like it's still loading all tasks every time?
   return withStore(TASKS_STORE, 'readonly', async (store) => {
-    const results: Task[] = []
+    const results: T[] = []
     await iterateCursor(store, (cursor) => {
       const task = { id: keyToTaskId(cursor.key), ...storedTaskSchema.parse(cursor.value) }
       if (matches(task)) results.push(task)
@@ -81,19 +81,30 @@ export async function loadTaskPageForStatus(
   offset: number,
   limit: number = TASK_PAGE_SIZE
 ): Promise<TaskPage<Task>> {
-  await ensureSeeded()
-  const matching = await readMatchingTasks((t) => t.archivedAt === null && t.statusSlug === statusSlug)
-  matching.sort(byRank)
-  return paginate(matching, offset, limit)
+  return loadTaskPage(
+    (t): t is Task => t.archivedAt === null && t.statusSlug === statusSlug,
+    tasks => tasks.sort(byRank),
+    offset,
+    limit
+  )
 }
 
-export async function loadArchivedTaskPage( // TODO: might be worth factoring out the shared between this and the previous func
+export async function loadArchivedTaskPage(
   offset: number,
   limit: number = TASK_PAGE_SIZE
 ): Promise<TaskPage<ArchivedTask>> {
+  return loadTaskPage(isArchivedTask, sortArchivedTasks, offset, limit)
+}
+
+async function loadTaskPage<T extends Task>(
+  filter: (task: Task) => task is T,
+  sort: (tasks: T[]) => T[],
+  offset: number,
+  limit: number = TASK_PAGE_SIZE,
+): Promise<TaskPage<T>> {
   await ensureSeeded()
-  const matching = await readMatchingTasks(isArchivedTask)
-  const sorted = sortArchivedTasks(archivedTasksOf(matching))
+  const matching = await readMatchingTasks(filter)
+  const sorted = sort(matching)
   return paginate(sorted, offset, limit)
 }
 
