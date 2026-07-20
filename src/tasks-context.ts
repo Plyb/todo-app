@@ -104,3 +104,7 @@ export function useDefaultSource(): TaskSource {
 export function useSource(id: string): TaskSource {
   return useTasksContext().getSource(id)
 }
+
+export function useAllSources(): TaskSource[] {
+  return useTasksContext().allSources
+}
