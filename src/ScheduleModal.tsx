@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Task, Status, ScheduledTransition } from './types'
-import { loadScheduledTransitions, addScheduledTransition, deleteScheduledTransition } from './db'
+import { useDefaultSource } from './tasks-context'
 import { theme } from './theme'
 import { Modal } from './ui/Modal'
 import { CloseButton } from './ui/CloseButton'
@@ -18,10 +18,11 @@ export function ScheduleModal({ task, statuses, onClose, onTransitionsChanged }:
   const [showForm, setShowForm] = useState(false)
   const [date, setDate] = useState('')
   const [statusSlug, setStatusSlug] = useState(statuses[0]?.slug ?? '')
+  const source = useDefaultSource()
 
   useEffect(() => {
-    loadScheduledTransitions(task.id).then(setTransitions)
-  }, [task.id])
+    source.loadScheduledTransitions(task.id).then(setTransitions)
+  }, [task.id, source])
 
   const takenDates = new Set(transitions.map((t) => t.date))
   const dateConflict = date !== '' && takenDates.has(date)
@@ -29,7 +30,7 @@ export function ScheduleModal({ task, statuses, onClose, onTransitionsChanged }:
 
   async function handleAdd() {
     if (!canSubmit) return
-    const added = await addScheduledTransition(task.id, date, statusSlug)
+    const added = await source.addScheduledTransition(task.id, date, statusSlug)
     const next = [...transitions, added].sort((a, b) => (a.date < b.date ? -1 : 1))
     setTransitions(next)
     setShowForm(false)
@@ -38,7 +39,7 @@ export function ScheduleModal({ task, statuses, onClose, onTransitionsChanged }:
   }
 
   async function handleDelete(id: number) {
-    await deleteScheduledTransition(id)
+    await source.deleteScheduledTransition(id)
     setTransitions((prev) => prev.filter((t) => t.id !== id))
     onTransitionsChanged()
   }

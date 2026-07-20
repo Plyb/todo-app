@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { Task, Status, SubtaskLink } from '../types'
-import { loadSubtaskLinks } from '../db'
 import { theme } from '../theme'
-import { useTasks } from '../tasks-context'
+import { useTasks, useDefaultSource } from '../tasks-context'
 import { PanelHeader } from './PanelHeader'
 import { DeleteConfirm } from './DeleteConfirm'
 import { ParentSection } from './ParentSection'
@@ -26,6 +25,7 @@ type QuickSelectPanelProps = {
 
 export function QuickSelectPanel({ task, statuses, allTasks, onClose, onChangeStatus, onDelete, onOpenTask, onBlockingRelationshipAdded, onSubtaskLinkAdded }: QuickSelectPanelProps) {
   const { setArchived } = useTasks()
+  const source = useDefaultSource()
   const [backdropReady, setBackdropReady] = useState(false)
   const [expanded, setExpanded] = useState(false)
   const [subtaskLinks, setSubtaskLinks] = useState<SubtaskLink[]>([])
@@ -49,8 +49,8 @@ export function QuickSelectPanel({ task, statuses, allTasks, onClose, onChangeSt
   }, [])
 
   useEffect(() => {
-    loadSubtaskLinks(task.id).then(setSubtaskLinks)
-  }, [task.id])
+    source.loadSubtaskLinks(task.id).then(setSubtaskLinks)
+  }, [task.id, source])
 
   function handleClose() {
     if (archivedDraft !== (task.archivedAt !== null)) {

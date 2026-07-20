@@ -1,7 +1,6 @@
 import { useRef, useState } from 'react'
 import type { Task, SubtaskLink } from '../types'
-import { createSubtaskLink, updateSubtaskLinkRank, loadAllSubtaskLinks } from '../db'
-import { useTasks } from '../tasks-context'
+import { useTasks, useDefaultSource } from '../tasks-context'
 import { LinkExistingTaskModal } from '../LinkExistingTaskModal'
 import { DraggableList } from '../DraggableList'
 import { rankBetween } from '../rank-utils'
@@ -19,6 +18,7 @@ type SubtasksSectionProps = {
 
 export function SubtasksSection({ task, allTasks, subtaskLinks, setSubtaskLinks, onOpenTask, onSubtaskLinkAdded }: SubtasksSectionProps) {
   const { createTask, setDone } = useTasks()
+  const source = useDefaultSource()
   const [newSubtaskName, setNewSubtaskName] = useState('')
   const [showLinkExistingModal, setShowLinkExistingModal] = useState(false)
   const [linkedTaskIds, setLinkedTaskIds] = useState<Set<number>>(new Set())
@@ -33,7 +33,7 @@ export function SubtasksSection({ task, allTasks, subtaskLinks, setSubtaskLinks,
       const lastLink = subtaskLinks[subtaskLinks.length - 1] ?? null
       const linkRank = rankBetween(lastLink, null)
       const newTask = await createTask(trimmed, rankBetween(null, null), task.statusSlug)
-      const link = await createSubtaskLink(task.id, newTask.id, linkRank)
+      const link = await source.createSubtaskLink(task.id, newTask.id, linkRank)
       setSubtaskLinks((prev) => [...prev, link])
       onSubtaskLinkAdded()
       setNewSubtaskName('')
@@ -47,7 +47,7 @@ export function SubtasksSection({ task, allTasks, subtaskLinks, setSubtaskLinks,
     const prev = insertIndex > 0 ? others[insertIndex - 1] : null
     const next = insertIndex < others.length ? others[insertIndex] : null
     const rank = rankBetween(prev, next)
-    updateSubtaskLinkRank(draggedLinkId, rank)
+    source.updateSubtaskLinkRank(draggedLinkId, rank)
     const dragged = subtaskLinks.find((l) => l.id === draggedLinkId)!
     const updated = { ...dragged, rank }
     const reordered = [...others]
@@ -56,7 +56,7 @@ export function SubtasksSection({ task, allTasks, subtaskLinks, setSubtaskLinks,
   }
 
   async function openLinkExistingModal() {
-    const allLinks = await loadAllSubtaskLinks()
+    const allLinks = await source.loadAllSubtaskLinks()
     setLinkedTaskIds(new Set(allLinks.map((l) => l.childTaskId)))
     setShowLinkExistingModal(true)
   }
@@ -64,7 +64,7 @@ export function SubtasksSection({ task, allTasks, subtaskLinks, setSubtaskLinks,
   async function handleLinkExistingTask(selected: Task) {
     const lastLink = subtaskLinks[subtaskLinks.length - 1] ?? null
     const rank = rankBetween(lastLink, null)
-    const link = await createSubtaskLink(task.id, selected.id, rank)
+    const link = await source.createSubtaskLink(task.id, selected.id, rank)
     setSubtaskLinks((prev) => [...prev, link])
     onSubtaskLinkAdded()
     setShowLinkExistingModal(false)

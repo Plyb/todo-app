@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Task, BlockingRelationship } from '../types'
-import { loadBlocks } from '../db'
-import { useTasks } from '../tasks-context'
+import { useTasks, useDefaultSource } from '../tasks-context'
 import { RelationshipModal, RelationshipGroup } from '../RelationshipModal'
 import { theme } from '../theme'
 import { PrimaryButton } from '../ui/Button'
@@ -16,15 +15,16 @@ type RelatedTasksSectionProps = {
 
 export function RelatedTasksSection({ task, allTasks, onOpenTask, onBlockingRelationshipAdded }: RelatedTasksSectionProps) {
   const { setDone } = useTasks()
+  const source = useDefaultSource()
   const [showRelationshipModal, setShowRelationshipModal] = useState(false)
   const [blockingRelationships, setBlockingRelationships] = useState<BlockingRelationship[]>([])
 
   useEffect(() => {
-    loadBlocks(task.id).then(setBlockingRelationships)
-  }, [task.id])
+    source.loadBlocks(task.id).then(setBlockingRelationships)
+  }, [task.id, source])
 
   function reloadRelationships() {
-    loadBlocks(task.id).then(setBlockingRelationships)
+    source.loadBlocks(task.id).then(setBlockingRelationships)
     onBlockingRelationshipAdded()
   }
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Task, Status, ScheduledTransition } from '../types'
-import { loadScheduledTransitions } from '../db'
+import { useDefaultSource } from '../tasks-context'
 import { StatusModal } from '../StatusModal'
 import { ScheduleModal } from '../ScheduleModal'
 import { theme } from '../theme'
@@ -15,10 +15,11 @@ export function StatusScheduleSection({ task, statuses, onChangeStatus }: Status
   const [statusModalOpen, setStatusModalOpen] = useState(false)
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false)
   const [scheduledTransitions, setScheduledTransitions] = useState<ScheduledTransition[]>([])
+  const source = useDefaultSource()
 
   useEffect(() => {
-    loadScheduledTransitions(task.id).then(setScheduledTransitions)
-  }, [task.id])
+    source.loadScheduledTransitions(task.id).then(setScheduledTransitions)
+  }, [task.id, source])
 
   const currentStatus = statuses.find((s) => s.slug === task.statusSlug)
 
@@ -72,7 +73,7 @@ export function StatusScheduleSection({ task, statuses, onChangeStatus }: Status
           task={task}
           statuses={statuses}
           onClose={() => setScheduleModalOpen(false)}
-          onTransitionsChanged={() => loadScheduledTransitions(task.id).then(setScheduledTransitions)}
+          onTransitionsChanged={() => source.loadScheduledTransitions(task.id).then(setScheduledTransitions)}
         />
       )}
     </>

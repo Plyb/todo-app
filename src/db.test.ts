@@ -34,6 +34,36 @@ async function putRaw(storeName: string, value: unknown): Promise<void> {
   })
 }
 
+// Reads every record from a store via raw IndexedDB, for asserting on data the
+// db.ts helpers don't expose a reader for (e.g. the sourceConfigurations store).
+async function getAllRaw<T>(storeName: string): Promise<T[]> {
+  return new Promise<T[]>((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME)
+    request.onsuccess = () => {
+      const rawDb = request.result
+      const tx = rawDb.transaction(storeName, 'readonly')
+      const getAll = tx.objectStore(storeName).getAll()
+      getAll.onsuccess = () => {
+        rawDb.close()
+        resolve(getAll.result as T[])
+      }
+      getAll.onerror = () => reject(getAll.error)
+    }
+    request.onerror = () => reject(request.error)
+  })
+}
+
+describe('sourceConfigurations migration (v13)', () => {
+  it('creates the store and seeds the built-in IndexedDB source configuration', async () => {
+    const db = await import('./db')
+    // Any db call opens the database at DB_VERSION, running the migrations.
+    await db.loadStatuses()
+
+    const configs = await getAllRaw('sourceConfigurations')
+    expect(configs).toEqual([{ kind: 'indexeddb', id: 'indexeddb' }])
+  })
+})
+
 describe('loadStatuses (simple read)', () => {
   it('returns the seeded default statuses on a fresh database', async () => {
     const db = await import('./db')
@@ -172,7 +202,7 @@ describe('runner abort-on-error (rolls back a partial multi-store write)', () =>
 })
 
 describe('migration replay', () => {
-  it('upgrades a v1 database (tasks store only, no completedAt/archivedAt/rank/statusSlug/notes) to v12', async () => {
+  it('upgrades a v1 database (tasks store only, no completedAt/archivedAt/rank/statusSlug/notes) to v13', async () => {
     // Simulate a database left behind by the very first shipped schema: only
     // the tasks store exists, and records predate the completedAt/archivedAt/rank/statusSlug/notes fields.
     await new Promise<void>((resolve, reject) => {
@@ -208,13 +238,13 @@ describe('migration replay', () => {
     const views = await db.loadViews()
     expect(views.map((v) => v.id).sort()).toEqual(['backlog', 'today', 'today-extra'])
 
-    // Confirm the upgrade chain actually landed on version 12 and won't fire another upgrade.
+    // Confirm the upgrade chain actually landed on version 13 and won't fire another upgrade.
     await new Promise<void>((resolve, reject) => {
       const verifyRequest = indexedDB.open(DB_NAME)
-      verifyRequest.onupgradeneeded = () => reject(new Error('unexpected upgrade needed; migration did not reach version 12'))
+      verifyRequest.onupgradeneeded = () => reject(new Error('unexpected upgrade needed; migration did not reach version 13'))
       verifyRequest.onsuccess = () => {
         try {
-          expect(verifyRequest.result.version).toBe(12)
+          expect(verifyRequest.result.version).toBe(13)
           verifyRequest.result.close()
           resolve()
         } catch (error) {

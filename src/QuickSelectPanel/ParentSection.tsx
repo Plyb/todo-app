@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Task, SubtaskLink } from '../types'
-import { loadParentLink, loadSubtaskLinks, createSubtaskLink, deleteSubtaskLinksByChild } from '../db'
+import { useDefaultSource } from '../tasks-context'
 import { LinkExistingTaskModal } from '../LinkExistingTaskModal'
 import { rankBetween } from '../rank-utils'
 import { theme } from '../theme'
@@ -16,26 +16,27 @@ type ParentSectionProps = {
 export function ParentSection({ task, allTasks, subtaskLinks, onOpenTask, onSubtaskLinkAdded }: ParentSectionProps) {
   const [parentLink, setParentLink] = useState<SubtaskLink | undefined>(undefined)
   const [showSetParentModal, setShowSetParentModal] = useState(false)
+  const source = useDefaultSource()
 
   useEffect(() => {
-    loadParentLink(task.id).then(setParentLink)
-  }, [task.id])
+    source.loadParentLink(task.id).then(setParentLink)
+  }, [task.id, source])
 
   const parentTask = parentLink ? allTasks.find((t) => t.id === parentLink.parentTaskId) : undefined
 
   async function handleSetParent(selected: Task) {
-    if (parentLink) await deleteSubtaskLinksByChild(task.id)
-    const newParentLinks = await loadSubtaskLinks(selected.id)
+    if (parentLink) await source.deleteSubtaskLinksByChild(task.id)
+    const newParentLinks = await source.loadSubtaskLinks(selected.id)
     const lastLink = newParentLinks[newParentLinks.length - 1] ?? null
     const rank = rankBetween(lastLink, null)
-    const link = await createSubtaskLink(selected.id, task.id, rank)
+    const link = await source.createSubtaskLink(selected.id, task.id, rank)
     setParentLink(link)
     onSubtaskLinkAdded()
     setShowSetParentModal(false)
   }
 
   async function handleClearParent() {
-    await deleteSubtaskLinksByChild(task.id)
+    await source.deleteSubtaskLinksByChild(task.id)
     setParentLink(undefined)
     onSubtaskLinkAdded()
   }

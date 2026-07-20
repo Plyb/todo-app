@@ -1,7 +1,14 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import * as db from './db'
 import type { Task, Status, View, UserDefinedView } from './types'
 import type { StatusUsage } from './db'
+import {
+  DEFAULT_SOURCE_CONFIG,
+  buildSource,
+  buildSourceRegistry,
+  loadSourceConfigurations,
+  type TaskSource,
+} from './sources'
 import { byRank, rankAtInsertIndex } from './rank-utils'
 import { isArchiveEligible } from './archive-utils'
 import { ARCHIVE_VIEW, ARCHIVE_VIEW_ID } from './synthetic-view-utils'
@@ -38,6 +45,16 @@ export function TasksProvider({ children }: { children: ReactNode }) {
   )
   const dailyScanDateRef = useRef<string | null>(null)
 
+  // The built-in IndexedDB source is available synchronously (its config is
+  // seeded by migration), so consumers never see a null source before init()
+  // has read the full configuration list into the registry below.
+  const defaultSource = useMemo(() => buildSource(DEFAULT_SOURCE_CONFIG), [])
+  const sourceRegistryRef = useRef<Map<string, TaskSource>>(new Map([[defaultSource.id, defaultSource]]))
+  const getSource = useCallback(
+    (id: string): TaskSource => sourceRegistryRef.current.get(id) ?? defaultSource,
+    [defaultSource],
+  )
+
   useEffect(() => {
     if (tasks.length === 0) return
 
@@ -50,7 +67,7 @@ export function TasksProvider({ children }: { children: ReactNode }) {
       if (toArchive.length > 0) {
         const toArchiveIds = new Set(toArchive.map(t => t.id))
         setTasks(prev => prev.map(t => toArchiveIds.has(t.id) ? { ...t, archivedAt: today } : t))
-        toArchive.forEach(t => db.updateTaskArchivedAt(t.id, today))
+        toArchive.forEach(t => defaultSource.updateTaskArchivedAt(t.id, today))
       }
     }
 
@@ -62,9 +79,9 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     if (rerankUpdates.length > 0) {
       const rankById = new Map(rerankUpdates.map(u => [u.id, u.rank]))
       setTasks(prev => prev.map(t => rankById.has(t.id) ? { ...t, rank: rankById.get(t.id)! } : t))
-      rerankUpdates.forEach(u => db.updateTaskRank(u.id, u.rank))
+      rerankUpdates.forEach(u => defaultSource.updateTaskRank(u.id, u.rank))
     }
-  }, [tasks])
+  }, [tasks, defaultSource])
 
   const [autoTransitionedTaskIds, setAutoTransitionedTaskIds] = useState<Set<number>>(new Set())
 
@@ -73,10 +90,10 @@ export function TasksProvider({ children }: { children: ReactNode }) {
   const lastCheckedDateRef = useRef(getTodayDateString())
 
   const applyDueTransitions = useCallback(async (currentTasks: Task[]): Promise<Task[]> => {
-    const dueTransitions = await db.loadAllDueTransitions()
+    const dueTransitions = await defaultSource.loadAllDueTransitions()
     if (dueTransitions.length === 0) return currentTasks
 
-    const existingTasks = await db.loadTasksByIds(dueTransitions.map((t) => t.taskId))
+    const existingTasks = await defaultSource.loadTasksByIds(dueTransitions.map((t) => t.taskId))
     const existingIds = new Set(existingTasks.map((t) => t.id))
 
     const transitionedIds = new Set<number>()
@@ -84,8 +101,8 @@ export function TasksProvider({ children }: { children: ReactNode }) {
       dueTransitions
         .filter((transition) => existingIds.has(transition.taskId))
         .map(async (transition) => {
-          await db.updateTaskStatus(transition.taskId, transition.statusSlug)
-          await db.deleteScheduledTransition(transition.id)
+          await defaultSource.updateTaskStatus(transition.taskId, transition.statusSlug)
+          await defaultSource.deleteScheduledTransition(transition.id)
           transitionedIds.add(transition.taskId)
         })
     )
@@ -99,14 +116,20 @@ export function TasksProvider({ children }: { children: ReactNode }) {
       const transition = dueTransitions.find((tr) => tr.taskId === t.id && transitionedIds.has(tr.taskId))
       return transition ? { ...t, statusSlug: transition.statusSlug } : t
     })
-  }, [])
+  }, [defaultSource])
 
   useEffect(() => {
     let isMounted = true
 
     async function init() {
-      const [loadedStatuses, loadedViews] = await Promise.all([db.loadStatuses(), db.loadViews()])
+      const [loadedStatuses, loadedViews, configs] = await Promise.all([
+        defaultSource.loadStatuses(),
+        db.loadViews(),
+        loadSourceConfigurations(),
+      ])
       if (!isMounted) return
+
+      sourceRegistryRef.current = buildSourceRegistry(configs)
 
       const updatedTasks = await applyDueTransitions([])
       if (!isMounted) return
@@ -140,7 +163,7 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     return () => {
       isMounted = false
     }
-  }, [applyDueTransitions])
+  }, [applyDueTransitions, defaultSource])
 
   useEffect(() => {
     function handleVisibilityChange() {
@@ -159,8 +182,8 @@ export function TasksProvider({ children }: { children: ReactNode }) {
 
   async function refetchAll(): Promise<void> {
     const [newStatuses, newTasks, newViews] = await Promise.all([
-      db.loadStatuses(),
-      db.loadTasksByIds(tasks.map((t) => t.id)),
+      defaultSource.loadStatuses(),
+      defaultSource.loadTasksByIds(tasks.map((t) => t.id)),
       db.loadViews(),
     ])
     setStatuses(newStatuses)
@@ -170,24 +193,24 @@ export function TasksProvider({ children }: { children: ReactNode }) {
 
   // Refetch (not roll back) on write failure: rolling back to a stale snapshot could erase a concurrently-succeeded edit.
   async function refetchTasks(): Promise<void> {
-    setTasks(await db.loadTasksByIds(tasks.map((t) => t.id)))
+    setTasks(await defaultSource.loadTasksByIds(tasks.map((t) => t.id)))
   }
 
   function setDone(id: number, done: boolean): void {
     const completedAt = done ? getTodayDateString() : null
-    db.updateTaskCompletedAt(id, completedAt).catch(() => refetchTasks())
+    defaultSource.updateTaskCompletedAt(id, completedAt).catch(() => refetchTasks())
     setTasks(prev => prev.map(t => t.id === id ? { ...t, completedAt } : t))
   }
 
   function setArchived(id: number, archived: boolean): void {
     const archivedAt = archived ? getTodayDateString() : null
-    db.updateTaskArchivedAt(id, archivedAt).catch(() => refetchTasks())
+    defaultSource.updateTaskArchivedAt(id, archivedAt).catch(() => refetchTasks())
     setTasks(prev => prev.map(t => t.id === id ? { ...t, archivedAt } : t))
   }
 
   function moveTask(id: number, toStatusSlug: string, newRank: string, changeStatus: boolean): void {
-    if (changeStatus) db.updateTaskStatus(id, toStatusSlug).catch(() => refetchTasks())
-    db.updateTaskRank(id, newRank).catch(() => refetchTasks())
+    if (changeStatus) defaultSource.updateTaskStatus(id, toStatusSlug).catch(() => refetchTasks())
+    defaultSource.updateTaskRank(id, newRank).catch(() => refetchTasks())
     setTasks(prev => {
       const updated = prev.map(t => t.id === id ? { ...t, rank: newRank, statusSlug: toStatusSlug } : t)
       return updated.sort(byRank)
@@ -200,8 +223,8 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     const destTasks = tasks.filter(t => t.statusSlug === statusSlug)
     const newRank = rankAtInsertIndex(destTasks, destTasks.length, id)
     try {
-      await db.updateTaskStatus(id, statusSlug)
-      await db.updateTaskRank(id, newRank)
+      await defaultSource.updateTaskStatus(id, statusSlug)
+      await defaultSource.updateTaskRank(id, newRank)
       setTasks(prev => {
         const updated = prev.map(t => t.id === id ? { ...t, statusSlug, rank: newRank } : t)
         return updated.sort(byRank)
@@ -212,18 +235,18 @@ export function TasksProvider({ children }: { children: ReactNode }) {
   }
 
   function renameTask(id: number, name: string): void {
-    db.updateTaskName(id, name).catch(() => refetchTasks())
+    defaultSource.updateTaskName(id, name).catch(() => refetchTasks())
     setTasks(prev => prev.map(t => t.id === id ? { ...t, name } : t))
   }
 
   function updateNotes(id: number, notes: string): void {
-    db.updateTaskNotes(id, notes).catch(() => refetchTasks())
+    defaultSource.updateTaskNotes(id, notes).catch(() => refetchTasks())
     setTasks(prev => prev.map(t => t.id === id ? { ...t, notes } : t))
   }
 
   async function deleteTask(id: number): Promise<void> {
     try {
-      await db.deleteTask(id)
+      await defaultSource.deleteTask(id)
       setTasks(prev => prev.filter(t => t.id !== id))
     } catch {
       await refetchTasks()
@@ -232,7 +255,7 @@ export function TasksProvider({ children }: { children: ReactNode }) {
 
   async function createTask(name: string, rank: string, statusSlug: string): Promise<Task> {
     try {
-      const task = await db.createTask(name, rank, statusSlug)
+      const task = await defaultSource.createTask(name, rank, statusSlug)
       setTasks(prev => [...prev, task].sort(byRank))
       return task
     } catch (err) {
@@ -250,28 +273,28 @@ export function TasksProvider({ children }: { children: ReactNode }) {
   }
 
   async function createStatus(name: string, slug: string): Promise<void> {
-    await db.createStatus(name, slug)
+    await defaultSource.createStatus(name, slug)
     await refetchAll()
   }
 
   async function updateStatus(oldSlug: string, newSlug: string, name: string): Promise<void> {
-    await db.updateStatus(oldSlug, newSlug, name)
+    await defaultSource.updateStatus(oldSlug, newSlug, name)
     await refetchAll()
   }
 
   async function deleteStatus(slug: string): Promise<void> {
-    await db.deleteStatus(slug)
+    await defaultSource.deleteStatus(slug)
     await refetchAll()
   }
 
   async function reassignAndDeleteStatus(fromSlug: string, toSlug: string): Promise<void> {
-    await db.reassignStatus(fromSlug, toSlug)
-    await db.deleteStatus(fromSlug)
+    await defaultSource.reassignStatus(fromSlug, toSlug)
+    await defaultSource.deleteStatus(fromSlug)
     await refetchAll()
   }
 
   function getStatusUsage(slug: string): Promise<StatusUsage> {
-    return db.getStatusUsage(slug)
+    return defaultSource.getStatusUsage(slug)
   }
 
   function setActiveViewId(id: string): void {
@@ -322,8 +345,8 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     setSectionPaging(prev => ({ ...prev, [sectionKey]: { ...current, isLoading: true } }))
 
     const pageRequest = sectionKey === ARCHIVE_VIEW_ID
-      ? db.loadArchivedTaskPage(current.offset)
-      : db.loadTaskPageForStatus(sectionKey, current.offset)
+      ? defaultSource.loadArchivedTaskPage(current.offset)
+      : defaultSource.loadTaskPageForStatus(sectionKey, current.offset)
 
     pageRequest
       .then((page) => {
@@ -364,6 +387,8 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     openView,
     saveView,
     deleteView,
+    defaultSource,
+    getSource,
   }
 
   return <TasksContext.Provider value={value}>{children}</TasksContext.Provider>

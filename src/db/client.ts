@@ -20,13 +20,18 @@ export function withDefault<T>(schema: z.ZodType<T>, fallback: () => T): z.ZodTy
 }
 
 export const DB_NAME = 'todo-app'
-export const DB_VERSION = 12
+export const DB_VERSION = 13
 export const TASKS_STORE = 'tasks'
 export const STATUSES_STORE = 'statuses'
 export const VIEWS_STORE = 'views'
 export const SCHEDULED_TRANSITIONS_STORE = 'scheduledTransitions'
 export const RELATIONSHIPS_STORE = 'relationships'
 export const SUBTASKS_STORE = 'subtasks'
+export const SOURCE_CONFIGURATIONS_STORE = 'sourceConfigurations'
+
+// Stable id of the built-in IndexedDB source seeded at migration time. Views
+// reference statuses by this id (see #12), so it must not change.
+export const DEFAULT_SOURCE_ID = 'indexeddb'
 
 const DEFAULT_STATUSES: Status[] = [
   { slug: 'today', name: 'Today' },
@@ -307,6 +312,19 @@ const MIGRATION_STEPS: MigrationStep[] = [
     version: 12,
     migrate: (_db, transaction) => migrateAddTaskIndices(transaction),
   },
+  {
+    // Per-source types (tasks, statuses, etc.) now live behind a TaskSource
+    // built from a stored configuration (#12). Seed the single built-in
+    // IndexedDB source so every existing install has one source to attribute
+    // its data to.
+    version: 13,
+    migrate: (db) => {
+      if (!db.objectStoreNames.contains(SOURCE_CONFIGURATIONS_STORE)) {
+        const store = db.createObjectStore(SOURCE_CONFIGURATIONS_STORE, { keyPath: 'id' })
+        store.put({ kind: 'indexeddb', id: DEFAULT_SOURCE_ID })
+      }
+    },
+  },
 ]
 
 export async function openTasksDatabase(): Promise<IDBDatabase> {
@@ -379,6 +397,7 @@ type StoreName =
   | typeof SCHEDULED_TRANSITIONS_STORE
   | typeof RELATIONSHIPS_STORE
   | typeof SUBTASKS_STORE
+  | typeof SOURCE_CONFIGURATIONS_STORE
 
 export async function withStore<T>(
   name: StoreName,
