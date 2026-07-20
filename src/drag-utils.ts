@@ -41,6 +41,8 @@ type ExpandedRow = {
   content: ReactNode
 }
 
+export const DRAG_ACTIVATION_PX = 8
+
 export const INSERT_BUTTON_ID = 'insert-button' as const
 
 // The wrapping <ul>, registered as a plain droppable so a drag released in the

@@ -1,5 +1,6 @@
-import React from 'react'
+import React, { useEffect, useRef } from 'react'
 import { theme, fabPlaceholder } from './theme'
+import { DRAG_ACTIVATION_PX } from './drag-utils'
 
 export const FAB_BOTTOM = 24
 export const FAB_RIGHT = 24
@@ -56,6 +57,11 @@ type DraggableInsertButtonProps = {
   // caused a one-frame placeholder flash when releasing inside the dead zone.
   showPlaceholder?: boolean
   onTap?: () => void
+  onLongPress?: () => void
+}
+
+function hasExceededDragThreshold(origin: { x: number; y: number }, point: { x: number; y: number }): boolean {
+  return Math.hypot(point.x - origin.x, point.y - origin.y) >= DRAG_ACTIVATION_PX
 }
 
 // The FAB, folded into the same DragDropProvider as task drags as a real
@@ -70,7 +76,43 @@ export function DraggableInsertButton({
   isDragging,
   showPlaceholder,
   onTap,
+  onLongPress,
 }: DraggableInsertButtonProps) {
+  const pressOrigin = useRef<{ x: number; y: number } | null>(null)
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function clearLongPressTimer() {
+    if (longPressTimer.current !== null) {
+      clearTimeout(longPressTimer.current)
+      longPressTimer.current = null
+    }
+  }
+
+  // Unmounting mid-press never happens in practice (the button is always
+  // rendered, see below), but this guards against a pending timer firing
+  // after teardown regardless.
+  useEffect(() => clearLongPressTimer, [])
+
+  function handlePointerDown(e: React.PointerEvent) {
+    pressOrigin.current = { x: e.clientX, y: e.clientY }
+    clearLongPressTimer()
+    longPressTimer.current = setTimeout(() => {
+      longPressTimer.current = null
+      onLongPress?.()
+    }, theme.durations.longPress)
+  }
+
+  function handlePointerMove(e: React.PointerEvent) {
+    const origin = pressOrigin.current
+    if (!origin) return
+    if (hasExceededDragThreshold(origin, { x: e.clientX, y: e.clientY })) clearLongPressTimer()
+  }
+
+  function handlePointerEnd() {
+    clearLongPressTimer()
+    pressOrigin.current = null
+  }
+
   // The <li> (the sortable source/row) and the fixed-corner button are ALWAYS
   // rendered so the button never unmounts - unmounting it on drag start made
   // it blink out of existence for a frame around the drop. While dragging, the
@@ -100,6 +142,10 @@ export function DraggableInsertButton({
         // tracking - so onClick only fires on a genuine tap. onTap inserts at
         // the top of the first section (onRequestInsert(0, 0)).
         onClick={onTap}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerEnd}
+        onPointerCancel={handlePointerEnd}
         style={{
           ...fabCircleStyle,
           position: 'fixed',

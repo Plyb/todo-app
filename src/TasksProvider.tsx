@@ -14,7 +14,7 @@ import { byRank, rankAtInsertIndex } from './rank-utils'
 import { isArchiveEligible } from './archive-utils'
 import { ARCHIVE_VIEW, ARCHIVE_VIEW_ID } from './synthetic-view-utils'
 import { needsRerank, rerankStatusGroup } from './rerank-utils'
-import { readCurrentViewId, writeCurrentViewId, readRecentViewIds, writeRecentViewIds, getAutoArchiveEnabled } from './storage'
+import { readCurrentViewId, writeCurrentViewId, readRecentViewIds, writeRecentViewIds, getAutoArchiveEnabled, readSelectedSourceId } from './storage'
 import { TasksContext, type TasksContextValue } from './tasks-context'
 import { DEFAULT_SECTION_PAGING, type SectionPagingInfo } from './view-utils'
 
@@ -302,7 +302,11 @@ export function TasksProvider({ children }: { children: ReactNode }) {
 
   async function createTask(name: string, rank: string, statusSlug: string): Promise<Task> {
     try {
-      const task = await defaultSource.createTask(name, rank, statusSlug)
+      const selectedSourceId = readSelectedSourceId()
+      const source = selectedSourceId !== null && allSources.some((s) => s.id === selectedSourceId)
+        ? getSource(selectedSourceId)
+        : defaultSource
+      const task = await source.createTask(name, rank, statusSlug)
       setTasks(prev => [...prev, task].sort(byRank))
       return task
     } catch (err) {
