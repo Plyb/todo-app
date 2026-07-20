@@ -18,9 +18,11 @@ export default function SettingsPage({ onBack }: SettingsPageProps) {
   const { views, saveView, deleteView } = useViews()
   const defaultSource = useDefaultSource()
   const userDefinedViews = views.filter(isUserDefinedView)
+  const isNewStatus = (status: Status) => !statuses.some((s) => s.slug === status.slug)
   const [editingView, setEditingView] = useState<UserDefinedView | null>(null)
   const [editingStatus, setEditingStatus] = useState<Status | null>(null)
   const [reassignFromSlug, setReassignFromSlug] = useState<string | null>(null)
+  const reassignFromSourceId = statuses.find((s) => s.slug === reassignFromSlug)?.sourceId
   const [autoArchiveEnabled, setAutoArchiveEnabledState] = useState(getAutoArchiveEnabled)
   const [viewSelectorButtonVisibility, setViewSelectorButtonVisibility] = useLocalStorageSetting<Exclude<ViewSelectorVisibility, null>>(VIEW_SELECTOR_VISIBILITY_KEY)
 
@@ -51,15 +53,13 @@ export default function SettingsPage({ onBack }: SettingsPageProps) {
   }
 
   function handleNewStatus() {
-    // A new status is created in the default source (see follow-up in issue #9).
     setEditingStatus({ slug: '', name: '', sourceId: defaultSource.id })
   }
 
   async function handleSaveStatus(updated: Status) {
     if (!editingStatus) return
-    const isNewStatus = !statuses.some((s) => s.slug === editingStatus.slug)
-    if (isNewStatus) {
-      await createStatus(updated.name, updated.slug)
+    if (isNewStatus(editingStatus)) {
+      await createStatus(updated.name, updated.slug, updated.sourceId)
     } else {
       await updateStatus(editingStatus.slug, updated.slug, updated.name)
     }
@@ -126,6 +126,7 @@ export default function SettingsPage({ onBack }: SettingsPageProps) {
       {editingStatus && (
         <StatusEditorModal
           status={editingStatus}
+          isNewStatus={isNewStatus(editingStatus)}
           onSave={handleSaveStatus}
           onClose={() => setEditingStatus(null)}
         />
@@ -134,7 +135,7 @@ export default function SettingsPage({ onBack }: SettingsPageProps) {
       {reassignFromSlug && (
         <StatusModal
           title="Reassign to..."
-          statuses={statuses.filter((s) => s.slug !== reassignFromSlug)}
+          statuses={statuses.filter((s) => s.slug !== reassignFromSlug && s.sourceId === reassignFromSourceId)}
           currentStatusSlug=""
           onSelect={handleReassignAndDelete}
           onClose={() => setReassignFromSlug(null)}

@@ -28,7 +28,7 @@ export type TasksApi = {
 
 export type StatusesApi = {
   statuses: Status[]
-  createStatus: (name: string, slug: string) => Promise<void>
+  createStatus: (name: string, slug: string, sourceId: string) => Promise<void>
   updateStatus: (oldSlug: string, newSlug: string, name: string) => Promise<void>
   deleteStatus: (slug: string) => Promise<void>
   reassignAndDeleteStatus: (fromSlug: string, toSlug: string) => Promise<void>

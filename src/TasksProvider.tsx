@@ -264,6 +264,12 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     const newRank = rankAtInsertIndex(destTasks, destTasks.length, id)
     const task = tasks.find(t => t.id === id)
     if (!task) return
+    // Backstop for the UI-level filtering (which already excludes cross-source
+    // options): a task is backed by its own source's store, so it can't move
+    // to a status living in a different source.
+    if (getStatusSource(statusSlug).id !== task.sourceId) {
+      throw new Error(`Cannot set task ${id} to status "${statusSlug}" in a different source`)
+    }
     try {
       const source = sourceOf(task, getSource)
       await source.updateTaskStatus(id, statusSlug)
@@ -323,11 +329,8 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     })
   }
 
-  // Every status created today lands in the default source. Letting the
-  // caller pick a source on creation, and guarding cross-source status
-  // changes/reassignment, is tracked as a follow-up (see issue #9).
-  async function createStatus(name: string, slug: string): Promise<void> {
-    await defaultSource.createStatus(name, slug)
+  async function createStatus(name: string, slug: string, sourceId: string): Promise<void> {
+    await getSource(sourceId).createStatus(name, slug)
     await refetchAll()
   }
 
@@ -343,6 +346,12 @@ export function TasksProvider({ children }: { children: ReactNode }) {
 
   async function reassignAndDeleteStatus(fromSlug: string, toSlug: string): Promise<void> {
     const source = getStatusSource(fromSlug)
+    // Backstop for the UI-level filtering (which already excludes cross-source
+    // options): a source's tasks are backed by its own store, so reassigning
+    // into another source's status isn't meaningful.
+    if (getStatusSource(toSlug).id !== source.id) {
+      throw new Error(`Cannot reassign status "${fromSlug}" to status "${toSlug}" in a different source`)
+    }
     await source.reassignStatus(fromSlug, toSlug)
     await source.deleteStatus(fromSlug)
     await refetchAll()
