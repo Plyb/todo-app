@@ -64,6 +64,7 @@ const otherTask: Task = {
 }
 
 const source = {
+  id: 'indexeddb',
   loadBlocks: vi.fn(() => Promise.resolve([])),
   loadAllBlocks: vi.fn(() => Promise.resolve([])),
   loadParentLink: vi.fn(() => Promise.resolve(undefined)),
@@ -101,11 +102,13 @@ vi.mock('./tasks-context', () => ({
     deleteView: vi.fn(),
   }),
   useSource: () => source,
+  useAllSources: () => [source],
+  useDefaultSource: () => source,
 }))
 
 describe('MainPage relationship loading (issue #260)', () => {
   beforeEach(() => {
-    Object.values(source).forEach((fn) => fn.mockClear())
+    Object.values(source).forEach((fn) => vi.isMockFunction(fn) && fn.mockClear())
   })
 
   afterEach(() => {
