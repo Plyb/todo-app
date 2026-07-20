@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Task, BlockingRelationship } from '../types'
-import { useTasks, useDefaultSource } from '../tasks-context'
+import { useTasks, useSource } from '../tasks-context'
 import { RelationshipModal, RelationshipGroup } from '../RelationshipModal'
 import { theme } from '../theme'
 import { PrimaryButton } from '../ui/Button'
@@ -15,7 +15,7 @@ type RelatedTasksSectionProps = {
 
 export function RelatedTasksSection({ task, allTasks, onOpenTask, onBlockingRelationshipAdded }: RelatedTasksSectionProps) {
   const { setDone } = useTasks()
-  const source = useDefaultSource()
+  const source = useSource(task.sourceId)
   const [showRelationshipModal, setShowRelationshipModal] = useState(false)
   const [blockingRelationships, setBlockingRelationships] = useState<BlockingRelationship[]>([])
 

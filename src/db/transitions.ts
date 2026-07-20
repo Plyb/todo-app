@@ -7,8 +7,11 @@ import {
   requestToPromise,
   withStore,
   type StoredScheduledTransition,
+  type WithoutSource,
 } from './client'
 import type { ScheduledTransition } from '../types'
+
+type StoredTransitionWithId = WithoutSource<ScheduledTransition>
 
 const storedScheduledTransitionSchema = z.object({
   taskId: z.number(),
@@ -16,7 +19,7 @@ const storedScheduledTransitionSchema = z.object({
   statusSlug: z.string(),
 }) satisfies z.ZodType<StoredScheduledTransition>
 
-export async function loadScheduledTransitions(taskId: number): Promise<ScheduledTransition[]> {
+export async function loadScheduledTransitions(taskId: number): Promise<StoredTransitionWithId[]> {
   return withStore(SCHEDULED_TRANSITIONS_STORE, 'readonly', async (store) => {
     const records = await getAllWithIds<Record<string, unknown>>(store)
     const transitions = records.map(({ id, ...raw }) => ({ id, ...storedScheduledTransitionSchema.parse(raw) }))
@@ -27,7 +30,7 @@ export async function loadScheduledTransitions(taskId: number): Promise<Schedule
   })
 }
 
-export async function addScheduledTransition(taskId: number, date: string, statusSlug: string): Promise<ScheduledTransition> {
+export async function addScheduledTransition(taskId: number, date: string, statusSlug: string): Promise<StoredTransitionWithId> {
   const stored: StoredScheduledTransition = { taskId, date, statusSlug }
   const key = await withStore(SCHEDULED_TRANSITIONS_STORE, 'readwrite', (store) =>
     requestToPromise(store.add(stored)),
@@ -41,7 +44,7 @@ export async function deleteScheduledTransition(id: number): Promise<void> {
   })
 }
 
-export async function loadAllDueTransitions(): Promise<ScheduledTransition[]> {
+export async function loadAllDueTransitions(): Promise<StoredTransitionWithId[]> {
   return withStore(SCHEDULED_TRANSITIONS_STORE, 'readonly', async (store) => {
     const records = await getAllWithIds<Record<string, unknown>>(store)
     const transitions = records.map(({ id, ...raw }) => ({ id, ...storedScheduledTransitionSchema.parse(raw) }))

@@ -2,7 +2,12 @@ import { LexoRank } from 'lexorank'
 import { z } from 'zod'
 import type { BlockingRelationship, ScheduledTransition, Status, SubtaskLink, Task } from '../types'
 
-export type Stored<T extends { id: number }> = Omit<T, 'id'>
+export type Stored<T extends { id: number }> = Omit<T, 'id' | 'sourceId'>
+
+// The DB only ever holds the default source's own records, so sourceId is
+// attached to reads / stripped from writes at the TaskSource adapter layer
+// (see src/sources/source-utils.ts) rather than persisted here.
+export type WithoutSource<T> = Omit<T, 'sourceId'>
 
 export type StoredTask = Stored<Task>
 export type StoredBlockingRelationship = Stored<BlockingRelationship>
@@ -29,11 +34,9 @@ export const RELATIONSHIPS_STORE = 'relationships'
 export const SUBTASKS_STORE = 'subtasks'
 export const SOURCE_CONFIGURATIONS_STORE = 'sourceConfigurations'
 
-// Stable id of the built-in IndexedDB source seeded at migration time. Views
-// reference statuses by this id (see #12), so it must not change.
 export const DEFAULT_SOURCE_ID = 'indexeddb'
 
-const DEFAULT_STATUSES: Status[] = [
+const DEFAULT_STATUSES: WithoutSource<Status>[] = [
   { slug: 'today', name: 'Today' },
   { slug: 'today-extra', name: 'Today Extra' },
   { slug: 'backlog', name: 'Backlog' },
@@ -205,7 +208,7 @@ async function migrateAddViews(transaction: IDBTransaction): Promise<void> {
   // Seed one default view per existing status, so users start with views but
   // can freely delete them afterward without them being regenerated.
   const statusStore = transaction.objectStore(STATUSES_STORE)
-  const statuses = (await requestToPromise(statusStore.getAll())) as Status[]
+  const statuses = (await requestToPromise(statusStore.getAll())) as WithoutSource<Status>[]
   const viewStore = transaction.objectStore(VIEWS_STORE)
   for (const status of statuses) {
     viewStore.put({ slug: status.slug, name: status.name, statusSlugs: [status.slug] })
@@ -313,10 +316,6 @@ const MIGRATION_STEPS: MigrationStep[] = [
     migrate: (_db, transaction) => migrateAddTaskIndices(transaction),
   },
   {
-    // Per-source types (tasks, statuses, etc.) now live behind a TaskSource
-    // built from a stored configuration (#12). Seed the single built-in
-    // IndexedDB source so every existing install has one source to attribute
-    // its data to.
     version: 13,
     migrate: (db) => {
       if (!db.objectStoreNames.contains(SOURCE_CONFIGURATIONS_STORE)) {

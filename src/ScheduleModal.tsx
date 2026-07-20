@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Task, Status, ScheduledTransition } from './types'
-import { useDefaultSource } from './tasks-context'
+import { useSource } from './tasks-context'
 import { theme } from './theme'
 import { Modal } from './ui/Modal'
 import { CloseButton } from './ui/CloseButton'
@@ -18,7 +18,7 @@ export function ScheduleModal({ task, statuses, onClose, onTransitionsChanged }:
   const [showForm, setShowForm] = useState(false)
   const [date, setDate] = useState('')
   const [statusSlug, setStatusSlug] = useState(statuses[0]?.slug ?? '')
-  const source = useDefaultSource()
+  const source = useSource(task.sourceId)
 
   useEffect(() => {
     source.loadScheduledTransitions(task.id).then(setTransitions)

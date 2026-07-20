@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Task, SubtaskLink } from '../types'
-import { useDefaultSource } from '../tasks-context'
+import { useSource } from '../tasks-context'
 import { LinkExistingTaskModal } from '../LinkExistingTaskModal'
 import { rankBetween } from '../rank-utils'
 import { theme } from '../theme'
@@ -16,7 +16,7 @@ type ParentSectionProps = {
 export function ParentSection({ task, allTasks, subtaskLinks, onOpenTask, onSubtaskLinkAdded }: ParentSectionProps) {
   const [parentLink, setParentLink] = useState<SubtaskLink | undefined>(undefined)
   const [showSetParentModal, setShowSetParentModal] = useState(false)
-  const source = useDefaultSource()
+  const source = useSource(task.sourceId)
 
   useEffect(() => {
     source.loadParentLink(task.id).then(setParentLink)

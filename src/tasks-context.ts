@@ -7,6 +7,7 @@ import type { SectionPagingInfo } from './view-utils'
 export type SourcesApi = {
   defaultSource: TaskSource
   getSource: (id: string) => TaskSource
+  allSources: TaskSource[]
 }
 
 export type TasksApi = {
@@ -102,4 +103,8 @@ export function useDefaultSource(): TaskSource {
 
 export function useSource(id: string): TaskSource {
   return useTasksContext().getSource(id)
+}
+
+export function useAllSources(): TaskSource[] {
+  return useTasksContext().allSources
 }

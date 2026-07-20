@@ -27,7 +27,7 @@ vi.mock('../tasks-context', () => {
       createTask: vi.fn(),
       setArchived,
     }),
-    useDefaultSource: () => source,
+    useSource: () => source,
   }
 })
 
@@ -40,6 +40,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
     rank: '0',
     statusSlug: 'today',
     notes: '',
+    sourceId: 'indexeddb',
     ...overrides,
   }
 }

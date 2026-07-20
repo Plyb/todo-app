@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Task, Status, ScheduledTransition } from '../types'
-import { useDefaultSource } from '../tasks-context'
+import { useSource } from '../tasks-context'
 import { StatusModal } from '../StatusModal'
 import { ScheduleModal } from '../ScheduleModal'
 import { theme } from '../theme'
@@ -15,7 +15,7 @@ export function StatusScheduleSection({ task, statuses, onChangeStatus }: Status
   const [statusModalOpen, setStatusModalOpen] = useState(false)
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false)
   const [scheduledTransitions, setScheduledTransitions] = useState<ScheduledTransition[]>([])
-  const source = useDefaultSource()
+  const source = useSource(task.sourceId)
 
   useEffect(() => {
     source.loadScheduledTransitions(task.id).then(setScheduledTransitions)

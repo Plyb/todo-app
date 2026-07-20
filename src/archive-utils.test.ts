@@ -3,7 +3,7 @@ import { isArchiveEligible } from './archive-utils'
 import type { Task } from './types'
 
 function makeTask(completedAt: string | null): Task {
-  return { id: 1, name: 'Task', completedAt, archivedAt: null, rank: '0', statusSlug: 'today', notes: '' }
+  return { id: 1, name: 'Task', completedAt, archivedAt: null, rank: '0', statusSlug: 'today', notes: '', sourceId: 'indexeddb' }
 }
 
 describe('isArchiveEligible', () => {

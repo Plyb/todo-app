@@ -9,23 +9,24 @@ import {
   withStore,
   withTransaction,
   type StoredTask,
+  type WithoutSource,
 } from './client'
 import type { Status, UserDefinedView } from '../types'
 
 const statusSchema = z.object({
   slug: z.string(),
   name: z.string(),
-}) satisfies z.ZodType<Status>
+}) satisfies z.ZodType<WithoutSource<Status>>
 
-export async function loadStatuses(): Promise<Status[]> {
+export async function loadStatuses(): Promise<WithoutSource<Status>[]> {
   return withStore(STATUSES_STORE, 'readonly', async (store) => {
     const raw = await requestToPromise(store.getAll())
     return raw.map((record) => statusSchema.parse(record))
   })
 }
 
-export async function createStatus(name: string, slug: string): Promise<Status> {
-  const status: Status = { slug, name }
+export async function createStatus(name: string, slug: string): Promise<WithoutSource<Status>> {
+  const status: WithoutSource<Status> = { slug, name }
   await withStore(STATUSES_STORE, 'readwrite', (store) => {
     store.add(status)
   })

@@ -10,6 +10,7 @@ function makeTask(overrides: Partial<Task> & { id: number; rank: string }): Task
     archivedAt: null,
     statusSlug: 'backlog',
     notes: '',
+    sourceId: 'indexeddb',
     ...overrides,
   }
 }

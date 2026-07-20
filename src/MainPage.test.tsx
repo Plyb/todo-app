@@ -12,6 +12,7 @@ const task: Task = {
   rank: '0',
   statusSlug: 'todo',
   notes: '',
+  sourceId: 'indexeddb',
 }
 
 describe('TaskRow', () => {

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { Task, Status, SubtaskLink } from '../types'
 import { theme } from '../theme'
-import { useTasks, useDefaultSource } from '../tasks-context'
+import { useTasks, useSource } from '../tasks-context'
 import { PanelHeader } from './PanelHeader'
 import { DeleteConfirm } from './DeleteConfirm'
 import { ParentSection } from './ParentSection'
@@ -25,7 +25,7 @@ type QuickSelectPanelProps = {
 
 export function QuickSelectPanel({ task, statuses, allTasks, onClose, onChangeStatus, onDelete, onOpenTask, onBlockingRelationshipAdded, onSubtaskLinkAdded }: QuickSelectPanelProps) {
   const { setArchived } = useTasks()
-  const source = useDefaultSource()
+  const source = useSource(task.sourceId)
   const [backdropReady, setBackdropReady] = useState(false)
   const [expanded, setExpanded] = useState(false)
   const [subtaskLinks, setSubtaskLinks] = useState<SubtaskLink[]>([])

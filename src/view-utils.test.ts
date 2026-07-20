@@ -9,6 +9,7 @@ function makeTask(overrides: Partial<Task> & { id: number; name: string; statusS
     archivedAt: null,
     rank: '0',
     notes: '',
+    sourceId: 'indexeddb',
     ...overrides,
   }
 }
@@ -20,6 +21,7 @@ function makeArchivedTask(overrides: Partial<ArchivedTask> & { id: number; name:
     rank: '0',
     statusSlug: 'today',
     notes: '',
+    sourceId: 'indexeddb',
     ...overrides,
   }
 }

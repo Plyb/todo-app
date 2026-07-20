@@ -23,10 +23,10 @@ describe('buildSource', () => {
     const source = buildSource(DEFAULT_SOURCE_CONFIG)
 
     const created = await source.createStatus('Custom', 'custom')
-    expect(created).toEqual({ slug: 'custom', name: 'Custom' })
+    expect(created).toEqual({ slug: 'custom', name: 'Custom', sourceId: 'indexeddb' })
 
     const statuses = await source.loadStatuses()
-    expect(statuses).toContainEqual({ slug: 'custom', name: 'Custom' })
+    expect(statuses).toContainEqual({ slug: 'custom', name: 'Custom', sourceId: 'indexeddb' })
   })
 })
 

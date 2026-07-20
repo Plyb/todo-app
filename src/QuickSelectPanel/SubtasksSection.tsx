@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import type { Task, SubtaskLink } from '../types'
-import { useTasks, useDefaultSource } from '../tasks-context'
+import { useTasks, useSource } from '../tasks-context'
 import { LinkExistingTaskModal } from '../LinkExistingTaskModal'
 import { DraggableList } from '../DraggableList'
 import { rankBetween } from '../rank-utils'
@@ -18,7 +18,7 @@ type SubtasksSectionProps = {
 
 export function SubtasksSection({ task, allTasks, subtaskLinks, setSubtaskLinks, onOpenTask, onSubtaskLinkAdded }: SubtasksSectionProps) {
   const { createTask, setDone } = useTasks()
-  const source = useDefaultSource()
+  const source = useSource(task.sourceId)
   const [newSubtaskName, setNewSubtaskName] = useState('')
   const [showLinkExistingModal, setShowLinkExistingModal] = useState(false)
   const [linkedTaskIds, setLinkedTaskIds] = useState<Set<number>>(new Set())

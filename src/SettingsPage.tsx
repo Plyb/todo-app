@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { Status, UserDefinedView, ViewSelectorVisibility } from './types'
-import { useStatuses, useViews } from './tasks-context'
+import { useStatuses, useViews, useDefaultSource } from './tasks-context'
 import { ViewEditorModal } from './ViewEditorModal'
 import { StatusEditorModal } from './StatusEditorModal'
 import { StatusModal } from './StatusModal'
@@ -16,6 +16,7 @@ type SettingsPageProps = {
 export default function SettingsPage({ onBack }: SettingsPageProps) {
   const { statuses, createStatus, updateStatus, deleteStatus, reassignAndDeleteStatus, getStatusUsage } = useStatuses()
   const { views, saveView, deleteView } = useViews()
+  const defaultSource = useDefaultSource()
   const userDefinedViews = views.filter(isUserDefinedView)
   const [editingView, setEditingView] = useState<UserDefinedView | null>(null)
   const [editingStatus, setEditingStatus] = useState<Status | null>(null)
@@ -50,7 +51,8 @@ export default function SettingsPage({ onBack }: SettingsPageProps) {
   }
 
   function handleNewStatus() {
-    setEditingStatus({ slug: '', name: '' })
+    // A new status is created in the default source (see follow-up in issue #9).
+    setEditingStatus({ slug: '', name: '', sourceId: defaultSource.id })
   }
 
   async function handleSaveStatus(updated: Status) {

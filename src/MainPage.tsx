@@ -9,7 +9,8 @@ import { QuickSelectPanel } from './QuickSelectPanel'
 import { ViewModal } from './ViewModal'
 import { theme } from './theme'
 import { useOverscrollGesture } from './useOverscrollGesture'
-import { useTasks, useStatuses, useViews, useDefaultSource } from './tasks-context'
+import { useTasks, useStatuses, useViews, useAllSources } from './tasks-context'
+import { loadAcrossSources } from './sources/source-utils'
 import { OverscrollIndicator } from './OverscrollIndicator'
 import { VIEW_SELECTOR_VISIBILITY_KEY } from './storage'
 import { ARCHIVE_VIEW_ID, isUserDefinedView } from './synthetic-view-utils'
@@ -114,7 +115,7 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
   } = useTasks()
   const { statuses } = useStatuses()
   const { views, currentViewId, recentViewIds, openView } = useViews()
-  const source = useDefaultSource()
+  const allSources = useAllSources()
   const [newTaskInput, setNewTaskInput] = useState<NewTaskInput | null>(null)
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null)
   const [modalTaskId, setModalTaskId] = useState<number | null>(null)
@@ -123,9 +124,12 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
   const [subtaskLinks, setSubtaskLinks] = useState<SubtaskLink[]>([])
 
   useEffect(() => {
-    source.loadAllBlocks().then(setBlockingRelationships)
-    source.loadAllSubtaskLinks().then(setSubtaskLinks)
-  }, [source])
+    // Blocks/subtasks are loaded across every source rather than lazily per
+    // task; scoping this to just what's needed (in step with the pagination
+    // added for tasks) is tracked as a follow-up (see issue #9).
+    loadAcrossSources(allSources, (s) => s.loadAllBlocks()).then(setBlockingRelationships)
+    loadAcrossSources(allSources, (s) => s.loadAllSubtaskLinks()).then(setSubtaskLinks)
+  }, [allSources])
 
   const inputKeyRef = useRef(0)
 
@@ -267,8 +271,8 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
         onAfterDelete()
       },
       onOpenTask: (id: number) => setModalTaskId(id),
-      onBlockingRelationshipAdded: () => source.loadAllBlocks().then(setBlockingRelationships),
-      onSubtaskLinkAdded: () => source.loadAllSubtaskLinks().then(setSubtaskLinks),
+      onBlockingRelationshipAdded: () => loadAcrossSources(allSources, (s) => s.loadAllBlocks()).then(setBlockingRelationships),
+      onSubtaskLinkAdded: () => loadAcrossSources(allSources, (s) => s.loadAllSubtaskLinks()).then(setSubtaskLinks),
     }
   }
 
