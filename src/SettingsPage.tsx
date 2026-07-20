@@ -34,9 +34,9 @@ export default function SettingsPage({ onBack }: SettingsPageProps) {
     setViewSelectorButtonVisibility(value as ViewSelectorVisibility)
   }
 
-  async function handleDeleteView(slug: string) {
+  async function handleDeleteView(id: string) {
     if (userDefinedViews.length === 1) return
-    await deleteView(slug)
+    await deleteView(id)
   }
 
   async function handleSaveView(view: UserDefinedView) {
@@ -45,8 +45,8 @@ export default function SettingsPage({ onBack }: SettingsPageProps) {
   }
 
   function handleNewView() {
-    const slug = crypto.randomUUID()
-    setEditingView({ slug, name: '', statusSlugs: [] })
+    const id = crypto.randomUUID()
+    setEditingView({ id, name: '', statusSlugs: [] })
   }
 
   function handleNewStatus() {
@@ -67,7 +67,7 @@ export default function SettingsPage({ onBack }: SettingsPageProps) {
   async function handleDeleteStatus(slug: string) {
     if (statuses.length === 1) return
     const usage = await getStatusUsage(slug)
-    if (usage.taskIds.length > 0 || usage.viewSlugs.length > 0) {
+    if (usage.taskIds.length > 0 || usage.viewIds.length > 0) {
       setReassignFromSlug(slug)
       return
     }
@@ -90,10 +90,10 @@ export default function SettingsPage({ onBack }: SettingsPageProps) {
         <EditableListSection
           title="Views"
           items={userDefinedViews}
-          getKey={(view) => view.slug}
+          getKey={(view) => view.id}
           getLabel={(view) => view.name}
           onEdit={setEditingView}
-          onDelete={(view) => handleDeleteView(view.slug)}
+          onDelete={(view) => handleDeleteView(view.id)}
           onAdd={handleNewView}
           canDelete={(_view, allViews) => allViews.length > 1}
         />

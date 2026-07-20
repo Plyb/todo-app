@@ -13,7 +13,7 @@ import { useOverscrollGesture } from './useOverscrollGesture'
 import { useTasks, useStatuses, useViews } from './tasks-context'
 import { OverscrollIndicator } from './OverscrollIndicator'
 import { VIEW_SELECTOR_VISIBILITY_KEY } from './storage'
-import { ARCHIVE_VIEW_SLUG, isUserDefinedView } from './synthetic-view-utils'
+import { ARCHIVE_VIEW_ID, isUserDefinedView } from './synthetic-view-utils'
 import {
   archivedTasksOf,
   displayedTasksForView,
@@ -114,7 +114,7 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
     clearAutoTransitionIndicator,
   } = useTasks()
   const { statuses } = useStatuses()
-  const { views, currentViewSlug, recentViewSlugs, openView } = useViews()
+  const { views, currentViewId, recentViewIds, openView } = useViews()
   const [newTaskInput, setNewTaskInput] = useState<NewTaskInput | null>(null)
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null)
   const [modalTaskId, setModalTaskId] = useState<number | null>(null)
@@ -136,7 +136,7 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
     onTrigger: () => setViewModalOpen(true),
   })
 
-  const currentView = views.find((v) => v.slug === currentViewSlug)
+  const currentView = views.find((v) => v.id === currentViewId)
 
   const requestTaskPageRef = useRef(requestTaskPage)
   requestTaskPageRef.current = requestTaskPage
@@ -149,7 +149,7 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
     if (isUserDefinedView(currentView)) {
       currentView.statusSlugs.forEach((slug) => requestTaskPageRef.current(slug))
     } else {
-      requestTaskPageRef.current(ARCHIVE_VIEW_SLUG) // TODO: slug -> id (might want to indicate this isn't actually a slug somehow in the function)
+      requestTaskPageRef.current(ARCHIVE_VIEW_ID) // TODO: slug -> id (might want to indicate this isn't actually a slug somehow in the function)
     }
   }, [currentView])
 
@@ -165,9 +165,9 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
 
   const archivedTasks = useMemo(() => sortArchivedTasks(archivedTasksOf(tasks)), [tasks])
 
-  const archivedPaging = sectionPaging[ARCHIVE_VIEW_SLUG] ?? DEFAULT_SECTION_PAGING
+  const archivedPaging = sectionPaging[ARCHIVE_VIEW_ID] ?? DEFAULT_SECTION_PAGING
   const archiveFooter = archivedPaging.isLoading || archivedPaging.hasMore
-    ? <LoadMoreSentinel isLoading={archivedPaging.isLoading} onVisible={() => requestTaskPageRef.current(ARCHIVE_VIEW_SLUG)} />
+    ? <LoadMoreSentinel isLoading={archivedPaging.isLoading} onVisible={() => requestTaskPageRef.current(ARCHIVE_VIEW_ID)} />
     : undefined // TODO: this is duplicated below for standard pages. maybe put in shared prop list
 
   const parentTaskNameByChildId = useMemo(
@@ -221,7 +221,7 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
         }
       })
     }
-  }, [currentViewSlug])
+  }, [currentViewId])
 
   if (!currentView) {
     return (
@@ -398,8 +398,8 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
   const viewModal = viewModalOpen && (
     <ViewModal
       views={views}
-      recentViewSlugs={recentViewSlugs}
-      currentViewSlug={currentViewSlug}
+      recentViewIds={recentViewIds}
+      currentViewId={currentViewId}
       onSelect={openView}
       onClose={() => setViewModalOpen(false)}
     />

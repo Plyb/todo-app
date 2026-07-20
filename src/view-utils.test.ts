@@ -24,7 +24,7 @@ function makeArchivedTask(overrides: Partial<ArchivedTask> & { id: number; name:
 }
 
 describe('displayedTasksForView', () => {
-  const view: UserDefinedView = { slug: 'view', name: 'View', statusSlugs: ['todo', 'doing'] }
+  const view: UserDefinedView = { id: 'view', name: 'View', statusSlugs: ['todo', 'doing'] }
 
   it('includes tasks whose status is in the view', () => {
     const task = makeTask({ id: 1, name: 'A', statusSlug: 'todo' })

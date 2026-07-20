@@ -30,11 +30,11 @@ export type StatusesApi = {
 
 export type ViewsApi = {
   views: View[]
-  currentViewSlug: string
-  recentViewSlugs: string[]
-  openView: (slug: string) => void
+  currentViewId: string
+  recentViewIds: string[]
+  openView: (id: string) => void
   saveView: (view: UserDefinedView) => Promise<void>
-  deleteView: (slug: string) => Promise<void>
+  deleteView: (id: string) => Promise<void>
 }
 
 export type TasksContextValue = TasksApi & StatusesApi & ViewsApi
@@ -82,8 +82,8 @@ export function useViews(): ViewsApi {
   const c = useTasksContext()
   return {
     views: c.views,
-    currentViewSlug: c.currentViewSlug,
-    recentViewSlugs: c.recentViewSlugs,
+    currentViewId: c.currentViewId,
+    recentViewIds: c.recentViewIds,
     openView: c.openView,
     saveView: c.saveView,
     deleteView: c.deleteView,

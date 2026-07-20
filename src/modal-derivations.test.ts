@@ -2,18 +2,18 @@ import { describe, expect, it } from 'vitest'
 import { sortViewsByRecency, partitionStatuses } from './modal-derivations'
 import type { View, Status } from './types'
 
-function makeView(slug: string): View {
-  return { slug, name: slug, statusSlugs: [] }
+function makeView(id: string): View {
+  return { id, name: id, statusSlugs: [] }
 }
 
 describe('sortViewsByRecency', () => {
-  it('leaves order unchanged when recentViewSlugs is empty', () => {
+  it('leaves order unchanged when recentViewIds is empty', () => {
     const views = [makeView('a'), makeView('b'), makeView('c')]
 
     expect(sortViewsByRecency(views, [])).toEqual(views)
   })
 
-  it('orders recent views by their position in recentViewSlugs', () => {
+  it('orders recent views by their position in recentViewIds', () => {
     const a = makeView('a')
     const b = makeView('b')
     const c = makeView('c')

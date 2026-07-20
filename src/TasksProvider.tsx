@@ -4,9 +4,9 @@ import type { Task, Status, View, UserDefinedView } from './types'
 import type { StatusUsage } from './db'
 import { byRank, rankAtInsertIndex } from './rank-utils'
 import { isArchiveEligible } from './archive-utils'
-import { ARCHIVE_VIEW, ARCHIVE_VIEW_SLUG } from './synthetic-view-utils'
+import { ARCHIVE_VIEW, ARCHIVE_VIEW_ID } from './synthetic-view-utils'
 import { needsRerank, rerankStatusGroup } from './rerank-utils'
-import { readCurrentViewSlug, writeCurrentViewSlug, readRecentViewSlugs, writeRecentViewSlugs, getAutoArchiveEnabled } from './storage'
+import { readCurrentViewId, writeCurrentViewId, readRecentViewIds, writeRecentViewIds, getAutoArchiveEnabled } from './storage'
 import { TasksContext, type TasksContextValue } from './tasks-context'
 import { DEFAULT_SECTION_PAGING, type SectionPagingInfo } from './view-utils'
 
@@ -30,11 +30,11 @@ export function TasksProvider({ children }: { children: ReactNode }) {
   const [sectionPaging, setSectionPaging] = useState<Record<string, SectionPagingInfo>>({})
   const sectionPagingRef = useRef(sectionPaging)
   sectionPagingRef.current = sectionPaging
-  const [currentViewSlug, setCurrentViewSlug] = useState<string>(
-    () => readCurrentViewSlug() ?? ''
+  const [currentViewId, setCurrentViewId] = useState<string>(
+    () => readCurrentViewId() ?? ''
   )
-  const [recentViewSlugs, setRecentViewSlugs] = useState<string[]>(
-    () => readRecentViewSlugs()
+  const [recentViewIds, setRecentViewIds] = useState<string[]>(
+    () => readRecentViewIds()
   )
   const dailyScanDateRef = useRef<string | null>(null)
 
@@ -114,25 +114,25 @@ export function TasksProvider({ children }: { children: ReactNode }) {
       // The archive view is a UI-layer construct, not a persisted one - it's
       // appended here (after the real views, so it's never the default) so
       // every other consumer of `views` just sees it as a normal member,
-      // rather than each having to special-case a separate sentinel slug.
+      // rather than each having to special-case a separate sentinel id.
       const viewsWithArchive: View[] = [...loadedViews, ARCHIVE_VIEW]
 
       setTasks(updatedTasks)
       setStatuses(loadedStatuses)
       setViews(viewsWithArchive)
 
-      const storedSlug = readCurrentViewSlug()
-      const validSlug = storedSlug !== null && viewsWithArchive.some((v) => v.slug === storedSlug)
-        ? storedSlug
-        : viewsWithArchive[0].slug
-      setCurrentViewSlug(validSlug)
-      if (validSlug !== storedSlug) {
-        writeCurrentViewSlug(validSlug)
+      const storedId = readCurrentViewId()
+      const validId = storedId !== null && viewsWithArchive.some((v) => v.id === storedId)
+        ? storedId
+        : viewsWithArchive[0].id
+      setCurrentViewId(validId)
+      if (validId !== storedId) {
+        writeCurrentViewId(validId)
       }
 
-      const storedRecent = readRecentViewSlugs()
-      const validRecent = storedRecent.filter((s) => viewsWithArchive.some((v) => v.slug === s))
-      setRecentViewSlugs(validRecent.length > 0 ? validRecent : [validSlug])
+      const storedRecent = readRecentViewIds()
+      const validRecent = storedRecent.filter((s) => viewsWithArchive.some((v) => v.id === s))
+      setRecentViewIds(validRecent.length > 0 ? validRecent : [validId])
     }
 
     init()
@@ -274,39 +274,39 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     return db.getStatusUsage(slug)
   }
 
-  function setActiveViewSlug(slug: string): void {
-    setCurrentViewSlug(slug)
-    writeCurrentViewSlug(slug)
+  function setActiveViewId(id: string): void {
+    setCurrentViewId(id)
+    writeCurrentViewId(id)
   }
 
-  function openView(slug: string): void {
-    setActiveViewSlug(slug)
-    setRecentViewSlugs((prev) => {
-      const next = [slug, ...prev.filter((s) => s !== slug)]
-      writeRecentViewSlugs(next)
+  function openView(id: string): void {
+    setActiveViewId(id)
+    setRecentViewIds((prev) => {
+      const next = [id, ...prev.filter((s) => s !== id)]
+      writeRecentViewIds(next)
       return next
     })
   }
 
   async function saveView(view: UserDefinedView): Promise<void> {
     await db.saveView(view)
-    setViews(prev => prev.some(v => v.slug === view.slug)
-      ? prev.map(v => v.slug === view.slug ? view : v)
+    setViews(prev => prev.some(v => v.id === view.id)
+      ? prev.map(v => v.id === view.id ? view : v)
       : [...prev, view])
   }
 
-  async function deleteView(slug: string): Promise<void> {
-    await db.deleteView(slug)
+  async function deleteView(id: string): Promise<void> {
+    await db.deleteView(id)
 
-    const remainingViews = views.filter(v => v.slug !== slug)
+    const remainingViews = views.filter(v => v.id !== id)
     setViews(remainingViews)
 
-    const prunedRecent = recentViewSlugs.filter((s) => s !== slug && remainingViews.some((v) => v.slug === s))
-    writeRecentViewSlugs(prunedRecent)
-    setRecentViewSlugs(prunedRecent)
+    const prunedRecent = recentViewIds.filter((s) => s !== id && remainingViews.some((v) => v.id === s))
+    writeRecentViewIds(prunedRecent)
+    setRecentViewIds(prunedRecent)
 
-    if (slug === currentViewSlug) {
-      setActiveViewSlug(prunedRecent[0] ?? remainingViews[0].slug)
+    if (id === currentViewId) {
+      setActiveViewId(prunedRecent[0] ?? remainingViews[0].id)
     }
   }
 
@@ -316,7 +316,7 @@ export function TasksProvider({ children }: { children: ReactNode }) {
 
     setSectionPaging(prev => ({ ...prev, [sectionKey]: { ...current, isLoading: true } }))
 
-    const pageRequest = sectionKey === ARCHIVE_VIEW_SLUG
+    const pageRequest = sectionKey === ARCHIVE_VIEW_ID
       ? db.loadArchivedTaskPage(current.offset)
       : db.loadTaskPageForStatus(sectionKey, current.offset)
 
@@ -337,8 +337,8 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     tasks,
     statuses,
     views,
-    currentViewSlug,
-    recentViewSlugs,
+    currentViewId,
+    recentViewIds,
     autoTransitionedTaskIds,
     sectionPaging,
     requestTaskPage,
