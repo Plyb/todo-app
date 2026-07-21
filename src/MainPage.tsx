@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { BlockingRelationship, SubtaskLink, Task, ViewSelectorVisibility } from './types'
+import type { Task, ViewSelectorVisibility } from './types'
+import type { TaskSource } from './sources'
 import { DraggableList } from './DraggableList'
 import { ArchiveView } from './ArchiveView'
 import { LoadMoreSentinel } from './LoadMoreSentinel'
@@ -10,8 +11,8 @@ import { ViewModal } from './ViewModal'
 import { SourceModal } from './SourceModal'
 import { theme } from './theme'
 import { useOverscrollGesture } from './useOverscrollGesture'
-import { useTasks, useStatuses, useViews, useAllSources, useDefaultSource } from './tasks-context'
-import { loadAcrossSources } from './sources/source-utils'
+import { useTasks, useStatuses, useViews, useAllSources, useDefaultSource, useGetSource } from './tasks-context'
+import { sourceOf } from './sources/source-utils'
 import { OverscrollIndicator } from './OverscrollIndicator'
 import { VIEW_SELECTOR_VISIBILITY_KEY, SELECTED_SOURCE_ID_KEY, useLocalStorageSetting } from './storage'
 import { ARCHIVE_VIEW_ID, isUserDefinedView } from './synthetic-view-utils'
@@ -34,6 +35,25 @@ function shouldShowViewSelectorButton(): boolean {
   if (visibility === 'always-show') return true
   if (visibility === 'always-hide') return false
   return !isIosPwa()
+}
+
+async function loadBlockedTaskIds(tasks: Task[], getSource: (id: string) => TaskSource): Promise<Set<number>> {
+  const results = await Promise.all(tasks.map((task) => sourceOf(task, getSource).loadBlocks(task.id)))
+  const blockedIds = new Set<number>()
+  tasks.forEach((task, i) => {
+    if (results[i].some((r) => r.toTaskId === task.id)) blockedIds.add(task.id)
+  })
+  return blockedIds
+}
+
+async function loadParentIdByChildId(tasks: Task[], getSource: (id: string) => TaskSource): Promise<Map<number, number>> {
+  const results = await Promise.all(tasks.map((task) => sourceOf(task, getSource).loadParentLink(task.id)))
+  const parentIdByChildId = new Map<number, number>()
+  tasks.forEach((task, i) => {
+    const link = results[i]
+    if (link) parentIdByChildId.set(task.id, link.parentTaskId)
+  })
+  return parentIdByChildId
 }
 
 type MainPageProps = {
@@ -118,22 +138,19 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
   const { views, currentViewId, recentViewIds, openView } = useViews()
   const allSources = useAllSources()
   const defaultSource = useDefaultSource()
+  const getSource = useGetSource()
   const [selectedSourceId, setSelectedSourceId] = useLocalStorageSetting<string>(SELECTED_SOURCE_ID_KEY)
   const [newTaskInput, setNewTaskInput] = useState<NewTaskInput | null>(null)
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null)
   const [modalTaskId, setModalTaskId] = useState<number | null>(null)
   const [viewModalOpen, setViewModalOpen] = useState(false)
   const [sourceModalOpen, setSourceModalOpen] = useState(false)
-  const [blockingRelationships, setBlockingRelationships] = useState<BlockingRelationship[]>([])
-  const [subtaskLinks, setSubtaskLinks] = useState<SubtaskLink[]>([])
-
-  useEffect(() => {
-    // Blocks/subtasks are loaded across every source rather than lazily per
-    // task; scoping this to just what's needed (in step with the pagination
-    // added for tasks) is tracked as a follow-up (see issue #9).
-    loadAcrossSources(allSources, (s) => s.loadAllBlocks()).then(setBlockingRelationships)
-    loadAcrossSources(allSources, (s) => s.loadAllSubtaskLinks()).then(setSubtaskLinks)
-  }, [allSources])
+  const [blockedTaskIds, setBlockedTaskIds] = useState<Set<number>>(new Set())
+  const [parentIdByChildId, setParentIdByChildId] = useState<Map<number, number>>(new Map())
+  // Guards the effect below against refetching a task's relationships on every
+  // render just because `tasks` got a new array reference (e.g. from setDone) -
+  // only ids not yet in this set trigger a (per-task-scoped) fetch.
+  const fetchedRelationshipTaskIdsRef = useRef<Set<number>>(new Set())
 
   const inputKeyRef = useRef(0)
 
@@ -161,6 +178,23 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
     }
   }, [currentView])
 
+  function fetchRelationshipDataForNewTasks() {
+    const newTasks = tasks.filter((t) => !fetchedRelationshipTaskIdsRef.current.has(t.id))
+    if (newTasks.length === 0) return
+    newTasks.forEach((t) => fetchedRelationshipTaskIdsRef.current.add(t.id))
+
+    loadBlockedTaskIds(newTasks, getSource).then((ids) => {
+      if (ids.size === 0) return
+      setBlockedTaskIds((prev) => new Set([...prev, ...ids]))
+    })
+    loadParentIdByChildId(newTasks, getSource).then((ids) => {
+      if (ids.size === 0) return
+      setParentIdByChildId((prev) => new Map([...prev, ...ids]))
+    })
+  }
+
+  useEffect(fetchRelationshipDataForNewTasks, [tasks, getSource])
+
   // Tasks shown across all sections of the current view, used below so the
   // cleanup effect can clear indicators for whatever was actually on screen
   // right before the view changes. Archived tasks are excluded here (they're
@@ -178,18 +212,14 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
     ? <LoadMoreSentinel isLoading={archivedPaging.isLoading} onVisible={() => requestTaskPageRef.current(ARCHIVE_VIEW_ID)} />
     : undefined // TODO: this is duplicated below for standard pages. maybe put in shared prop list
 
-  const parentTaskNameByChildId = useMemo(
-    () =>
-      new Map(
-        subtaskLinks
-          .map((link) => {
-            const parentTask = tasks.find((t) => t.id === link.parentTaskId)
-            return parentTask ? [link.childTaskId, parentTask.name] as const : undefined
-          })
-          .filter((entry): entry is [number, string] => entry !== undefined)
-      ),
-    [subtaskLinks, tasks]
-  )
+  const parentTaskNameByChildId = useMemo(() => {
+    const map = new Map<number, string>()
+    parentIdByChildId.forEach((parentId, childId) => {
+      const parentTask = tasks.find((t) => t.id === parentId)
+      if (parentTask) map.set(childId, parentTask.name)
+    })
+    return map
+  }, [parentIdByChildId, tasks])
 
   const sections = useMemo(
     () =>
@@ -261,6 +291,30 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
       onAfterDelete: () => void
     }
   ) {
+    function refreshBlockedIndicatorForTask() {
+      sourceOf(task, getSource).loadBlocks(task.id).then((relationships) => {
+        const isBlocked = relationships.some((r) => r.toTaskId === task.id)
+        setBlockedTaskIds((prev) => {
+          if (isBlocked === prev.has(task.id)) return prev
+          const next = new Set(prev)
+          if (isBlocked) next.add(task.id)
+          else next.delete(task.id)
+          return next
+        })
+      })
+    }
+
+    function refreshParentIndicatorForTask() {
+      sourceOf(task, getSource).loadParentLink(task.id).then((link) => {
+        setParentIdByChildId((prev) => {
+          const next = new Map(prev)
+          if (link) next.set(task.id, link.parentTaskId)
+          else next.delete(task.id)
+          return next
+        })
+      })
+    }
+
     return {
       task,
       allTasks: tasks,
@@ -275,8 +329,8 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
         onAfterDelete()
       },
       onOpenTask: (id: number) => setModalTaskId(id),
-      onBlockingRelationshipAdded: () => loadAcrossSources(allSources, (s) => s.loadAllBlocks()).then(setBlockingRelationships),
-      onSubtaskLinkAdded: () => loadAcrossSources(allSources, (s) => s.loadAllSubtaskLinks()).then(setSubtaskLinks),
+      onBlockingRelationshipAdded: refreshBlockedIndicatorForTask,
+      onSubtaskLinkAdded: refreshParentIndicatorForTask,
     }
   }
 
@@ -350,7 +404,7 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
       task={task}
       onDoneChange={(done) => setDone(task.id, done)}
       showIndicator={autoTransitionedTaskIds.has(task.id)}
-      isBlocked={blockingRelationships.some((r) => r.toTaskId === task.id)}
+      isBlocked={blockedTaskIds.has(task.id)}
       parentTaskName={parentTaskNameByChildId.get(task.id)}
     />
   )
