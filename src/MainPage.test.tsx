@@ -136,6 +136,7 @@ vi.mock('./tasks-context', () => ({
   useSource: () => source,
   useAllSources: () => [source],
   useDefaultSource: () => source,
+  useGetSource: () => () => source,
 }))
 
 // ArchiveView marks only the actual task row with data-item-row (the

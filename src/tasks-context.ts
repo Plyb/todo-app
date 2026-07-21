@@ -105,6 +105,10 @@ export function useSource(id: string): TaskSource {
   return useTasksContext().getSource(id)
 }
 
+export function useGetSource(): (id: string) => TaskSource {
+  return useTasksContext().getSource
+}
+
 export function useAllSources(): TaskSource[] {
   return useTasksContext().allSources
 }

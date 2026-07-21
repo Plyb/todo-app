@@ -11,7 +11,8 @@ import { ViewModal } from './ViewModal'
 import { SourceModal } from './SourceModal'
 import { theme } from './theme'
 import { useOverscrollGesture } from './useOverscrollGesture'
-import { useTasks, useStatuses, useViews, useAllSources, useDefaultSource } from './tasks-context'
+import { useTasks, useStatuses, useViews, useAllSources, useDefaultSource, useGetSource } from './tasks-context'
+import { sourceOf } from './sources/source-utils'
 import { OverscrollIndicator } from './OverscrollIndicator'
 import { VIEW_SELECTOR_VISIBILITY_KEY, SELECTED_SOURCE_ID_KEY, useLocalStorageSetting } from './storage'
 import { ARCHIVE_VIEW_ID, isUserDefinedView } from './synthetic-view-utils'
@@ -36,18 +37,8 @@ function shouldShowViewSelectorButton(): boolean {
   return !isIosPwa()
 }
 
-function sourceForTask(task: Task, allSources: TaskSource[], defaultSource: TaskSource): TaskSource {
-  return allSources.find((s) => s.id === task.sourceId) ?? defaultSource
-}
-
-// Fetches each task's own blocking relationships via the per-task-scoped
-// loadBlocks (not the full-table loadAllBlocks), so this stays bounded to
-// whatever tasks the caller passes in - see the cache-populating effect in
-// MainPage, which only ever passes tasks it hasn't fetched yet.
-async function loadBlockedTaskIds(tasks: Task[], allSources: TaskSource[], defaultSource: TaskSource): Promise<Set<number>> {
-  const results = await Promise.all(
-    tasks.map((task) => sourceForTask(task, allSources, defaultSource).loadBlocks(task.id))
-  )
+async function loadBlockedTaskIds(tasks: Task[], getSource: (id: string) => TaskSource): Promise<Set<number>> {
+  const results = await Promise.all(tasks.map((task) => sourceOf(task, getSource).loadBlocks(task.id)))
   const blockedIds = new Set<number>()
   tasks.forEach((task, i) => {
     if (results[i].some((r) => r.toTaskId === task.id)) blockedIds.add(task.id)
@@ -55,11 +46,8 @@ async function loadBlockedTaskIds(tasks: Task[], allSources: TaskSource[], defau
   return blockedIds
 }
 
-// Same idea as loadBlockedTaskIds, via the per-task loadParentLink.
-async function loadParentIdByChildId(tasks: Task[], allSources: TaskSource[], defaultSource: TaskSource): Promise<Map<number, number>> {
-  const results = await Promise.all(
-    tasks.map((task) => sourceForTask(task, allSources, defaultSource).loadParentLink(task.id))
-  )
+async function loadParentIdByChildId(tasks: Task[], getSource: (id: string) => TaskSource): Promise<Map<number, number>> {
+  const results = await Promise.all(tasks.map((task) => sourceOf(task, getSource).loadParentLink(task.id)))
   const parentIdByChildId = new Map<number, number>()
   tasks.forEach((task, i) => {
     const link = results[i]
@@ -150,6 +138,7 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
   const { views, currentViewId, recentViewIds, openView } = useViews()
   const allSources = useAllSources()
   const defaultSource = useDefaultSource()
+  const getSource = useGetSource()
   const [selectedSourceId, setSelectedSourceId] = useLocalStorageSetting<string>(SELECTED_SOURCE_ID_KEY)
   const [newTaskInput, setNewTaskInput] = useState<NewTaskInput | null>(null)
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null)
@@ -189,25 +178,22 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
     }
   }, [currentView])
 
-  useEffect(() => {
-    // Populates isBlocked/parentTaskName for whatever's in `tasks` - the
-    // bounded, paginated-in set (issue #249), not a full-table scan across
-    // every source. Only fetches for ids not already cached, so paging in
-    // more tasks (or any other update to `tasks`) doesn't re-fetch data for
-    // ones already known.
+  function fetchRelationshipDataForNewTasks() {
     const newTasks = tasks.filter((t) => !fetchedRelationshipTaskIdsRef.current.has(t.id))
     if (newTasks.length === 0) return
     newTasks.forEach((t) => fetchedRelationshipTaskIdsRef.current.add(t.id))
 
-    loadBlockedTaskIds(newTasks, allSources, defaultSource).then((ids) => {
+    loadBlockedTaskIds(newTasks, getSource).then((ids) => {
       if (ids.size === 0) return
       setBlockedTaskIds((prev) => new Set([...prev, ...ids]))
     })
-    loadParentIdByChildId(newTasks, allSources, defaultSource).then((ids) => {
+    loadParentIdByChildId(newTasks, getSource).then((ids) => {
       if (ids.size === 0) return
       setParentIdByChildId((prev) => new Map([...prev, ...ids]))
     })
-  }, [tasks, allSources, defaultSource])
+  }
+
+  useEffect(fetchRelationshipDataForNewTasks, [tasks, getSource])
 
   // Tasks shown across all sections of the current view, used below so the
   // cleanup effect can clear indicators for whatever was actually on screen
@@ -305,6 +291,30 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
       onAfterDelete: () => void
     }
   ) {
+    function refreshBlockedIndicatorForTask() {
+      sourceOf(task, getSource).loadBlocks(task.id).then((relationships) => {
+        const isBlocked = relationships.some((r) => r.toTaskId === task.id)
+        setBlockedTaskIds((prev) => {
+          if (isBlocked === prev.has(task.id)) return prev
+          const next = new Set(prev)
+          if (isBlocked) next.add(task.id)
+          else next.delete(task.id)
+          return next
+        })
+      })
+    }
+
+    function refreshParentIndicatorForTask() {
+      sourceOf(task, getSource).loadParentLink(task.id).then((link) => {
+        setParentIdByChildId((prev) => {
+          const next = new Map(prev)
+          if (link) next.set(task.id, link.parentTaskId)
+          else next.delete(task.id)
+          return next
+        })
+      })
+    }
+
     return {
       task,
       allTasks: tasks,
@@ -319,32 +329,8 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
         onAfterDelete()
       },
       onOpenTask: (id: number) => setModalTaskId(id),
-      // Refreshes just this task's own cached indicator (scoped per-task, not
-      // a full-table reload) - the panel already reloaded its own local copy
-      // of the relationship it just added, this only updates MainPage's
-      // separate isBlocked/parentTaskName cache for the list view.
-      onBlockingRelationshipAdded: () => {
-        sourceForTask(task, allSources, defaultSource).loadBlocks(task.id).then((relationships) => {
-          const isBlocked = relationships.some((r) => r.toTaskId === task.id)
-          setBlockedTaskIds((prev) => {
-            if (isBlocked === prev.has(task.id)) return prev
-            const next = new Set(prev)
-            if (isBlocked) next.add(task.id)
-            else next.delete(task.id)
-            return next
-          })
-        })
-      },
-      onSubtaskLinkAdded: () => {
-        sourceForTask(task, allSources, defaultSource).loadParentLink(task.id).then((link) => {
-          setParentIdByChildId((prev) => {
-            const next = new Map(prev)
-            if (link) next.set(task.id, link.parentTaskId)
-            else next.delete(task.id)
-            return next
-          })
-        })
-      },
+      onBlockingRelationshipAdded: refreshBlockedIndicatorForTask,
+      onSubtaskLinkAdded: refreshParentIndicatorForTask,
     }
   }
 
