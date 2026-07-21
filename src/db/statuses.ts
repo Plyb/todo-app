@@ -43,9 +43,6 @@ async function reassignTasksAndViews(transaction: IDBTransaction, oldSlug: strin
     }
   })
 
-  // A view's statusRefs can reference statuses from other sources too (see
-  // StatusRef in types.ts); only rewrite refs pointing at this store's own
-  // source, so a same-slug status belonging to a different source is untouched.
   const viewStore = transaction.objectStore(VIEWS_STORE)
   const views = (await requestToPromise(viewStore.getAll())) as UserDefinedView[]
   for (const view of views) {

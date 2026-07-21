@@ -30,8 +30,6 @@ export const DEFAULT_SECTION_PAGING: SectionPagingInfo = { offset: 0, isLoading:
 // status, or the synthetic archive view's sentinel id.
 export type SectionRef = StatusRef | ArchivedView['id']
 
-// Composite so two sources' same-named status slug don't collide in
-// sectionPaging's keys once a view's statuses can span multiple sources.
 export function sectionPagingKey(section: SectionRef): string {
   return typeof section === 'string' ? section : `${section.sourceId}:${section.slug}`
 }
