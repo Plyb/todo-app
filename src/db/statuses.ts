@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import {
+  DEFAULT_SOURCE_ID,
   STATUSES_STORE,
   TASKS_STORE,
   VIEWS_STORE,
@@ -11,7 +12,8 @@ import {
   type StoredTask,
   type WithoutSource,
 } from './client'
-import type { Status, UserDefinedView } from '../types'
+import type { Status } from '../types'
+import { getStatusUsageInViews, reassignStatusSlugsInViews } from './views'
 
 const statusSchema = z.object({
   slug: z.string(),
@@ -42,13 +44,7 @@ async function reassignTasksAndViews(transaction: IDBTransaction, oldSlug: strin
     }
   })
 
-  const viewStore = transaction.objectStore(VIEWS_STORE)
-  const views = (await requestToPromise(viewStore.getAll())) as UserDefinedView[]
-  for (const view of views) {
-    if (view.statusSlugs.includes(oldSlug)) {
-      viewStore.put({ ...view, statusSlugs: view.statusSlugs.map((s) => (s === oldSlug ? newSlug : s)) })
-    }
-  }
+  reassignStatusSlugsInViews(DEFAULT_SOURCE_ID, oldSlug, newSlug, { transaction })
 }
 
 export async function updateStatus(oldSlug: string, newSlug: string, newName: string): Promise<void> {
@@ -74,16 +70,13 @@ export type StatusUsage = { taskIds: number[]; viewIds: string[] }
 export async function getStatusUsage(slug: string): Promise<StatusUsage> {
   return withTransaction([TASKS_STORE, VIEWS_STORE], 'readonly', async (tx) => {
     const taskStore = tx.objectStore(TASKS_STORE)
-    const viewStore = tx.objectStore(VIEWS_STORE)
 
     const tasksWithIds = await getAllWithIds<StoredTask>(taskStore)
-    const views = (await requestToPromise(viewStore.getAll())) as UserDefinedView[]
 
     const taskIds = tasksWithIds
       .filter((t) => t.statusSlug === slug)
       .map((t) => t.id)
-    const viewIds = views.filter((v) => v.statusSlugs.includes(slug)).map((v) => v.id)
-
+    const viewIds = await getStatusUsageInViews(DEFAULT_SOURCE_ID, slug, { transaction: tx })
     return { taskIds, viewIds }
   })
 }

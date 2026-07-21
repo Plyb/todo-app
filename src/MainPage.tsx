@@ -19,6 +19,7 @@ import { ARCHIVE_VIEW_ID, isUserDefinedView } from './synthetic-view-utils'
 import {
   archivedTasksOf,
   displayedTasksForView,
+  sectionPagingKey,
   sectionTasksForStatus,
   sortArchivedTasks,
   DEFAULT_SECTION_PAGING,
@@ -172,7 +173,7 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
     // very first view shown at startup and every subsequent view switch.
     if (!currentView) return
     if (isUserDefinedView(currentView)) {
-      currentView.statusSlugs.forEach((slug) => requestTaskPageRef.current(slug))
+      currentView.statusRefs.forEach((ref) => requestTaskPageRef.current(ref))
     } else {
       requestTaskPageRef.current(ARCHIVE_VIEW_ID) 
     }
@@ -224,18 +225,18 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
   const sections = useMemo(
     () =>
       currentView && isUserDefinedView(currentView)
-        ? currentView.statusSlugs.map((slug) => {
-            const status = statuses.find((s) => s.slug === slug)
-            const paging = sectionPaging[slug] ?? DEFAULT_SECTION_PAGING
+        ? currentView.statusRefs.map((ref) => {
+            const status = statuses.find((s) => s.slug === ref.slug && s.sourceId === ref.sourceId)
+            const paging = sectionPaging[sectionPagingKey(ref)] ?? DEFAULT_SECTION_PAGING
             return {
               header: (
                 <h2 style={{ padding: '16px 16px 8px', margin: 0, fontSize: theme.fontSizes.xxl, fontWeight: 700 }}>
-                  {status?.name ?? slug}
+                  {status?.name ?? ref.slug}
                 </h2>
               ),
-              items: sectionTasksForStatus(tasks, slug),
+              items: sectionTasksForStatus(tasks, ref),
               footer: paging.isLoading || paging.hasMore
-                ? <LoadMoreSentinel isLoading={paging.isLoading} onVisible={() => requestTaskPageRef.current(slug)} />
+                ? <LoadMoreSentinel isLoading={paging.isLoading} onVisible={() => requestTaskPageRef.current(ref)} />
                 : undefined,
             }
           })
@@ -276,7 +277,7 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
 
   function handleReorder(draggedId: number, toSectionIndex: number, insertIndex: number) {
     if (!currentView || !isUserDefinedView(currentView)) return
-    const toStatusSlug = currentView.statusSlugs[toSectionIndex]
+    const toStatusSlug = currentView.statusRefs[toSectionIndex].slug
     const toSectionTasks = tasks.filter((t) => t.statusSlug === toStatusSlug)
     const newRank = rankAtInsertIndex(toSectionTasks, insertIndex, draggedId)
     const needsStatusChange = !toSectionTasks.some((t) => t.id === draggedId)
@@ -341,7 +342,7 @@ export default function MainPage({ onNavigateToSettings }: MainPageProps) {
       return
     }
     if (!currentView || !isUserDefinedView(currentView)) return
-    const statusSlug = currentView.statusSlugs[sectionIndex]
+    const statusSlug = currentView.statusRefs[sectionIndex].slug
     const sectionTasks = tasks.filter((t) => t.statusSlug === statusSlug)
     const rank = rankAtInsertIndex(sectionTasks, insertIndex)
     await createTask(trimmed, rank, statusSlug)

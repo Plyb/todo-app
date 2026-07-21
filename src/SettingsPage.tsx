@@ -49,7 +49,7 @@ export default function SettingsPage({ onBack }: SettingsPageProps) {
 
   function handleNewView() {
     const id = crypto.randomUUID()
-    setEditingView({ id, name: '', statusSlugs: [] })
+    setEditingView({ id, name: '', statusRefs: [] })
   }
 
   function handleNewStatus() {

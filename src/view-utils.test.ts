@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { displayedTasksForView, sectionTasksForStatus, sortArchivedTasks } from './view-utils'
+import { displayedTasksForView, sectionPagingKey, sectionTasksForStatus, sortArchivedTasks } from './view-utils'
 import { type ArchivedTask } from './types';
 import type { Task, UserDefinedView } from './types'
 
@@ -27,7 +27,11 @@ function makeArchivedTask(overrides: Partial<ArchivedTask> & { id: number; name:
 }
 
 describe('displayedTasksForView', () => {
-  const view: UserDefinedView = { id: 'view', name: 'View', statusSlugs: ['todo', 'doing'] }
+  const view: UserDefinedView = {
+    id: 'view',
+    name: 'View',
+    statusRefs: [{ slug: 'todo', sourceId: 'indexeddb' }, { slug: 'doing', sourceId: 'indexeddb' }],
+  }
 
   it('includes tasks whose status is in the view', () => {
     const task = makeTask({ id: 1, name: 'A', statusSlug: 'todo' })
@@ -43,22 +47,50 @@ describe('displayedTasksForView', () => {
     const task = makeTask({ id: 1, name: 'A', statusSlug: 'todo', archivedAt: '2026-01-01' })
     expect(displayedTasksForView([task], view)).toEqual([])
   })
+
+  it('excludes a task whose slug matches but whose source differs from the ref', () => {
+    const task = makeTask({ id: 1, name: 'A', statusSlug: 'todo', sourceId: 'other-source' })
+    expect(displayedTasksForView([task], view)).toEqual([])
+  })
 })
 
 describe('sectionTasksForStatus', () => {
-  it('includes tasks matching the status slug', () => {
+  const ref = { slug: 'todo', sourceId: 'indexeddb' }
+
+  it('includes tasks matching the status slug and source', () => {
     const task = makeTask({ id: 1, name: 'A', statusSlug: 'todo' })
-    expect(sectionTasksForStatus([task], 'todo')).toEqual([task])
+    expect(sectionTasksForStatus([task], ref)).toEqual([task])
   })
 
   it('excludes tasks with a different status slug', () => {
     const task = makeTask({ id: 1, name: 'A', statusSlug: 'done' })
-    expect(sectionTasksForStatus([task], 'todo')).toEqual([])
+    expect(sectionTasksForStatus([task], ref)).toEqual([])
+  })
+
+  it('excludes a task whose slug matches but whose source differs from the ref', () => {
+    const task = makeTask({ id: 1, name: 'A', statusSlug: 'todo', sourceId: 'other-source' })
+    expect(sectionTasksForStatus([task], ref)).toEqual([])
   })
 
   it('excludes archived tasks even when their status matches', () => {
     const task = makeTask({ id: 1, name: 'A', statusSlug: 'todo', archivedAt: '2026-01-01' })
-    expect(sectionTasksForStatus([task], 'todo')).toEqual([])
+    expect(sectionTasksForStatus([task], ref)).toEqual([])
+  })
+})
+
+describe('sectionPagingKey', () => {
+  it('composes a status ref into a sourceId-prefixed key', () => {
+    expect(sectionPagingKey({ slug: 'todo', sourceId: 'indexeddb' })).toBe('indexeddb:todo')
+  })
+
+  it('keeps two sources\' same-named slug from colliding', () => {
+    const keyA = sectionPagingKey({ slug: 'todo', sourceId: 'indexeddb' })
+    const keyB = sectionPagingKey({ slug: 'todo', sourceId: 'other-source' })
+    expect(keyA).not.toBe(keyB)
+  })
+
+  it('passes the archive sentinel id through unchanged', () => {
+    expect(sectionPagingKey('__archived__')).toBe('__archived__')
   })
 })
 

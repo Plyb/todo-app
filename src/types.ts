@@ -19,10 +19,12 @@ export type SubtaskLink = { id: number; parentTaskId: number; childTaskId: numbe
 
 export type BlockingRelationship = { id: number; fromTaskId: number; toTaskId: number; type: 'blocks' }
 
+export type StatusRef = { slug: string; sourceId: string }
+
 export type UserDefinedView = {
   id: string
   name: string
-  statusSlugs: string[]
+  statusRefs: StatusRef[]
 }
 
 export type ArchivedView = {

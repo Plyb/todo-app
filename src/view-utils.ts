@@ -1,11 +1,13 @@
-import { isArchivedTask, type ArchivedTask, type Task, type UserDefinedView } from './types'
+import { isArchivedTask, type ArchivedTask, type ArchivedView, type StatusRef, type Task, type UserDefinedView } from './types'
 
 export function displayedTasksForView(tasks: Task[], view: UserDefinedView): Task[] {
-  return tasks.filter((t) => t.archivedAt === null && view.statusSlugs.includes(t.statusSlug))
+  return tasks.filter(
+    (t) => t.archivedAt === null && view.statusRefs.some((ref) => ref.slug === t.statusSlug && ref.sourceId === t.sourceId)
+  )
 }
 
-export function sectionTasksForStatus(tasks: Task[], statusSlug: string): Task[] {
-  return tasks.filter((t) => t.archivedAt === null && t.statusSlug === statusSlug)
+export function sectionTasksForStatus(tasks: Task[], ref: StatusRef): Task[] {
+  return tasks.filter((t) => t.archivedAt === null && t.statusSlug === ref.slug && t.sourceId === ref.sourceId)
 }
 
 export function archivedTasksOf(tasks: Task[]): ArchivedTask[] {
@@ -23,3 +25,11 @@ export function sortArchivedTasks<T extends { archivedAt: string; completedAt: s
 export type SectionPagingInfo = { offset: number; isLoading: boolean; hasMore: boolean }
 
 export const DEFAULT_SECTION_PAGING: SectionPagingInfo = { offset: 0, isLoading: false, hasMore: true }
+
+// Identifies one section's page-request target: either a real (source-scoped)
+// status, or the synthetic archive view's sentinel id.
+export type SectionRef = StatusRef | ArchivedView['id']
+
+export function sectionPagingKey(section: SectionRef): string {
+  return typeof section === 'string' ? section : `${section.sourceId}:${section.slug}`
+}
