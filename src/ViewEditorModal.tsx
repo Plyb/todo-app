@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { type Status, type UserDefinedView } from './types'
+import { type Status, type StatusRef, type UserDefinedView } from './types'
 import { DraggableList } from './DraggableList'
 import { theme } from './theme'
 import { Modal } from './ui/Modal'
@@ -17,18 +17,20 @@ type StatusListItem = { id: number; status: Status }
 
 export function ViewEditorModal({ view, statuses, onSave, onClose }: ViewEditorModalProps) {
   const [name, setName] = useState(view.name)
-  const [slugs, setSlugs] = useState<string[]>(view.statusSlugs)
+  const [refs, setRefs] = useState<StatusRef[]>(view.statusRefs)
 
-  const { selected: selectedStatuses, unselected: unselectedStatuses } = partitionStatuses(statuses, slugs)
+  const { selected: selectedStatuses, unselected: unselectedStatuses } = partitionStatuses(statuses, refs)
 
-  function toggle(slug: string) {
-    setSlugs((prev) =>
-      prev.includes(slug) ? prev.filter((s) => s !== slug) : [...prev, slug]
+  function toggle(status: Status) {
+    setRefs((prev) =>
+      prev.some((ref) => ref.slug === status.slug && ref.sourceId === status.sourceId)
+        ? prev.filter((ref) => !(ref.slug === status.slug && ref.sourceId === status.sourceId))
+        : [...prev, { slug: status.slug, sourceId: status.sourceId }]
     )
   }
 
   function handleReorderStatuses(draggedId: number, _toSectionIndex: number, insertIndex: number) {
-    setSlugs((prev) => {
+    setRefs((prev) => {
       const dragged = prev[draggedId]
       const others = prev.filter((_, i) => i !== draggedId)
       return [...others.slice(0, insertIndex), dragged, ...others.slice(insertIndex)]
@@ -69,7 +71,7 @@ export function ViewEditorModal({ view, statuses, onSave, onClose }: ViewEditorM
         onReorder={handleReorderStatuses}
         renderItem={(item) => (
           <div style={{ display: 'flex', alignItems: 'center', gap: theme.space.sm, width: '100%' }}>
-            <input type="checkbox" checked onChange={() => toggle(item.status.slug)} />
+            <input type="checkbox" checked onChange={() => toggle(item.status)} />
             <span style={{ flex: 1 }}>{item.status.name}</span>
           </div>
         )}
@@ -80,7 +82,7 @@ export function ViewEditorModal({ view, statuses, onSave, onClose }: ViewEditorM
           key={status.slug}
           style={{ display: 'flex', alignItems: 'center', gap: theme.space.sm, padding: '6px 0', borderBottom: '1px solid #f0f0f0' }}
         >
-          <input type="checkbox" checked={false} onChange={() => toggle(status.slug)} />
+          <input type="checkbox" checked={false} onChange={() => toggle(status)} />
           <span style={{ flex: 1, color: theme.colors.textTertiary }}>{status.name}</span>
         </div>
       ))}
@@ -89,7 +91,7 @@ export function ViewEditorModal({ view, statuses, onSave, onClose }: ViewEditorM
         <SecondaryButton onClick={onClose}>
           Cancel
         </SecondaryButton>
-        <PrimaryButton onClick={() => onSave({ ...view, name: name.trim() || 'Unnamed', statusSlugs: slugs })}>
+        <PrimaryButton onClick={() => onSave({ ...view, name: name.trim() || 'Unnamed', statusRefs: refs })}>
           Save
         </PrimaryButton>
       </div>

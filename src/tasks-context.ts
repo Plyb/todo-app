@@ -2,7 +2,7 @@ import { createContext, useContext } from 'react'
 import type { Task, Status, View, UserDefinedView } from './types'
 import type { StatusUsage } from './db'
 import type { TaskSource } from './sources'
-import type { SectionPagingInfo } from './view-utils'
+import type { SectionPagingInfo, SectionRef } from './view-utils'
 
 export type SourcesApi = {
   defaultSource: TaskSource
@@ -14,7 +14,7 @@ export type TasksApi = {
   tasks: Task[]
   autoTransitionedTaskIds: Set<number>
   sectionPaging: Record<string, SectionPagingInfo>
-  requestTaskPage: (sectionKey: string) => void
+  requestTaskPage: (section: SectionRef) => void
   setDone: (id: number, done: boolean) => void
   setArchived: (id: number, archived: boolean) => void
   moveTask: (id: number, toStatusSlug: string, newRank: string, changeStatus: boolean) => void

@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import {
+  DEFAULT_SOURCE_ID,
   STATUSES_STORE,
   TASKS_STORE,
   VIEWS_STORE,
@@ -42,11 +43,19 @@ async function reassignTasksAndViews(transaction: IDBTransaction, oldSlug: strin
     }
   })
 
+  // A view's statusRefs can reference statuses from other sources too (see
+  // StatusRef in types.ts); only rewrite refs pointing at this store's own
+  // source, so a same-slug status belonging to a different source is untouched.
   const viewStore = transaction.objectStore(VIEWS_STORE)
   const views = (await requestToPromise(viewStore.getAll())) as UserDefinedView[]
   for (const view of views) {
-    if (view.statusSlugs.includes(oldSlug)) {
-      viewStore.put({ ...view, statusSlugs: view.statusSlugs.map((s) => (s === oldSlug ? newSlug : s)) })
+    if (view.statusRefs.some((ref) => ref.sourceId === DEFAULT_SOURCE_ID && ref.slug === oldSlug)) {
+      viewStore.put({
+        ...view,
+        statusRefs: view.statusRefs.map((ref) =>
+          ref.sourceId === DEFAULT_SOURCE_ID && ref.slug === oldSlug ? { ...ref, slug: newSlug } : ref
+        ),
+      })
     }
   }
 }
@@ -82,7 +91,9 @@ export async function getStatusUsage(slug: string): Promise<StatusUsage> {
     const taskIds = tasksWithIds
       .filter((t) => t.statusSlug === slug)
       .map((t) => t.id)
-    const viewIds = views.filter((v) => v.statusSlugs.includes(slug)).map((v) => v.id)
+    const viewIds = views
+      .filter((v) => v.statusRefs.some((ref) => ref.sourceId === DEFAULT_SOURCE_ID && ref.slug === slug))
+      .map((v) => v.id)
 
     return { taskIds, viewIds }
   })

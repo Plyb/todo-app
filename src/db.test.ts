@@ -64,6 +64,56 @@ describe('sourceConfigurations migration (v13)', () => {
   })
 })
 
+describe('view statusSlugs -> statusRefs migration (v14)', () => {
+  it('rewrites each existing view\'s statusSlugs into statusRefs scoped to the default source', async () => {
+    // Simulate a v13 database (all stores present, including sourceConfigurations
+    // from the prior migration) whose views are still shaped with the old bare
+    // statusSlugs list.
+    await new Promise<void>((resolve, reject) => {
+      const request = indexedDB.open(DB_NAME, 13)
+      request.onupgradeneeded = () => {
+        const upgradeDb = request.result
+        upgradeDb.createObjectStore('tasks', { autoIncrement: true })
+        upgradeDb.createObjectStore('statuses', { keyPath: 'slug' })
+        upgradeDb.createObjectStore('views', { keyPath: 'id' })
+        upgradeDb.createObjectStore('scheduledTransitions', { autoIncrement: true })
+        upgradeDb.createObjectStore('relationships', { autoIncrement: true })
+        upgradeDb.createObjectStore('subtasks', { keyPath: 'id', autoIncrement: true })
+        upgradeDb.createObjectStore('sourceConfigurations', { keyPath: 'id' })
+      }
+      request.onsuccess = () => {
+        const legacyDb = request.result
+        const tx = legacyDb.transaction(['views', 'sourceConfigurations'], 'readwrite')
+        tx.objectStore('views').add({ id: 'today', name: 'Today', statusSlugs: ['today'] })
+        tx.objectStore('views').add({ id: 'custom-view', name: 'Custom View', statusSlugs: ['backlog', 'today'] })
+        tx.objectStore('sourceConfigurations').add({ kind: 'indexeddb', id: 'indexeddb' })
+        tx.oncomplete = () => {
+          legacyDb.close()
+          resolve()
+        }
+        tx.onerror = () => reject(tx.error)
+      }
+      request.onerror = () => reject(request.error)
+    })
+
+    vi.resetModules()
+    const db = await import('./db')
+
+    const views = await db.loadViews()
+    expect(views).toEqual(
+      expect.arrayContaining([
+        { id: 'today', name: 'Today', statusRefs: [{ slug: 'today', sourceId: 'indexeddb' }] },
+        {
+          id: 'custom-view',
+          name: 'Custom View',
+          statusRefs: [{ slug: 'backlog', sourceId: 'indexeddb' }, { slug: 'today', sourceId: 'indexeddb' }],
+        },
+      ]),
+    )
+    expect(views).toHaveLength(2)
+  })
+})
+
 describe('loadStatuses (simple read)', () => {
   it('returns the seeded default statuses on a fresh database', async () => {
     const db = await import('./db')
@@ -125,7 +175,11 @@ describe('updateStatus (multi-store write)', () => {
 
     await db.createStatus('Custom', 'custom')
     const task = await db.createTask('Task in custom status', LexoRank.middle().toString(), 'custom')
-    await db.saveView({ id: 'custom-view', name: 'Custom View', statusSlugs: ['custom', 'backlog'] })
+    await db.saveView({
+      id: 'custom-view',
+      name: 'Custom View',
+      statusRefs: [{ slug: 'custom', sourceId: 'indexeddb' }, { slug: 'backlog', sourceId: 'indexeddb' }],
+    })
 
     await db.updateStatus('custom', 'custom-renamed', 'Custom Renamed')
 
@@ -137,7 +191,10 @@ describe('updateStatus (multi-store write)', () => {
     expect(tasks.find((t) => t.id === task.id)?.statusSlug).toBe('custom-renamed')
 
     const views = await db.loadViews()
-    expect(views.find((v) => v.id === 'custom-view')?.statusSlugs).toEqual(['custom-renamed', 'backlog'])
+    expect(views.find((v) => v.id === 'custom-view')?.statusRefs).toEqual([
+      { slug: 'custom-renamed', sourceId: 'indexeddb' },
+      { slug: 'backlog', sourceId: 'indexeddb' },
+    ])
   })
 })
 
@@ -184,7 +241,7 @@ describe('runner abort-on-error (rolls back a partial multi-store write)', () =>
 
     await db.createStatus('Custom', 'custom')
     const task = await db.createTask('Task in custom status', LexoRank.middle().toString(), 'custom')
-    // A view missing `statusSlugs` makes `view.statusSlugs.includes(...)` throw
+    // A view missing `statusRefs` makes `view.statusRefs.some(...)` throw
     // inside reassignTasksAndViews, after the status delete + task reassignment
     // have been queued in the same transaction.
     await putRaw('views', { id: 'malformed', name: 'Malformed' })
@@ -202,7 +259,7 @@ describe('runner abort-on-error (rolls back a partial multi-store write)', () =>
 })
 
 describe('migration replay', () => {
-  it('upgrades a v1 database (tasks store only, no completedAt/archivedAt/rank/statusSlug/notes) to v13', async () => {
+  it('upgrades a v1 database (tasks store only, no completedAt/archivedAt/rank/statusSlug/notes) to v14', async () => {
     // Simulate a database left behind by the very first shipped schema: only
     // the tasks store exists, and records predate the completedAt/archivedAt/rank/statusSlug/notes fields.
     await new Promise<void>((resolve, reject) => {
@@ -237,14 +294,15 @@ describe('migration replay', () => {
 
     const views = await db.loadViews()
     expect(views.map((v) => v.id).sort()).toEqual(['backlog', 'today', 'today-extra'])
+    expect(views.find((v) => v.id === 'today')?.statusRefs).toEqual([{ slug: 'today', sourceId: 'indexeddb' }])
 
-    // Confirm the upgrade chain actually landed on version 13 and won't fire another upgrade.
+    // Confirm the upgrade chain actually landed on version 14 and won't fire another upgrade.
     await new Promise<void>((resolve, reject) => {
       const verifyRequest = indexedDB.open(DB_NAME)
-      verifyRequest.onupgradeneeded = () => reject(new Error('unexpected upgrade needed; migration did not reach version 13'))
+      verifyRequest.onupgradeneeded = () => reject(new Error('unexpected upgrade needed; migration did not reach version 14'))
       verifyRequest.onsuccess = () => {
         try {
-          expect(verifyRequest.result.version).toBe(13)
+          expect(verifyRequest.result.version).toBe(14)
           verifyRequest.result.close()
           resolve()
         } catch (error) {
@@ -289,8 +347,12 @@ describe('migration replay', () => {
     const views = await db.loadViews()
     expect(views).toEqual(
       expect.arrayContaining([
-        { id: 'today', name: 'Today', statusSlugs: ['today'] },
-        { id: 'custom-view', name: 'Custom View', statusSlugs: ['backlog', 'today'] },
+        { id: 'today', name: 'Today', statusRefs: [{ slug: 'today', sourceId: 'indexeddb' }] },
+        {
+          id: 'custom-view',
+          name: 'Custom View',
+          statusRefs: [{ slug: 'backlog', sourceId: 'indexeddb' }, { slug: 'today', sourceId: 'indexeddb' }],
+        },
       ]),
     )
     expect(views).toHaveLength(2)
@@ -569,7 +631,7 @@ describe('remaining-store read validation (Zod schema at the read boundary)', ()
     const db = await import('./db')
     await db.loadViews()
 
-    await putRaw('views', { id: 'bad', name: 'Bad', statusSlugs: 'not-an-array' })
+    await putRaw('views', { id: 'bad', name: 'Bad', statusRefs: 'not-an-array' })
 
     await expect(db.loadViews()).rejects.toThrow()
   })

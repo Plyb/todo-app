@@ -25,7 +25,7 @@ export function withDefault<T>(schema: z.ZodType<T>, fallback: () => T): z.ZodTy
 }
 
 export const DB_NAME = 'todo-app'
-export const DB_VERSION = 13
+export const DB_VERSION = 14
 export const TASKS_STORE = 'tasks'
 export const STATUSES_STORE = 'statuses'
 export const VIEWS_STORE = 'views'
@@ -241,6 +241,14 @@ async function migrateViewsToIdKeyPath(db: IDBDatabase, transaction: IDBTransact
   }
 }
 
+async function migrateViewStatusSlugsToRefs(transaction: IDBTransaction): Promise<void> {
+  const viewStore = transaction.objectStore(VIEWS_STORE)
+  const views = (await requestToPromise(viewStore.getAll())) as { id: string; name: string; statusSlugs: string[] }[]
+  for (const { statusSlugs, ...rest } of views) {
+    viewStore.put({ ...rest, statusRefs: statusSlugs.map((slug) => ({ slug, sourceId: DEFAULT_SOURCE_ID })) })
+  }
+}
+
 type MigrationStep = {
   version: number
   migrate: (db: IDBDatabase, transaction: IDBTransaction, oldVersion: number) => void | Promise<void>
@@ -323,6 +331,10 @@ const MIGRATION_STEPS: MigrationStep[] = [
         store.put({ kind: 'indexeddb', id: DEFAULT_SOURCE_ID })
       }
     },
+  },
+  {
+    version: 14,
+    migrate: (_db, transaction) => migrateViewStatusSlugsToRefs(transaction),
   },
 ]
 

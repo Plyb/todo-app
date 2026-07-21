@@ -5,7 +5,7 @@ import type { UserDefinedView } from '../types'
 const viewSchema = z.object({
   id: z.string(),
   name: z.string(),
-  statusSlugs: z.array(z.string()),
+  statusRefs: z.array(z.object({ slug: z.string(), sourceId: z.string() })),
 }) satisfies z.ZodType<UserDefinedView>
 
 export async function loadViews(): Promise<UserDefinedView[]> {

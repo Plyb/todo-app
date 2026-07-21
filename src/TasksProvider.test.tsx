@@ -7,6 +7,7 @@ import { TasksProvider } from './TasksProvider'
 import { useTasks, useViews, useStatuses } from './tasks-context'
 import { SELECTED_SOURCE_ID_KEY, setAutoArchiveEnabled, writeCurrentViewId, writeRecentViewIds } from './storage'
 import { ARCHIVE_VIEW_ID } from './synthetic-view-utils'
+import { sectionPagingKey } from './view-utils'
 import * as db from './db'
 import type { Status } from './types'
 import type { SourceConfiguration, TaskSource } from './sources'
@@ -159,7 +160,7 @@ describe('deleteView navigation', () => {
     // pool of default views. Seed an extra view so this test always has at
     // least one to fall back to, regardless of how much the earlier tests
     // already consumed.
-    await db.saveView({ id: 'fallback-spare', name: 'Fallback Spare', statusSlugs: ['backlog'] })
+    await db.saveView({ id: 'fallback-spare', name: 'Fallback Spare', statusRefs: [{ slug: 'backlog', sourceId: 'indexeddb' }] })
 
     const { result } = renderViews()
     await waitFor(() => expect(result.current.views.length).toBeGreaterThan(0))
@@ -209,7 +210,7 @@ describe('archive sentinel id persistence', () => {
     // ambient view count left over from other tests isn't reliable here.
     const anchorId = result.current.views[0].id
     await act(async () => {
-      await result.current.saveView({ id: 'temp-view-to-delete', name: 'Temp', statusSlugs: [] })
+      await result.current.saveView({ id: 'temp-view-to-delete', name: 'Temp', statusRefs: [] })
     })
 
     act(() => result.current.openView(ARCHIVE_VIEW_ID))
@@ -227,7 +228,7 @@ describe('archive sentinel id persistence', () => {
 describe('setStatus rank', () => {
   it('recomputes rank so the task does not collide with an existing rank in the destination status', async () => {
     const { result } = renderTasks()
-    act(() => result.current.requestTaskPage('today'))
+    act(() => result.current.requestTaskPage({ slug: 'today', sourceId: 'indexeddb' }))
     await waitFor(() => expect(result.current.tasks.length).toBeGreaterThan(0))
 
     const buyGroceries = result.current.tasks.find((t) => t.name === 'Buy groceries')!
@@ -295,7 +296,7 @@ describe('auto-archive scan effect', () => {
     setAutoArchiveEnabled(true)
 
     const { result } = renderTasks()
-    act(() => result.current.requestTaskPage('today'))
+    act(() => result.current.requestTaskPage({ slug: 'today', sourceId: 'indexeddb' }))
     await waitFor(() => {
       const updated = result.current.tasks.find((t) => t.id === seeded.id)
       expect(updated).toBeDefined()
@@ -311,7 +312,7 @@ describe('auto-archive scan effect', () => {
     await db.updateTaskCompletedAt(seeded.id, '2020-01-01')
 
     const { result } = renderTasks()
-    act(() => result.current.requestTaskPage('today'))
+    act(() => result.current.requestTaskPage({ slug: 'today', sourceId: 'indexeddb' }))
     await waitFor(() => expect(result.current.tasks.length).toBeGreaterThan(0))
 
     const stillUnarchived = result.current.tasks.find((t) => t.id === seeded.id)!
@@ -326,8 +327,8 @@ describe('daily rerank scan effect', () => {
     const short = await db.createTask('Short rank task', '0', 'backlog')
 
     const { result } = renderTasks()
-    act(() => result.current.requestTaskPage('today'))
-    act(() => result.current.requestTaskPage('backlog'))
+    act(() => result.current.requestTaskPage({ slug: 'today', sourceId: 'indexeddb' }))
+    act(() => result.current.requestTaskPage({ slug: 'backlog', sourceId: 'indexeddb' }))
     await waitFor(() => {
       const updated = result.current.tasks.find((t) => t.id === long.id)
       expect(updated).toBeDefined()
@@ -348,7 +349,7 @@ describe('daily rerank scan effect', () => {
     const seeded = await db.createTask('Normal task', '0', 'today')
 
     const { result } = renderTasks()
-    act(() => result.current.requestTaskPage('today'))
+    act(() => result.current.requestTaskPage({ slug: 'today', sourceId: 'indexeddb' }))
     await waitFor(() => expect(result.current.tasks.length).toBeGreaterThan(0))
 
     const unchanged = result.current.tasks.find((t) => t.id === seeded.id)!
@@ -403,19 +404,19 @@ describe('lazy section pagination (issue #249)', () => {
     const created = await seedTasksInStatus(db.TASK_PAGE_SIZE + 5, statusSlug)
 
     const { result } = renderTasks()
-    act(() => result.current.requestTaskPage(statusSlug))
+    act(() => result.current.requestTaskPage({ slug: statusSlug, sourceId: 'indexeddb' }))
 
     await waitFor(() => expect(result.current.tasks).toHaveLength(db.TASK_PAGE_SIZE))
     expect(result.current.tasks.map((t) => t.id)).toEqual(created.slice(0, db.TASK_PAGE_SIZE).map((t) => t.id))
-    expect(result.current.sectionPaging[statusSlug].hasMore).toBe(true)
+    expect(result.current.sectionPaging[sectionPagingKey({ slug: statusSlug, sourceId: 'indexeddb' })].hasMore).toBe(true)
 
-    act(() => result.current.requestTaskPage(statusSlug))
+    act(() => result.current.requestTaskPage({ slug: statusSlug, sourceId: 'indexeddb' }))
 
     await waitFor(() => expect(result.current.tasks).toHaveLength(created.length))
     expect(result.current.tasks.map((t) => t.id).sort((a, b) => a - b)).toEqual(
       created.map((t) => t.id).sort((a, b) => a - b)
     )
-    expect(result.current.sectionPaging[statusSlug].hasMore).toBe(false)
+    expect(result.current.sectionPaging[sectionPagingKey({ slug: statusSlug, sourceId: 'indexeddb' })].hasMore).toBe(false)
   })
 
   it('marks the section as loading synchronously while its page request is in flight', async () => {
@@ -424,12 +425,12 @@ describe('lazy section pagination (issue #249)', () => {
 
     const { result } = renderTasks()
     act(() => {
-      result.current.requestTaskPage(statusSlug)
+      result.current.requestTaskPage({ slug: statusSlug, sourceId: 'indexeddb' })
     })
 
-    expect(result.current.sectionPaging[statusSlug].isLoading).toBe(true)
+    expect(result.current.sectionPaging[sectionPagingKey({ slug: statusSlug, sourceId: 'indexeddb' })].isLoading).toBe(true)
 
-    await waitFor(() => expect(result.current.sectionPaging[statusSlug].isLoading).toBe(false))
+    await waitFor(() => expect(result.current.sectionPaging[sectionPagingKey({ slug: statusSlug, sourceId: 'indexeddb' })].isLoading).toBe(false))
   })
 
   it('sorts a normal section by rank and the archived section by archivedAt, independently', async () => {
@@ -444,7 +445,7 @@ describe('lazy section pagination (issue #249)', () => {
     const rankFirst = await db.createTask('Rank first', LexoRank.middle().genNext().genNext().toString(), statusSlug)
 
     const { result } = renderTasks()
-    act(() => result.current.requestTaskPage(statusSlug))
+    act(() => result.current.requestTaskPage({ slug: statusSlug, sourceId: 'indexeddb' }))
     await waitFor(() => expect(result.current.tasks.some((t) => t.id === rankFirst.id)).toBe(true))
 
     // The status section excludes archived tasks and sorts by rank - only
@@ -498,7 +499,7 @@ describe('cross-source status guards (issue #261)', () => {
     otherSourceEnabled = true
     otherSourceSeed = [{ name: 'Other Status', slug: 'other-status', sourceId: OTHER_SOURCE_ID }]
     const { result } = renderTasksAndStatuses()
-    act(() => result.current.requestTaskPage('today'))
+    act(() => result.current.requestTaskPage({ slug: 'today', sourceId: 'indexeddb' }))
     await waitFor(() => expect(result.current.tasks.length).toBeGreaterThan(0))
 
     const task = result.current.tasks.find((t) => t.statusSlug === 'today')!
